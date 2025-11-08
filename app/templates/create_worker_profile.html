@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Create Worker Profile</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    .step-container { display: none; }
+    .step-container.active { display: block; }
+    .progress { height: 8px; border-radius: 5px; }
+    .step-btns { margin-top: 20px; }
+  </style>
+</head>
+<body class="bg-light">
+
+<div class="container mt-5">
+  <div class="card shadow-lg p-4 rounded-4">
+    <h3 class="text-center text-primary mb-3">Worker Profile Creation</h3>
+
+    <!-- Progress bar -->
+    <div class="progress mb-4">
+      <div id="progressBar" class="progress-bar bg-primary" style="width: 20%;"></div>
+    </div>
+
+    <form action="/create_worker_profile" method="POST" enctype="multipart/form-data">
+
+
+      <!-- STEP 1: Live Photo -->
+      <div class="step-container active">
+        <h5 class="mb-3">📸 Capture Your Photo</h5>
+        <input type="file" name="photo" accept="image/*" capture="user" class="form-control" required>
+        <div class="step-btns d-flex justify-content-end">
+          <button type="button" class="btn btn-primary next">Next ➡️</button>
+        </div>
+      </div>
+
+      <!-- STEP 2: Bank Details -->
+      <div class="step-container">
+        <h5 class="mb-3">🏦 Bank Details</h5>
+        <input type="text" name="bank_name" placeholder="Bank Name" class="form-control mb-2" required>
+        <input type="text" name="branch" placeholder="Branch" class="form-control mb-2" required>
+        <input type="text" name="ifsc" placeholder="IFSC Code" class="form-control mb-2" required>
+        <input type="text" name="account_number" placeholder="Account Number" class="form-control mb-2" required>
+        <div class="step-btns d-flex justify-content-between">
+          <button type="button" class="btn btn-secondary prev">⬅️ Back</button>
+          <button type="button" class="btn btn-primary next">Next ➡️</button>
+        </div>
+      </div>
+
+      <!-- STEP 3: ID Proof -->
+      <div class="step-container">
+        <h5 class="mb-3">🪪 Upload ID Proof</h5>
+        <label>Aadhaar / Voter ID / DL (Front)</label>
+        <input type="file" name="id_front" accept="image/*" class="form-control mb-2" required>
+        <label>Back Side</label>
+        <input type="file" name="id_back" accept="image/*" class="form-control mb-2" required>
+        <div class="step-btns d-flex justify-content-between">
+          <button type="button" class="btn btn-secondary prev">⬅️ Back</button>
+          <button type="button" class="btn btn-primary next">Next ➡️</button>
+        </div>
+      </div>
+
+      <!-- STEP 4: PAN Card -->
+      <div class="step-container">
+        <h5 class="mb-3">🧾 Upload PAN Card</h5>
+        <input type="file" name="pan_card" accept="image/*" class="form-control mb-2" required>
+        <div class="step-btns d-flex justify-content-between">
+          <button type="button" class="btn btn-secondary prev">⬅️ Back</button>
+          <button type="button" class="btn btn-primary next">Next ➡️</button>
+        </div>
+      </div>
+
+      <!-- STEP 5: Profile Details -->
+      <div class="step-container">
+        <h5 class="mb-3">👤 Profile Details</h5>
+        <div class="row g-3">
+          <div class="col-md-6">
+            <input type="number" name="age" placeholder="Age" class="form-control" required>
+          </div>
+          <div class="col-md-6">
+            <select name="gender" class="form-select" required>
+              <option value="" disabled selected>Select Gender</option>
+              <option>Male</option>
+              <option>Female</option>
+            </select>
+          </div>
+          <div class="col-md-6">
+            <input type="text" name="qualification" placeholder="Qualification" class="form-control" required>
+          </div>
+          <div class="col-md-6">
+            <input type="text" name="experience" placeholder="Experience" class="form-control" required>
+          </div>
+          <div class="col-12">
+            <textarea name="about" placeholder="About Me" rows="3" class="form-control" required></textarea>
+          </div>
+        </div>
+
+        <h6 class="mt-4">🔧 Skills & Rates</h6>
+        <div id="skills-section">
+          <div class="skill-row d-flex gap-2 mt-2">
+            <input type="text" class="form-control" name="skills[]" placeholder="Skill" required>
+            <input type="number" class="form-control" name="rates[]" placeholder="Rate (₹)" required>
+            <select class="form-select" name="rate_types[]" required>
+              <option value="per hour">₹/Hour</option>
+              <option value="per job">₹/Job</option>
+              <option value="per kilogram">₹/Kilogram</option>
+              <option value="custom">₹/Custom</option>
+            </select>
+          </div>
+        </div>
+        <button type="button" class="btn btn-outline-secondary mt-2" onclick="addSkill()">➕ Add Skill</button>
+
+        <div class="step-btns d-flex justify-content-between mt-4">
+          <button type="button" class="btn btn-secondary prev">⬅️ Back</button>
+          <button type="submit" class="btn btn-success">✅ Submit Profile</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+  let currentStep = 0;
+  const steps = document.querySelectorAll(".step-container");
+  const progress = document.getElementById("progressBar");
+
+  function showStep(index) {
+    steps.forEach((step, i) => {
+      step.classList.toggle("active", i === index);
+    });
+    progress.style.width = ((index + 1) / steps.length) * 100 + "%";
+  }
+
+  document.querySelectorAll(".next").forEach(btn => {
+    btn.addEventListener("click", () => {
+      if (currentStep < steps.length - 1) {
+        currentStep++;
+        showStep(currentStep);
+      }
+    });
+  });
+
+  document.querySelectorAll(".prev").forEach(btn => {
+    btn.addEventListener("click", () => {
+      if (currentStep > 0) {
+        currentStep--;
+        showStep(currentStep);
+      }
+    });
+  });
+
+  function addSkill() {
+    const container = document.getElementById("skills-section");
+    const row = document.createElement("div");
+    row.className = "skill-row d-flex gap-2 mt-2";
+    row.innerHTML = `
+      <input type="text" class="form-control" name="skills[]" placeholder="Skill" required>
+      <input type="number" class="form-control" name="rates[]" placeholder="Rate (₹)" required>
+      <select class="form-select" name="rate_types[]" required>
+        <option value="per hour">₹/Hour</option>
+        <option value="per job">₹/Job</option>
+        <option value="per kilogram">₹/Kilogram</option>
+        <option value="custom">₹/Custom</option>
+      </select>
+      <button type="button" class="btn btn-danger" onclick="this.parentElement.remove()">✖</button>
+    `;
+    container.appendChild(row);
+  }
+
+  showStep(currentStep);
+</script>
+
+</body>
+</html>

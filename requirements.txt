@@ -1,0 +1,15 @@
+python-dotenv
+fastapi
+uvicorn[standard]
+jinja2
+itsdangerous
+python-multipart
+sqlalchemy>=2.0
+psycopg[binary]
+pydantic
+starlette
+geopy
+requests
+twilio
+email-validator
+passlib[bcrypt]

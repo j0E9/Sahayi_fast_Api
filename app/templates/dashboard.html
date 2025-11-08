@@ -1,0 +1,34 @@
+{% extends "admin/base.html" %}
+{% block content %}
+<h2>Dashboard</h2>
+<div class="row">
+  {% for k,v in counts.items() %}
+    <div class="col-md-2">
+      <div class="card mb-3">
+        <div class="card-body">
+          <h5 class="card-title">{{ k }}</h5>
+          <p class="card-text">{{ v }}</p>
+        </div>
+      </div>
+    </div>
+  {% endfor %}
+</div>
+
+<h4>Recent bookings</h4>
+<div class="table-wrap">
+  <table class="table table-sm">
+    <thead><tr>
+      {% for c in recent[0].__table__.columns if recent %}<th>{{ c.key }}</th>{% endfor %}
+    </tr></thead>
+    <tbody>
+      {% for r in recent %}
+        <tr>
+          {% for c in r.__table__.columns %}
+            <td>{{ getattr(r, c.key) }}</td>
+          {% endfor %}
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

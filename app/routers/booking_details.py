@@ -1,0 +1,391 @@
+# app/routers/booking_details.py
+from __future__ import annotations
+
+from datetime import datetime, timedelta
+from fastapi import APIRouter, Depends, HTTPException, Request, status, Body
+from sqlalchemy.orm import Session, joinedload
+from app.models import Rating
+from app.database import get_db
+from app.models import Booking, User, WorkerWarning
+
+
+
+import secrets
+def generate_otp(length: int = 6) -> str:
+    """Return a numeric OTP of given length."""
+    return "".join(str(secrets.randbelow(10)) for _ in range(length))
+
+router = APIRouter(tags=["booking-details"])
+
+# ---- session-based auth (Trust API style) ----
+def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
+    uid = request.session.get("user_id")
+    if not uid:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+    user = db.get(User, int(uid))
+    if not user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+    return user
+
+
+
+def _payment_flags(booking: Booking) -> dict:
+    return {
+        "payment_required": bool(getattr(booking, "payment_required", True)),
+        "payment_completed": bool(getattr(booking, "payment_completed", False)),
+        "razorpay_status": (getattr(booking, "razorpay_status", "") or "").lower(),
+    }
+
+
+# ---- util: plain chat URL (avoid url_for name lookups) ----
+def chat_url_for(booking_id: int) -> str:
+    # Make sure your chat route actually matches this path
+    return f"/chat/{booking_id}"
+
+def _next_warning_allowed(db: Session, booking: Booking) -> tuple[bool, int]:
+    """
+    Returns (allowed, remaining) for issuing a warning.
+    allowed=True only if total warnings so far < 3.
+    remaining is how many warnings remain including the next one.
+    """
+    latest = (
+        db.query(WorkerWarning)
+        .filter(
+            WorkerWarning.booking_id == booking.id,
+            WorkerWarning.worker_id == booking.worker_id,
+        )
+        .order_by(WorkerWarning.created_at.desc())
+        .first()
+    )
+    stage = latest.stage if latest else 0
+    remaining = max(0, 3 - stage)   # warnings left BEFORE issuing the next
+    return (stage < 3, remaining)
+
+def has_giver_rated(db: Session, booking: Booking) -> bool:
+    return db.query(Rating).filter(
+        Rating.booking_id == booking.id,
+        Rating.job_giver_id == booking.provider_id,
+    ).first() is not None
+
+
+
+def _rating_payload(booking: Booking, is_giver: bool, name: str, map_url: str) -> dict:
+    """Payload that tells the frontend to show the rating popup to the giver."""
+    return {
+        "show": True,
+        "completed": True,
+        "rating_pending": is_giver and True,           # force popup for giver
+        "role": {"self": "giver" if is_giver else "worker"},
+        "booking_id": booking.id,
+        "giver_name": name,
+        "chat_url": chat_url_for(booking.id),
+        "map_url": map_url,
+    }
+
+
+@router.post("/get_booking_details")
+def get_booking_details(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    user_id = current_user.id
+
+    booking: Booking | None = (
+        db.query(Booking)
+        .options(
+            joinedload(Booking.provider),
+            joinedload(Booking.worker),
+        )
+        .filter((Booking.worker_id == user_id) | (Booking.provider_id == user_id))
+        .order_by(Booking.id.desc())
+        .first()
+    )
+
+    if not booking:
+        return {"show": False, "message": "No active chat."}
+
+    # Close chat for terminal states (Rejected/Cancelled = hard close)
+    if booking.status in ["Rejected", "Cancelled"]:
+        if booking.provider: booking.provider.busy = False
+        if booking.worker:   booking.worker.busy = False
+        db.commit()
+        return {"show": False, "message": "No active chat. Job ended or rejected."}
+
+    # ✅ Completed: allow rating popup for the giver
+    if booking.status == "Completed":
+        if booking.provider: booking.provider.busy = False
+        if booking.worker:   booking.worker.busy = False
+        db.commit()
+
+        is_giver = booking.provider_id == user_id
+        is_worker = booking.worker_id == user_id
+
+        name = booking.provider.name if is_worker else booking.worker.name
+        lat = booking.provider.latitude if is_worker else booking.worker.latitude
+        lon = booking.provider.longitude if is_worker else booking.worker.longitude
+        map_url = f"https://www.google.com/maps/search/?api=1&query={lat},{lon}" if lat and lon else ""
+
+        if is_giver and not has_giver_rated(db, booking):
+            return _rating_payload(booking, is_giver, name, map_url)
+
+        return {"show": False, "message": "✅ Job completed."}
+
+    # Pending → restrict giver; chat not visible yet
+    if booking.status == "Pending":
+        if booking.provider:
+            booking.provider.busy = True
+        db.commit()
+        return {"show": False, "message": "⏳ Waiting for worker response."}
+
+    # Only active chats visible
+    if booking.status not in ["Token Paid", "In Progress", "Extra Time"]:
+        return {"show": False, "message": "No active chat. Payment not done or job ended."}
+
+    is_giver = booking.provider_id == user_id
+    is_worker = booking.worker_id == user_id
+
+    allowed, remaining = _next_warning_allowed(db, booking)
+
+    can_warn_now = bool(is_giver and allowed and not getattr(booking, "otp_verified", False))
+
+    if is_worker:
+        can_warn_now = False
+
+    # Counterpart information
+    name = booking.provider.name if is_worker else booking.worker.name
+    lat = booking.provider.latitude if is_worker else booking.worker.latitude
+    lon = booking.provider.longitude if is_worker else booking.worker.longitude
+    map_url = f"https://www.google.com/maps/search/?api=1&query={lat},{lon}" if lat and lon else ""
+
+    now = datetime.utcnow()
+    rate_type = (booking.rate_type or "").strip().lower()
+    is_quantity_based = rate_type in ["per job", "per kilogram", "custom"]
+    is_hourly = rate_type == "per hour"
+
+    # ✅ Generate initial OTP to start the job (giver only)
+    if is_giver and not getattr(booking, "otp_code", None):
+        # replace with your helper
+        booking.otp_code = generate_otp()  # type: ignore[name-defined]
+        db.commit()
+
+    # ✅ Quantity-based flow
+    if is_quantity_based and (booking.completed_quantity or 0) >= (booking.quantity or 0):
+        if not getattr(booking, "final_otp_code", None):
+            booking.final_otp_code = generate_otp()  # type: ignore[name-defined]
+            db.commit()
+
+        if getattr(booking, "final_otp_verified", False):
+            booking.status = "Completed"
+            if booking.worker:   booking.worker.busy = False
+            if booking.provider: booking.provider.busy = False
+            db.commit()
+            if is_giver and not has_giver_rated(db, booking):
+                return _rating_payload(booking, is_giver, name, map_url)
+            return {"show": False, "message": "✅ Job completed and verified."}
+
+        # Still waiting for final OTP — keep chat active
+        return {
+            "show": True,
+            **_payment_flags(booking),
+            "booking_id": booking.id,
+            "completed_phase": True,
+            "giver_name": name,
+            "chat_url": chat_url_for(booking.id),
+            "map_url": map_url,
+            "final_otp_code": booking.final_otp_code if is_worker else None,
+            "show_final_otp_input": is_giver and not getattr(booking, "final_otp_verified", False),
+            "final_otp_verified": getattr(booking, "final_otp_verified", False),
+            "rate_type": booking.rate_type,
+            "quantity": booking.quantity,
+            "completed_quantity": booking.completed_quantity,
+            "chat_active": True,
+            "can_issue_warning": can_warn_now,
+            "warnings_remaining": remaining if can_warn_now else None,
+        }
+
+    # ✅ Hourly flow
+    time_left = None
+    if is_hourly and getattr(booking, "otp_verified", False) and getattr(booking, "otp_verified_time", None):
+        duration_secs = (booking.quantity or 0) * 3600
+        expiry_time = booking.otp_verified_time + timedelta(seconds=duration_secs)
+        time_left = (expiry_time - now).total_seconds()
+
+        if time_left <= 0:
+            # Grace check (extra time)
+            grace_seconds = 15
+            extra_requested = getattr(booking, "extra_timer_requested", False)
+            extra_requested_at = getattr(booking, "extra_timer_requested_at", None)
+            recent_request = bool(
+                extra_requested
+                and extra_requested_at
+                and (now - extra_requested_at).total_seconds() <= grace_seconds
+            )
+
+            if extra_requested or recent_request:
+                # ensure extra OTP
+                if not getattr(booking, "extra_otp_code", None):
+                    booking.extra_otp_code = generate_otp()  # type: ignore[name-defined]
+                    db.commit()
+
+                if not getattr(booking, "extra_otp_verified", False):
+                    return {
+                        "show": True,
+                        **_payment_flags(booking),
+                        "booking_id": booking.id,
+                        "giver_name": name,
+                        "chat_url": chat_url_for(booking.id),
+                        "map_url": map_url,
+                        "extra_otp_code": booking.extra_otp_code if is_giver else None,
+                        "show_extra_otp_input": is_worker,
+                        "extra_timer_pending": True,
+                        "chat_active": True,
+                        "time_left": 0,
+                        "message": "⏳ Waiting for Extra OTP verification.",
+                        "can_issue_warning": can_warn_now,
+                        "warnings_remaining": remaining if can_warn_now else None,
+                    }
+
+                # Start extra timer if not started
+                if booking.extra_otp_verified and not getattr(booking, "extra_timer_started_at", None):
+                    booking.extra_timer_started_at = datetime.utcnow()
+                    db.commit()
+
+                # Extra timer running → keep going until stopped
+                if booking.extra_timer_started_at and not getattr(booking, "extra_timer_stopped", False):
+                    extra_elapsed = (datetime.utcnow() - booking.extra_timer_started_at).total_seconds()
+                    return {
+                        "show": True,
+                        **_payment_flags(booking),
+                        "chat_active": True,
+                        "booking_id": booking.id,
+                        "extra_timer_running": True,
+                        "extra_duration_seconds": extra_elapsed,
+                        "giver_name": name,
+                        "chat_url": chat_url_for(booking.id),
+                        "map_url": map_url,
+                        "stop_confirmed": getattr(booking, "extra_timer_confirmed_stop", False),
+                        "show_stop_button": is_worker,
+                        "can_issue_warning": can_warn_now,
+                        "warnings_remaining": remaining if can_warn_now else None,
+                    }
+
+                # Extra timer stopped
+                if getattr(booking, "extra_timer_confirmed_stop", False):
+                    booking.status = "Completed"
+                    if booking.worker:   booking.worker.busy = False
+                    if booking.provider: booking.provider.busy = False
+                    db.commit()
+                    if is_giver and not has_giver_rated(db, booking):
+                        return _rating_payload(booking, is_giver, name, map_url)
+                    return {"show": False, "message": "✅ Extra time completed. Job finished."}
+
+                # Stop requested but not yet confirmed
+                return {
+                    "show": True,
+                    "chat_active": False,
+                    "extra_timer_stopped": True,
+                    "booking_id": booking.id,
+                    "show_confirm_stop_button": (
+                        (is_worker and getattr(booking, "extra_timer_stopped_by", "") == "provider")
+                        or (is_giver and getattr(booking, "extra_timer_stopped_by", "") == "worker")
+                    ) and not getattr(booking, "extra_timer_confirmed_stop", False),
+                    "giver_name": name,
+                }
+
+            # No extra timer requested → expire chat
+            booking.status = "Completed"
+            if booking.worker:   booking.worker.busy = False
+            if booking.provider: booking.provider.busy = False
+            db.commit()
+            if is_giver and not has_giver_rated(db, booking):
+                return _rating_payload(booking, is_giver, name, map_url)
+            return {"show": False, "message": "⛔ Chat expired. No extra time was requested."}
+
+        # Less than 10 minutes left → offer extra time (worker)
+        if time_left < 600 and not getattr(booking, "extra_timer_requested", False):
+            return {
+                "show": True,
+                **_payment_flags(booking),
+                "show_extra_timer_button": is_worker,
+                "chat_url": chat_url_for(booking.id),
+                "map_url": map_url,
+                "giver_name": name,
+                "booking_id": booking.id,
+                "rate_type": booking.rate_type,
+                "quantity": booking.quantity,
+                "completed_quantity": booking.completed_quantity,
+                "otp_code": booking.otp_code if is_giver else None,
+                "show_otp_input": is_worker and getattr(booking, "worker_arrived", False) and not getattr(booking, "otp_verified", False),
+                "show_reached_slider": is_worker and not getattr(booking, "worker_arrived", False),
+                "otp_verified": getattr(booking, "otp_verified", False),
+                "chat_active": True,
+                "time_left": time_left,
+                "can_issue_warning": can_warn_now,
+                "warnings_remaining": remaining if can_warn_now else None,
+            }
+
+    # Final fallback (active chat)
+    return {
+        "show": True,
+        **_payment_flags(booking),
+        "giver_name": name,
+        "booking_id": booking.id,
+        "chat_url": chat_url_for(booking.id),
+        "map_url": map_url,
+        "otp_code": booking.otp_code if is_giver else None,
+        "show_otp_input": is_worker and getattr(booking, "worker_arrived", False) and not getattr(booking, "otp_verified", False),
+        "show_reached_slider": is_worker and not getattr(booking, "worker_arrived", False),
+        "otp_verified": getattr(booking, "otp_verified", False),
+        "chat_active": True,
+        "time_left": time_left if is_hourly else None,
+        "rate_type": booking.rate_type,
+        "quantity": booking.quantity or 0,
+        "completed_quantity": booking.completed_quantity or 0,
+        "debug": {"is_worker": is_worker, "is_giver": is_giver},
+        "can_issue_warning": can_warn_now,
+        "warnings_remaining": remaining if can_warn_now else None,
+        "completed": booking.status == "Completed",
+        "rating_pending": (booking.status == "Completed") and (is_giver and not has_giver_rated(db, booking)),
+        "role": {"self": "giver" if is_giver else "worker"},
+    }
+
+
+@router.post("/rate_worker")
+def rate_worker(
+    data: dict = Body(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    booking_id = data.get("booking_id")
+    stars      = data.get("stars")
+    comment    = (data.get("comment") or "").strip()
+
+    if not booking_id or stars is None:
+        return {"success": False, "message": "Missing booking_id or stars."}
+
+    booking = db.query(Booking).filter(Booking.id == booking_id).first()
+    if not booking:
+        return {"success": False, "message": "Booking not found."}
+
+    # only job giver can rate
+    if booking.provider_id != current_user.id:
+        return {"success": False, "message": "Not authorized."}
+
+    # prevent duplicate for THIS booking
+    exists = db.query(Rating).filter(
+        Rating.booking_id == booking.id,
+        Rating.job_giver_id == booking.provider_id,
+    ).first()
+    if exists:
+        return {"success": False, "message": "You already rated this job."}
+
+    db.add(Rating(
+        booking_id=booking.id,  # <-- IMPORTANT
+        job_giver_id=booking.provider_id,
+        worker_id=booking.worker_id,
+        stars=float(stars),
+        comment=comment or None,
+    ))
+
+    db.commit()
+    return {"success": True, "message": "Rating saved."}

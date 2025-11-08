@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Welcome 👋</h1>
+<p>This page is rendered with Jinja via FastAPI.</p>
+<form method="post" action="/auth/login">
+  <label>Demo login name:</label>
+  <input name="name" placeholder="Joe">
+  <button type="submit">Login</button>
+</form>
+{% endblock %}

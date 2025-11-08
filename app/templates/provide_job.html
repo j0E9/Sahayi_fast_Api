@@ -1,0 +1,2196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Welcome to Job Connect</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Poppins', sans-serif;
+      background: linear-gradient(to right, #e0f7fa, #ffffff);
+      color: #333;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* Fixed boxes */
+    .location-box, .notification-icon, .token-box {
+      position: fixed;
+      z-index: 1000;
+      padding: 8px 12px;
+      border-radius: 12px;
+      font-size: 14px;
+      box-shadow: 0 0 5px rgba(0,0,0,0.2);
+    }
+
+    .location-box {
+      top: 10px;
+      left: 10px;
+      background-color: #d7f0e3;
+      max-width: 80vw;
+    }
+
+    .notification-icon {
+      top: 10px;
+      right: 10px;
+      font-size: 18px;
+      z-index: 1060;
+      background-color: #f0f0f0;
+      color: black;
+      text-decoration: none;
+      border-radius: 20px;
+    }
+
+    .token-box {
+      top: 55px; /* adjusted to avoid overlapping notification icon */
+      right: 10px;
+      z-index: 1070;
+      background-color: #fff4e6;
+      border: 1px solid #ffc107;
+      color: #856404;
+      font-weight: 500;
+    }
+
+    /* Hero section */
+    .hero {
+      text-align: center;
+      padding: 140px 20px 40px; /* enough padding to avoid fixed boxes */
+    }
+
+    .hero h1 {
+      font-size: 2.5rem;
+      font-weight: 600;
+      color: #00695c;
+    }
+
+    .hero p {
+      font-size: 1.2rem;
+      color: #555;
+    }
+
+    /* Option cards */
+    .card-options {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 20px;
+      margin-top: 40px;
+    }
+
+    .option-card {
+      background: white;
+      padding: 30px 20px;
+      border-radius: 16px;
+      width: 250px;
+      box-shadow: 0 6px 15px rgba(0, 0, 0, 0.1);
+      text-align: center;
+      transition: transform 0.3s ease;
+    }
+
+    .option-card:hover {
+      transform: translateY(-8px);
+    }
+
+    .option-card a {
+      text-decoration: none;
+      color: #0077cc;
+      font-weight: 500;
+      font-size: 18px;
+    }
+
+    /* Logout button */
+    .logout-link {
+      margin-top: 30px;
+      display: inline-block;
+      background-color: #f44336;
+      color: white;
+      padding: 10px 20px;
+      border-radius: 25px;
+      text-decoration: none;
+      font-weight: 500;
+      transition: background-color 0.3s;
+    }
+
+    .logout-link:hover {
+      background-color: #d32f2f;
+    }
+
+    /* Chat toggle button */
+    .chat-toggle-button {
+      position: fixed;
+      left: 0;
+      top: 50%;
+      transform: translateY(-50%);
+      writing-mode: vertical-rl;
+      background-color: #007bff;
+      color: white;
+      border: none;
+      border-radius: 0 8px 8px 0;
+      padding: 12px 8px;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+      z-index: 999;
+      box-shadow: 2px 2px 8px rgba(0,0,0,0.2);
+    }
+
+    /* Chat panel */
+    #chat-direction-panel {
+      display: none;
+      position: fixed;
+      top: 120px;   /* adjust this number to raise/lower */
+      left: 50%;
+      transform: translateX(-50%);
+      width: 100%;
+      max-width: 400px;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 0 20px rgba(0, 0, 0, 0.15);
+      padding: 20px;
+      z-index: 2000;
+    }
+
+
+    #chat-box {
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      height: 300px;
+      overflow-y: auto;
+      background: #f8f9fa;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+    }
+
+    .chat-message {
+      max-width: 70%;
+      padding: 8px 12px;
+      border-radius: 14px;
+      font-size: 14px;
+      display: inline-block;
+    }
+
+    .chat-message.me {
+      background-color: #007bff;
+      color: white;
+      align-self: flex-start;
+      border-bottom-right-radius: 2px;
+    }
+
+    .chat-message.partner {
+      background-color: #e5e5ea;
+      color: black;
+      align-self: flex-end;
+      border-bottom-left-radius: 2px;
+    }
+
+    #chat-input {
+      width: 100%;
+      border-radius: 8px;
+      border: 1px solid #ddd;
+      padding: 8px 10px;
+    }
+
+    /* Change location box */
+    #change-location-box {
+      display: none;
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: #ffffff;
+      padding: 16px;
+      border-radius: 8px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.3);
+      z-index: 2000;
+      max-height: 300px;
+      overflow-y: auto;
+      min-width: 240px;
+    }
+
+    .location-option {
+      padding: 6px 8px;
+      margin-bottom: 6px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    .location-option:hover {
+      background-color: #d7f0e3;
+    }
+
+    /* Responsive adjustments */
+    @media (max-width: 768px) {
+      .location-box, .notification-icon, .token-box {
+        font-size: 12px;
+        padding: 6px 10px;
+      }
+
+      .option-card {
+        width: 80%;
+      }
+
+      /* Move token-box further down to avoid overlap */
+      .token-box {
+        top: 90px;
+        right: 8px;
+      }
+
+     /* Push notification icon slightly lower */
+    .notification-icon {
+      top: 10px; /* or increase if needed */
+      right: 10px;
+    }
+
+      /* Ensure hero section starts below fixed elements */
+      .hero {
+        padding-top: 160px;
+      }
+    }
+   #reached-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      background: #28a745; /* green */
+      box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+      cursor: grabbing;
+      transition: 0.2s;
+    }
+
+    #reached-slider::-moz-range-thumb {
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      background: #28a745;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+      cursor: grabbing;
+    }
+    .profile-option {
+      padding: 8px;
+      border-radius: 6px;
+      transition: background 0.2s;
+    }
+    .profile-option:hover {
+      background: #f2f2f2;
+    }
+    .profile-option a {
+      text-decoration: none;
+      color: #333;
+      display: block;
+    }
+
+
+    </style>
+
+</head>
+
+<!-- Location Box -->
+<div class="location-box" style="position:fixed; top:10px; left:10px; z-index:1050;
+     background:#d7f0e3; padding:8px 10px; border-radius:10px; box-shadow:0 0 5px rgba(0,0,0,0.2);
+     display:flex; flex-direction:column; gap:6px; max-width:280px; font-size:13px;">
+
+  <!-- Current location -->
+  <div style="display:flex; align-items:center; gap:4px; flex-wrap:wrap;">
+    📍 <b>Current Location:</b> <span id="location-display">Fetching...</span>
+  </div>
+
+    <div id="location-error" style="display:none; background:#fff3f3;
+       color:#b00020; font-size:12px; padding:6px 8px; border-radius:6px;
+       margin-top:4px; border:1px solid #f5c2c7;">
+    ⚠️ Location unavailable. Please enable GPS/Location Services.
+    <br>
+    <button onclick="retryLocation()"
+            class="btn btn-sm btn-outline-danger"
+            style="margin-top:4px; font-size:12px; padding:2px 6px;">
+      🔄 Retry Location
+    </button>
+  </div>
+
+  <!-- Controls Row (Change Location first, Save below) -->
+  <div style="display:flex; flex-direction:column; gap:4px; flex-wrap:wrap;">
+    <button id="change-location-btn" class="btn btn-outline-secondary btn-sm">🔄 Change Location</button>
+    <button id="show-save-location" class="btn btn-outline-primary btn-sm">💾 Save Location</button>
+
+    {% if current_user.is_worker %}
+    <div class="form-check form-switch mb-0" style="margin-top:4px;">
+      <input class="form-check-input" type="checkbox" id="worker-status-toggle"
+        {% if is_online %}checked{% endif %}>
+      <label class="form-check-label mb-0" id="worker-status-label" for="worker-status-toggle">
+        <span style="color:{{ 'green' if is_online else 'red' }};">
+          {{ "🟢 Online" if is_online else "🔴 Offline" }}
+        </span>
+      </label>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Hidden Save form -->
+  <div id="save-location-form" style="display:none; margin-top:6px;">
+    <input type="text" id="place-name-input"
+           class="form-control form-control-sm"
+           placeholder="Enter place name"
+           style="max-width:180px; display:inline-block;">
+    <button id="save-location-btn" class="btn btn-success btn-sm">Save</button>
+    <span id="save-location-msg" style="margin-left:6px; color:red;"></span>
+  </div>
+</div>
+
+
+<!-- Custom Change Location Popup (Center of page) -->
+<div id="change-location-box" style="display:none;
+     position:fixed; top:50%; left:50%; transform:translate(-50%, -50%);
+     background:#ffffff; padding:14px; border-radius:10px;
+     box-shadow:0 0 15px rgba(0,0,0,0.3); z-index:2000;
+     max-height:300px; overflow-y:auto; min-width:240px;">
+
+  <h5 style="margin-bottom:8px;">Select Saved Location</h5>
+
+  <!-- Live Location -->
+  <div style="margin-bottom:6px;">
+    <button id="use-live-location" class="btn btn-sm btn-primary">📡 Use Live Location</button>
+  </div>
+
+  <!-- Saved Locations -->
+  <div id="saved-locations-list" style="margin-bottom:6px;"></div>
+
+  <!-- Close -->
+  <button id="close-change-location" class="btn btn-sm btn-outline-danger">
+    Close
+  </button>
+</div>
+
+
+<!-- Top-right action buttons -->
+<div style="position: fixed; top: 10px; right: 10px; z-index: 1080; display: flex; gap: 10px; align-items: center;">
+
+  <!-- Notification button -->
+  <a href="/notifications" class="btn btn-light btn-sm"
+     style="border-radius:20px; box-shadow:0 0 5px rgba(0,0,0,0.2);">
+    🔔 {{ unread_count }}
+  </a>
+
+  <!-- Profile button with dropdown -->
+    <div style="position: relative;">
+      <button id="profile-btn" class="btn btn-light btn-sm"
+              style="border-radius:20px; box-shadow:0 0 5px rgba(0,0,0,0.2);">
+        👤 Profile
+      </button>
+
+      <!-- Dropdown box -->
+      <div id="profile-box" style="display:none; position:absolute; right:0; margin-top:5px;
+           background:white; border-radius:10px; box-shadow:0 4px 12px rgba(0,0,0,0.2);
+           width:220px; padding:10px; z-index:2000;">
+        <div class="profile-option"><a href="/profile">⚙️ Profile Settings</a></div>
+        <div class="profile-option"><a href="/wallet">💳 Wallet</a></div>
+        <div class="profile-option"><a href="/payment_history">📂 History</a></div>
+        <div class="profile-option"><a href="/agreement">📜 Agreement</a></div>
+        <div class="profile-option"><a href="/support">❓ Help & Support</a></div>
+        <div class="profile-option"><a href="/logout">🚪 Logout</a></div>
+      </div>
+    </div>
+
+</div>
+
+<!-- Tokens info stays below -->
+<div class="token-box">
+  🪙 <b>Tokens:</b> {{ current_user.tokens }}
+</div>
+
+
+  <div class="hero">
+    <h1>Welcome, {{ current_user.name }} 👋</h1>
+    <p>Your gateway to finding and offering jobs nearby</p>
+    <div id="hero-actions">
+        <div class="card-options">
+      <div class="option-card"><a href='/provide_job'>🛠️ Get a Sahayi</a></div>
+      <div class="option-card"><a href='/seek_job'>🤝 Be a Sahayi</a></div>
+     </div>
+    </div>
+  </div>
+
+  <!-- Chat Popup -->
+  <div id="chat-direction-panel" style="display:none;">
+    <div id="chat-content">
+      <h5>Booking Found</h5>
+      <p><strong>Job Partner:</strong> <span id="partner-name">Loading...</span></p>
+
+      <div id="otp-display" style="display: none;">
+        <label><strong>🔑 OTP for Sahayi:</strong></label>
+        <div id="generated-otp" style="font-size: 24px; font-weight: bold; color: #007bff;"></div>
+      </div>
+
+     <!-- Worker "Reached Location" slider -->
+    <div id="reached-location-section" style="margin-top:15px; display:none; text-align:center;">
+      <div style="position: relative; width: 100%; max-width: 320px; height: 60px; margin: auto; background: #e0e0e0; border-radius: 40px; box-shadow: inset 0 4px 6px rgba(0,0,0,0.2); overflow: hidden;">
+
+        <!-- Label inside the track -->
+        <span style="position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+                     font-weight: bold; color: #555; font-size: 16px; pointer-events: none;">
+          📍 Confirm Arrival
+        </span>
+
+        <!-- Actual slider -->
+        <input type="range" min="0" max="100" value="0" id="reached-slider"
+               style="width: 100%; height: 60px; -webkit-appearance: none; background: transparent; cursor: grab;">
+
+      </div>
+      <div id="reached-msg" style="font-size:14px; margin-top:8px; color:red;"></div>
+    </div>
+
+
+      <div id="otp-input-section" style="display: none; margin-top: 10px;">
+        <label for="otp-input"><strong>🔐 Enter OTP from Job Giver:</strong></label>
+        <input type="text" id="otp-input" class="form-control mt-1" placeholder="Enter OTP here">
+        <button id="submit-otp" class="btn btn-primary btn-sm mt-2">Verify OTP</button>
+        <div id="otp-status" class="mt-2" style="font-weight: bold;"></div>
+      </div>
+      <!-- Final OTP Display for Worker -->
+      <div id="final-otp-display" style="display: none; margin-top: 10px;">
+        <label><strong>🎯 Final OTP (show to Job Giver):</strong></label>
+        <div id="final-otp-code" style="font-size: 22px; font-weight: bold; color: #28a745;"></div>
+      </div>
+
+      <!-- Final OTP Input for Giver -->
+      <div id="final-otp-input-section" style="display: none; margin-top: 10px;">
+        <label><strong>✅ Enter Final OTP from Worker:</strong></label>
+        <input type="text" id="final-otp-input" class="form-control mt-1" placeholder="Enter final OTP here">
+        <button id="submit-final-otp" class="btn btn-success btn-sm mt-2">Verify Final OTP</button>
+        <div id="final-otp-status" class="mt-2" style="font-weight: bold;"></div>
+      </div>
+      <!-- Extra OTP Display for Giver -->
+     <div id="extra-otp-display" style="display: none; margin-top: 10px;">
+       <label><strong>⏱ Extra OTP for Worker:</strong></label>
+       <div id="extra-otp-code" style="font-size: 22px; font-weight: bold; color: #ff5722;"></div>
+     </div>
+
+     <!-- Extra OTP Input for Worker -->
+     <div id="extra-otp-input-section" style="display: none; margin-top: 10px;">
+       <label><strong>⏱ Enter Extra OTP from Giver:</strong></label>
+       <input type="text" id="extra-otp-input" class="form-control mt-1" placeholder="Enter extra OTP here">
+       <button id="submit-extra-otp" class="btn btn-info btn-sm mt-2">Verify Extra OTP</button>
+       <div id="extra-otp-status" class="mt-2" style="font-weight: bold;"></div>
+     </div>
+
+
+
+      <p id="chat-timer"></p>
+      <div id="quantity-tracker" style="display: none;">
+      <p><strong>📦 Quantity:</strong> <span id="quantity-count">0 / 0</span></p>
+
+      <label><strong>📈 Update Completed Quantity:</strong></label>
+      <input type="number" min="1" id="completed-input" class="form-control mt-1" placeholder="Enter completed amount" style="display: none;">
+      <button id="submit-completed" class="btn btn-warning btn-sm mt-2" style="display: none;">Submit</button>
+      <div id="completed-status" class="mt-2" style="font-weight: bold;"></div>
+    </div>
+      <div id="chat-box">🗨 Chat will appear here...</div>
+      <div style="display: flex; gap: 5px; margin-top: 5px;">
+          <input type="text" id="chat-input" placeholder="Type your message..." disabled style="flex: 1;" />
+          <button id="send-chat-btn" class="btn btn-primary btn-sm" disabled>Send</button>
+        </div>
+        <script>
+            const CURRENT_USER_ID = {{ current_user.id }};
+        </script>
+        <a id="chat-link" style="display: none;"></a>
+
+      <button id="map-btn" class="btn btn-success btn-sm mt-2" style="display: none;">📍 Get Directions</button>
+      <button id="call-btn" class="btn btn-info btn-sm mt-2">📞 Call Partner</button>
+      <button id="request-extra-btn" class="btn btn-warning mt-2" style="display:none;">⏱ Request Extra Time</button>
+      <button id="stop-extra-btn" class="btn btn-danger mt-2" style="display:none;">🛑 Stop Extra Time</button>
+      <button id="confirm-stop-btn" class="btn btn-dark mt-2" style="display:none;">✅ Confirm Stop</button>
+      <!-- 🚨 Warn Sahayi Button -->
+      <button id="warn-sahayi-btn" class="btn btn-danger mt-3" style="display:none;">⚠ Warn Sahayi</button>
+
+
+
+    </div>
+
+  </div>
+<!-- Worker warning modal -->
+<div id="worker-warn-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:9999; align-items:center; justify-content:center;">
+  <div style="background:white; border-radius:12px; max-width:520px; width:90%; padding:24px; text-align:center; box-shadow:0 8px 30px rgba(0,0,0,0.3);">
+    <h3 style="margin-top:0;">⚠️ Delay Warning</h3>
+    <p id="worker-warn-msg" style="font-size:18px; margin:12px 0;">Your partner warned you for delay in arriving.</p>
+    <p id="worker-warn-chances" style="font-weight:600; margin-bottom:12px;"></p>
+    <div style="display:flex; gap:10px; justify-content:center;">
+      <button id="worker-warn-close" class="btn btn-primary">Close</button>
+      <button id="worker-warn-ack" class="btn btn-outline-secondary">Acknowledge</button>
+    </div>
+  </div>
+</div>
+
+<!-- short alert sound -->
+<audio id="warn-sound" preload="auto">
+  <source src="{{ url_for('static', filename='audio/videoplayback.m4a') }}" type="audio/mp4">
+  <!-- If you want you can replace above data URL with an actual hosted mp3 path like /static/sounds/alert.mp3 -->
+</audio>
+
+
+<div id="location-error" style="display:none; color:red; font-size:12px; margin-top:4px;">
+  ⚠️ Location unavailable. Please enable GPS/Location Services.
+  <br>
+  <button onclick="retryLocation()" class="btn btn-sm btn-outline-danger" style="margin-top:4px;">
+    Retry Location
+  </button>
+</div>
+
+<!-- Worker negotiation popup (global) -->
+<div id="neg-overlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:5000; align-items:center; justify-content:center;">
+  <div style="background:#fff; border-radius:12px; width:92%; max-width:420px; padding:18px;">
+    <h5 id="neg-title" class="mb-2">Custom price confirmation</h5>
+    <div class="text-muted small mb-2" id="neg-subtitle"></div>
+    <label class="form-label mb-1">Your price (INR)</label>
+    <input type="number" id="neg-worker-price" class="form-control" min="0" step="1" placeholder="Type amount">
+    <div id="neg-msg" class="small text-muted mt-2"></div>
+    <div class="d-flex gap-2 mt-3">
+      <button id="neg-confirm" class="btn btn-primary flex-grow-1">Confirm</button>
+      <button id="neg-cancel"  class="btn btn-outline-danger">Cancel</button>
+    </div>
+  </div>
+</div>
+
+
+<script>
+// Current user role from server-side template
+const CURRENT_USER_ROLE = "{{ 'worker' if current_user.is_worker else 'giver' }}";
+
+window.addEventListener('DOMContentLoaded', () => {
+    const mapBtn = document.getElementById('map-btn');
+
+    if (mapBtn) {  // ✅ Check if element exists
+        if (CURRENT_USER_ROLE === 'worker') {
+            mapBtn.style.display = 'inline-block';
+        } else {
+            mapBtn.style.display = 'none';
+        }
+    }
+});
+
+
+let locationRetryInterval = null;
+
+async function fetchLocationAndUpdate() {
+  if (!navigator.geolocation) {
+    document.getElementById("location-display").textContent = "❌ Not supported";
+    return;
+  }
+
+  navigator.geolocation.getCurrentPosition(
+    async pos => {
+      // ✅ Clear any retry interval if location works
+      if (locationRetryInterval) {
+        clearInterval(locationRetryInterval);
+        locationRetryInterval = null;
+      }
+      document.getElementById("location-error").style.display = "none";
+
+      const lat = pos.coords.latitude;
+      const lon = pos.coords.longitude;
+
+      const res = await fetch('/get_location_details', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ latitude: lat, longitude: lon })
+      });
+
+      if (res.ok) {
+        const loc = await res.json();
+        document.getElementById("location-display").textContent = `${loc.state}, ${loc.zipcode}`;
+
+        await fetch('/update_location', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ latitude: lat, longitude: lon, state: loc.state, zipcode: loc.zipcode })
+        });
+      }
+    },
+    error => {
+      console.warn("Location error:", error);
+
+      // ❌ Show warning and retry option
+      document.getElementById("location-error").style.display = "block";
+
+      if (!locationRetryInterval) {
+        // 🔁 Auto retry every 10s until available
+        locationRetryInterval = setInterval(fetchLocationAndUpdate, 10000);
+      }
+    },
+    { enableHighAccuracy: true, timeout: 10000 }
+  );
+}
+
+// Manual retry button
+function retryLocation() {
+  fetchLocationAndUpdate();
+}
+
+
+// Toggle save location form
+document.getElementById("show-save-location").addEventListener("click", () => {
+  const form = document.getElementById("save-location-form");
+  form.style.display = form.style.display === "none" ? "block" : "none";
+});
+
+// Save location
+document.getElementById("save-location-btn").addEventListener("click", async () => {
+  const placeInput = document.getElementById("place-name-input");
+  let placeName = placeInput.value.trim();
+
+  if (!placeName) {
+    document.getElementById("save-location-msg").style.color = "red";
+    document.getElementById("save-location-msg").textContent = "⚠ Please enter a place name";
+    return;
+  }
+
+  if (!navigator.geolocation) return alert("Geolocation not supported");
+
+  navigator.geolocation.getCurrentPosition(async pos => {
+    const lat = pos.coords.latitude, lon = pos.coords.longitude;
+
+    // Get state + zipcode
+    const res = await fetch('/get_location_details', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ latitude: lat, longitude: lon })
+    });
+    const loc = await res.json();
+
+    // Final formatted name
+    const finalName = `${placeName} (${loc.zipcode})`;
+
+    // Save to DB
+    await fetch('/save_location', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        latitude: lat,
+        longitude: lon,
+        state: loc.state,
+        zipcode: loc.zipcode,
+        name: finalName
+      })
+    });
+
+    // ✅ Success handling
+    document.getElementById("save-location-msg").style.color = "green";
+    document.getElementById("save-location-msg").textContent = `✅ Saved as ${finalName}`;
+    placeInput.value = ""; // clear input
+
+    // Hide the form again after 1 second
+    setTimeout(() => {
+      document.getElementById("save-location-form").style.display = "none";
+      document.getElementById("save-location-msg").textContent = ""; // clear success text
+    }, 1000);
+  });
+});
+
+
+
+document.getElementById("change-location-btn").addEventListener("click", async () => {
+  try {
+    const res = await fetch('/get_saved_locations');
+    if (!res.ok) throw new Error("Failed to fetch saved locations");
+    const data = await res.json();
+    const list = document.getElementById("saved-locations-list");
+    list.innerHTML = "";
+
+    if (!data || data.length === 0) {
+      list.innerHTML = "<p class='text-muted'>No saved locations yet. Save one first!</p>";
+    } else {
+      data.forEach(loc => {
+        const div = document.createElement("div");
+        div.className = "location-option";
+        div.textContent = `${loc.name} (${loc.state || "Unknown"}, ${loc.zipcode || "Unknown"})`;
+
+        div.onclick = async () => {
+          try {
+            const updateRes = await fetch('/set_current_location', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(loc)
+            });
+
+            const result = await updateRes.json();
+            if (updateRes.ok && result.success) {
+              // Display the full saved name
+              document.getElementById("location-display").textContent = loc.name;
+              document.getElementById("change-location-box").style.display = "none";
+            } else {
+              console.error("Failed to set current location:", result);
+              alert("Failed to update location. Try again.");
+            }
+          } catch (err) {
+            console.error("Error updating location:", err);
+            alert("Error updating location. See console for details.");
+          }
+        };
+
+
+        list.appendChild(div);
+      });
+    }
+
+    // Show the custom popup
+    document.getElementById("change-location-box").style.display = "block";
+
+  } catch (err) {
+    console.error("Error fetching saved locations:", err);
+    alert("Failed to load saved locations. See console for details.");
+  }
+});
+
+// Close button
+document.getElementById("close-change-location").addEventListener("click", () => {
+  document.getElementById("change-location-box").style.display = "none";
+});
+
+// Use live location
+document.getElementById("use-live-location").addEventListener("click", async () => {
+  await fetchLocationAndUpdate(); // existing function
+  document.getElementById("change-location-box").style.display = "none";
+});
+
+
+
+
+const chatBox = document.getElementById("chat-box");
+const chatInput = document.getElementById("chat-input");
+const sendBtn = document.getElementById("send-chat-btn");
+
+function appendMessage(sender, text) {
+    const msgDiv = document.createElement("div");
+    msgDiv.innerHTML = `<strong>${sender}:</strong> ${text}`;
+    chatBox.appendChild(msgDiv);
+    chatBox.scrollTop = chatBox.scrollHeight;
+}
+
+
+
+async function checkPendingPayment() {
+  const res = await fetch('/check_pending_payment');
+  const data = await res.json();
+  if (data.redirect_url) setTimeout(() => window.location.href = data.redirect_url, 1000);
+}
+
+async function checkBookingStatusAndShowChat() {
+  const res = await fetch('/get_booking_details', { method: 'POST' });
+  const data = await res.json();
+
+  if (!data || !data.booking_id) return;
+
+      // If server already knows arrival / OTP verified, mark arrival locally (hide warn button)
+  if (data.arrival_confirmed || data.otp_verified) {
+    try {
+      markArrivalConfirmed();
+    } catch (e) {
+      console.warn("markArrivalConfirmed() error:", e);
+    }
+    // defensive: hide warn button and clear timer for giver as well
+    const warnBtn = document.getElementById("warn-sahayi-btn");
+    if (warnBtn) warnBtn.style.display = "none";
+    if (warnTimerHandle) {
+      clearTimeout(warnTimerHandle);
+      warnTimerHandle = null;
+    }
+  }
+
+
+   if (data.completed) {
+    const chatPanel = document.getElementById("chat-direction-panel");
+
+    chatPanel.style.display = "block";
+
+    chatPanel.innerHTML = `
+      <h5>✅ Work Completed</h5>
+      <p><strong>Partner:</strong> ${data.giver_name}</p>
+      <p>✅ Your work has been marked as complete.</p>
+      <a href="${data.chat_url}" target="_blank" class="btn btn-primary mt-2">💬 View Chat</a>
+      <a href="${data.map_url}" target="_blank" class="btn btn-success mt-2">📍 Get Directions</a>
+      <button class="btn btn-secondary mt-3" onclick="document.getElementById('chat-direction-panel').style.display='none'">Close</button>
+    `;
+    window._warnTimerStartedFor = null;
+    return;
+  }
+
+
+
+  const chatPanel = document.getElementById("chat-direction-panel");
+  const otpDisplay = document.getElementById("otp-display");
+  const generatedOtp = document.getElementById("generated-otp");
+  const otpInputSection = document.getElementById("otp-input-section");
+  const chatInput = document.getElementById("chat-input");
+  const chatTimer = document.getElementById("chat-timer");
+
+  chatPanel.style.display = "block";
+
+    // ✅ Start drive timer only for JOB GIVER side
+    if (CURRENT_USER_ROLE === "giver" && data.booking_id) {
+      if (window._warnTimerStartedFor !== data.booking_id) {
+        arrivalConfirmed = false;
+        if (warnTimerHandle) clearTimeout(warnTimerHandle);
+        warnTimerHandle = null;
+        startDriveTimer(data.drive_seconds || 0, data.booking_id);
+        window._warnTimerStartedFor = data.booking_id;
+      }
+    }
+
+
+
+
+
+
+  if (data.show) {
+    // 🆕 Final OTP logic
+    const finalOTPDisplay = document.getElementById("final-otp-display");
+    const finalOTPInput = document.getElementById("final-otp-input-section");
+
+    if (data.final_otp_code) {
+      finalOTPDisplay.style.display = "block";
+      document.getElementById("final-otp-code").textContent = data.final_otp_code;
+    } else {
+      finalOTPDisplay.style.display = "none";
+    }
+
+    if (data.show_final_otp_input) {
+      finalOTPInput.style.display = "block";
+    } else {
+      finalOTPInput.style.display = "none";
+    }
+
+  // Extra OTP display for giver
+    const extraOtpDisplay = document.getElementById("extra-otp-display");
+    const extraOtpCodeEl = document.getElementById("extra-otp-code");
+    const extraOtpInputSection = document.getElementById("extra-otp-input-section");
+
+    if (data.extra_otp_code) {
+      extraOtpDisplay.style.display = "block";
+      extraOtpCodeEl.textContent = data.extra_otp_code;
+    } else {
+      extraOtpDisplay.style.display = "none";
+    }
+
+    if (data.show_extra_otp_input) {
+      extraOtpInputSection.style.display = "block";
+    } else {
+      extraOtpInputSection.style.display = "none";
+    }
+
+
+    document.getElementById("partner-name").textContent = data.giver_name;
+    document.getElementById("chat-link").href = data.chat_url;
+    // Show "Request Extra Time" button if allowed
+    if (data.show_extra_timer_button) {
+      document.getElementById("request-extra-btn").style.display = "inline-block";
+    } else {
+      document.getElementById("request-extra-btn").style.display = "none";
+    }
+
+    // Handle pending extra timer state
+    if (data.extra_timer_pending) {
+      chatInput.disabled = true;
+      chatTimer.textContent = data.message || "⏳ Extra timer will start shortly.";
+    }
+
+    // Handle extra timer running
+    if (data.extra_timer_running) {
+  clearInterval(window.chatCountdown);  // ⛔ Stop normal timer
+  chatInput.disabled = false;
+  document.getElementById("send-chat-btn").disabled = false;
+
+  let extraTimeElapsed = Math.floor(data.extra_duration_seconds || 0);
+
+    clearInterval(window.extraChatCountdown);
+    window.extraChatCountdown = setInterval(() => {
+      const mins = Math.floor(extraTimeElapsed / 60);
+      const secs = extraTimeElapsed % 60;
+
+      chatTimer.textContent = `⏱ Extra Chat Time: ${mins}m ${secs}s`;
+
+      extraTimeElapsed++;
+
+    }, 1000);
+
+
+
+  if (CURRENT_USER_ROLE === "worker") {
+    document.getElementById("map-btn").style.display = "inline-block";
+  } else {
+    document.getElementById("map-btn").style.display = "none";
+  }
+
+
+  if (!data.stop_confirmed) {
+    document.getElementById("stop-extra-btn").style.display = "inline-block";
+  } else {
+    document.getElementById("stop-extra-btn").style.display = "none";
+  }
+}
+
+// If stop was clicked but not yet confirmed
+if (data.extra_timer_stopped && data.show_confirm_stop_button) {
+  document.getElementById("confirm-stop-btn").style.display = "inline-block";
+  document.getElementById("stop-extra-btn").style.display = "none"; // hide stop
+} else {
+  document.getElementById("confirm-stop-btn").style.display = "none";
+}
+
+
+
+
+    document.getElementById("partner-name").textContent = data.giver_name;
+    document.getElementById("chat-link").href = data.chat_url;
+    localStorage.setItem("mapUrl", data.map_url);
+
+    otpDisplay.style.display = data.otp_code ? "block" : "none";
+    document.getElementById("generated-otp").textContent = data.otp_code || "";
+
+    if (data.show_reached_slider) {
+        document.getElementById("reached-location-section").style.display = "block";
+        document.getElementById("otp-input-section").style.display = "none";
+    } else if (data.show_otp_input) {
+        document.getElementById("reached-location-section").style.display = "none";
+        document.getElementById("otp-input-section").style.display = "block";
+    }
+
+
+    if (!data.otp_verified) {
+      chatInput.disabled = false;
+      chatTimer.textContent = "🔒 Please verify OTP ";
+    } else if (data.chat_active && data.time_left > 0) {
+      let timeLeft = Math.floor(data.time_left);
+      chatInput.disabled = false;
+      document.getElementById("send-chat-btn").disabled = false;
+
+
+      // Show chat & map buttons
+      if (CURRENT_USER_ROLE === "worker") {
+        document.getElementById("map-btn").style.display = "inline-block";
+      } else {
+        document.getElementById("map-btn").style.display = "none";
+      }
+
+
+      clearInterval(window.chatCountdown);
+      window.chatCountdown = setInterval(() => {
+        if (timeLeft <= 0) {
+          clearInterval(window.chatCountdown);
+
+          if (data.extra_timer_pending) {
+            // Let the server handle it — do NOT mark expired
+            chatTimer.textContent = data.message || "⏳ Waiting for Extra OTP verification.";
+            return;
+          }
+
+          // ❌ Only run this if extra timer not requested
+          chatInput.disabled = true;
+          chatTimer.textContent = "⛔ Chat time expired.";
+          document.getElementById("chat-link").style.display = "none";
+          document.getElementById("map-btn").style.display = "none";
+          fetch("/end_booking", { method: "POST" });
+          return;
+        }
+
+        const mins = Math.floor(timeLeft / 60);
+        const secs = timeLeft % 60;
+        chatTimer.textContent = `🕒 Chat will expire in ${mins}m ${secs}s`;
+        timeLeft--;
+      }, 1000);
+    } else if (data.rate_type !== 'per hour' && data.chat_active) {
+      // ✅ For per job/kilo/km type (manual tracking)
+      chatInput.disabled = false;
+      document.getElementById("send-chat-btn").disabled = false;
+
+
+      if (CURRENT_USER_ROLE === "worker") {
+        document.getElementById("map-btn").style.display = "inline-block";
+      } else {
+        document.getElementById("map-btn").style.display = "none";
+      }
+
+
+      document.getElementById("quantity-count").textContent = `${data.completed_quantity} / ${data.quantity}`;
+      chatTimer.textContent = `✅ Chat open until work is marked complete.`;
+
+      // Only show update input to the worker
+      if (data.debug && data.debug.is_worker) {
+        document.getElementById("completed-input").style.display = "block";
+        document.getElementById("submit-completed").style.display = "inline-block";
+      } else {
+        document.getElementById("completed-input").style.display = "none";
+        document.getElementById("submit-completed").style.display = "none";
+      }
+
+      document.getElementById("quantity-tracker").style.display = "block";
+
+    } else {
+      chatInput.disabled = true;
+      chatTimer.textContent = "⛔ Chat time expired.";
+      document.getElementById("chat-link").style.display = "none";
+      document.getElementById("map-btn").style.display = "none";
+    }
+
+
+  } else {
+    chatPanel.style.display = "none";
+  }
+}
+
+document.getElementById("map-btn").addEventListener("click", () => {
+  const mapUrl = localStorage.getItem("mapUrl");
+  if (mapUrl) window.open(mapUrl, "_blank");
+});
+
+document.getElementById("submit-otp").addEventListener("click", async () => {
+  const otp = document.getElementById("otp-input").value;
+  const res = await fetch("/verify_otp", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ otp })
+  });
+  const result = await res.json();
+  if (result.success) {
+      document.getElementById("otp-input-section").style.display = "none";
+      document.getElementById("otp-status").textContent = "✅ OTP Verified!";
+      document.getElementById("otp-status").style.color = "green";
+
+      // ✅ Directly enable chat input & send button
+      document.getElementById("chat-input").disabled = false;
+      document.getElementById("send-chat-btn").disabled = false;
+
+
+      markArrivalConfirmed();
+
+      checkBookingStatusAndShowChat(); // refresh panel
+  } else {
+    document.getElementById("otp-status").textContent = result.message || "Invalid OTP.";
+    document.getElementById("otp-status").style.color = "red";
+  }
+});
+document.getElementById("submit-completed").addEventListener("click", async () => {
+  const completed = parseInt(document.getElementById("completed-input").value);
+  const res = await fetch("/update_completed_quantity", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ completed_quantity: completed })
+  });
+
+  const result = await res.json();
+  const statusEl = document.getElementById("completed-status");
+
+  if (result.success) {
+    statusEl.textContent = "✅ Updated!";
+    statusEl.style.color = "green";
+
+    // ✅ 🛑 Don't immediately re-fetch the chat here.
+    // ✅ 🆕 Show a delay, or user confirmation before refresh
+    if (completed >= parseInt(document.getElementById("quantity-count").textContent.split('/')[1])) {
+      statusEl.textContent = "✅ Work marked complete! Waiting for confirmation...";
+      setTimeout(() => {
+        checkBookingStatusAndShowChat(); // Then update after short delay
+      }, 3000);
+    } else {
+      checkBookingStatusAndShowChat(); // still update if not yet done
+    }
+  } else {
+    statusEl.textContent = result.message || "❌ Update failed.";
+    statusEl.style.color = "red";
+  }
+});
+
+document.getElementById("submit-final-otp").addEventListener("click", async () => {
+  const finalOtp = document.getElementById("final-otp-input").value;
+  const res = await fetch("/verify_final_otp", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ otp: finalOtp })
+  });
+
+  const result = await res.json();
+  const statusEl = document.getElementById("final-otp-status");
+
+  if (result.success) {
+    statusEl.textContent = "✅ Job marked complete!";
+    statusEl.style.color = "green";
+    document.getElementById("final-otp-input-section").style.display = "none";
+    setTimeout(() => {
+      window.location.reload();
+    }, 2000);
+  } else {
+    statusEl.textContent = result.message || "❌ Invalid OTP.";
+    statusEl.style.color = "red";
+  }
+});
+
+document.getElementById("request-extra-btn").addEventListener("click", async () => {
+  const confirmed = confirm("Request extra time?");
+  if (!confirmed) return;
+  const res = await fetch("/request_extra_time", { method: "POST" });
+  const data = await res.json();
+  if (data.success) {
+    alert("OTP sent to job giver. Ask them to enter it.");
+  } else {
+    alert(data.message || "Failed to request extra time.");
+  }
+});
+
+document.getElementById("stop-extra-btn").addEventListener("click", async () => {
+  const confirmed = confirm("Stop the extra timer?");
+  if (!confirmed) return;
+  const res = await fetch("/stop_extra_timer", { method: "POST" });
+  const data = await res.json();
+  if (data.success) {
+    alert("Waiting for job giver to confirm stop.");
+  } else {
+    alert(data.message || "Stop request failed.");
+  }
+});
+
+document.getElementById("submit-extra-otp").addEventListener("click", async () => {
+  const otp = document.getElementById("extra-otp-input").value;
+  const res = await fetch("/verify_extra_timer_otp", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ otp })
+  });
+
+  const result = await res.json();
+  const statusEl = document.getElementById("extra-otp-status");
+
+  if (result.success) {
+    statusEl.textContent = "✅ Extra OTP Verified!";
+    statusEl.style.color = "green";
+
+    // Start the extra timer
+    await fetch("/start_extra_timer", { method: "POST" });
+
+    // Refresh chat panel
+    checkBookingStatusAndShowChat();
+  } else {
+    statusEl.textContent = result.message || "❌ Invalid OTP.";
+    statusEl.style.color = "red";
+  }
+});
+
+
+document.getElementById("confirm-stop-btn").addEventListener("click", async () => {
+  const confirmed = confirm("Confirm stop of extra chat?");
+  if (!confirmed) return;
+
+  const res = await fetch("/confirm_stop_extra_timer", { method: "POST" });
+  const data = await res.json();
+
+  if (data.success) {
+    alert("Extra timer ended. Payment page will open.");
+    if (data.redirect_url) {
+      window.location.href = data.redirect_url;
+    } else {
+      checkBookingStatusAndShowChat(); // fallback refresh
+    }
+  } else {
+    alert("❌ Failed to confirm stop.");
+  }
+});
+
+function getDistanceFromLatLon(lat1, lon1, lat2, lon2) {
+  function deg2rad(deg) { return deg * (Math.PI / 180); }
+  const R = 6371; // Earth radius in km
+  const dLat = deg2rad(lat2 - lat1);
+  const dLon = deg2rad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c * 1000; // return distance in meters
+}
+
+
+let currentBookingId = null; // global booking id
+
+window.addEventListener("DOMContentLoaded", () => {
+    const sendBtn = document.getElementById("send-chat-btn");
+    const chatInput = document.getElementById("chat-input");
+    const chatBox = document.getElementById("chat-box");
+
+    // Restore booking ID and messages from localStorage instantly
+    const savedBookingId = localStorage.getItem("currentBookingId");
+    if (savedBookingId) {
+        currentBookingId = parseInt(savedBookingId);
+        console.log("Restored booking ID:", currentBookingId);
+
+        // restore warn timer/button state for this booking
+        restoreWarnTimerForBooking(currentBookingId);
+
+        // Load messages from localStorage instantly
+        const savedMessages = JSON.parse(localStorage.getItem(`chatMessages_${currentBookingId}`) || "[]");
+        savedMessages.forEach(m => appendMessage(m.sender, m.text));
+
+        sendBtn.disabled = false;
+        chatInput.disabled = false;
+
+        // Fetch updated messages from backend
+        loadMessages();
+    }
+
+
+    // Fetch booking details from backend (payment-guarded)
+    function loadBookingDetails() {
+      fetch("/get_booking_details", { method: "POST" })
+        .then(res => res.json())
+        .then(data => {
+          // DOM elements (always resolve here)
+          const chatPanel = document.getElementById("chat-direction-panel");
+          const chatBox = document.getElementById("chat-box");
+          const sendBtn = document.getElementById("send-chat-btn");
+          const chatInput = document.getElementById("chat-input");
+
+          // Payment guard
+          if (data.payment_required && !data.payment_completed) {
+            if (chatPanel) chatPanel.style.display = "none";
+            if (chatBox) chatBox.innerHTML = "<p>Payment pending.</p>";
+            if (sendBtn) sendBtn.disabled = true;
+            if (chatInput) { chatInput.disabled = true; chatInput.value = ""; }
+
+            if (currentBookingId) {
+              localStorage.removeItem(`chatMessages_${currentBookingId}`);
+              localStorage.removeItem("currentBookingId");
+              currentBookingId = null;
+            }
+            window._warnTimerStartedFor = null;
+            return;
+          }
+
+          // Normal flow
+          showOrHideChatPanel(data);
+          console.log("Booking details received:", data);
+
+          if (data.show && data.booking_id) {
+            if (currentBookingId !== data.booking_id) {
+              if (currentBookingId) localStorage.removeItem(`chatMessages_${currentBookingId}`);
+              window._warnTimerStartedFor = null;
+              currentBookingId = data.booking_id;
+              localStorage.setItem("currentBookingId", currentBookingId);
+
+              // restore warn timer / shown state for the newly active booking
+              restoreWarnTimerForBooking(currentBookingId);
+              if (chatBox) chatBox.innerHTML = "";
+              loadMessages();
+            }
+            if (sendBtn) sendBtn.disabled = false;
+            if (chatInput) chatInput.disabled = false;
+          } else {
+            if (currentBookingId) localStorage.removeItem(`chatMessages_${currentBookingId}`);
+            localStorage.removeItem("currentBookingId");
+            currentBookingId = null;
+            if (sendBtn) sendBtn.disabled = true;
+            if (chatInput) chatInput.disabled = true;
+            if (chatBox) chatBox.innerHTML = "<p>No active booking or payment not completed.</p>";
+            window._warnTimerStartedFor = null;
+          }
+        })
+        .catch(err => console.error("Error fetching booking details:", err));
+    }
+
+
+
+
+    // Load messages from server & store locally
+    function loadMessages() {
+        if (!currentBookingId) return;
+
+        fetch(`/get_messages/${currentBookingId}`)
+            .then(res => res.json())
+            .then(messages => {
+                // Convert backend data
+                const backendMessages = messages.map(msg => ({
+                    sender: msg.sender_id === CURRENT_USER_ID ? "Me" : "Partner",
+                    text: msg.text
+                }));
+
+                // Merge with stored local messages
+                let stored = JSON.parse(localStorage.getItem(`chatMessages_${currentBookingId}`) || "[]");
+                const merged = mergeMessages(stored, backendMessages);
+
+                // Save merged messages back to localStorage
+                localStorage.setItem(`chatMessages_${currentBookingId}`, JSON.stringify(merged));
+
+                // Render merged chat
+                renderMessages(merged);
+            })
+            .catch(err => console.error("Error loading messages:", err));
+    }
+
+    // Merge arrays without duplicates
+    function mergeMessages(localMsgs, backendMsgs) {
+        const seen = new Set(localMsgs.map(m => m.sender + m.text));
+        backendMsgs.forEach(m => {
+            const key = m.sender + m.text;
+            if (!seen.has(key)) {
+                localMsgs.push(m);
+                seen.add(key);
+            }
+        });
+        return localMsgs;
+    }
+
+    // Render all messages
+    function renderMessages(messages) {
+        chatBox.innerHTML = "";
+        messages.forEach(m => appendMessage(m.sender, m.text));
+    }
+
+    // Append a single message
+    function appendMessage(sender, text) {
+    const msgElem = document.createElement("div");
+    msgElem.classList.add("chat-message");
+
+    if (sender === "Me") {
+        msgElem.classList.add("me");
+    } else {
+        msgElem.classList.add("partner");
+    }
+
+    msgElem.innerHTML = `<span class="sender">${sender}:</span> ${text}`;
+    chatBox.appendChild(msgElem);
+    chatBox.scrollTop = chatBox.scrollHeight;
+}
+
+
+    // Send a message
+    function sendMessage() {
+        const text = chatInput.value.trim();
+        if (!text) return;
+        if (!currentBookingId) {
+            alert("Booking ID is not set yet.");
+            return;
+        }
+
+        // Show immediately
+        appendMessage("Me", text);
+
+        // Save to localStorage immediately
+        let stored = JSON.parse(localStorage.getItem(`chatMessages_${currentBookingId}`) || "[]");
+        stored.push({ sender: "Me", text: text });
+        localStorage.setItem(`chatMessages_${currentBookingId}`, JSON.stringify(stored));
+
+        // Clear input
+        chatInput.value = "";
+
+        // Send to backend
+        fetch("/send_message", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            message: text,
+            booking_id: currentBookingId,
+            sender_id: CURRENT_USER_ID  // ✅ Ensure backend knows who sent it
+        })
+    })
+
+        .then(res => res.json())
+        .then(() => {
+            // Wait a moment for DB commit, then reload messages
+            setTimeout(() => loadMessages(), 800);
+        })
+        .catch(err => console.error("Error sending message:", err));
+    }
+
+    // Event listeners
+    sendBtn.addEventListener("click", sendMessage);
+    fetchLocationAndUpdate();
+    chatInput.addEventListener("keydown", e => {
+        if (e.key === "Enter") {
+            e.preventDefault();
+            sendMessage();
+        }
+    });
+
+    // Poll messages every 2 seconds
+    setInterval(() => {
+        if (currentBookingId) loadMessages();
+    }, 2000);
+
+    // Initial booking load
+    // Initial booking load
+    loadBookingDetails();
+    checkBookingStatusAndShowChat();   // ✅ Always run once on page load
+
+    // Other periodic checks
+    setInterval(checkPendingPayment, 20000);
+
+    // ✅ Always check booking/chat status every 5s (not only if panel is visible)
+    setInterval(checkBookingStatusAndShowChat, 5000);
+
+});
+
+const workerToggle = document.getElementById("worker-status-toggle");
+const workerStatusLabel = document.getElementById("worker-status-label");
+if (workerToggle && workerStatusLabel) {
+  workerToggle.addEventListener("change", async () => {
+    const isOnline = workerToggle.checked;
+    const res = await fetch("/update_worker_status", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ online: isOnline })
+    });
+    if (res.ok) {
+      workerStatusLabel.innerHTML = isOnline
+        ? "<span style='color:green;'>🟢 Online</span>"
+        : "<span style='color:red;'>🔴 Offline</span>";
+    }
+  });
+}
+
+function showOrHideChatPanel(data) {
+  const chatPanel = document.getElementById("chat-direction-panel");
+  if (!chatPanel) return;
+
+
+
+  // Only show when server explicitly allows and payment completed
+  if (data.show && data.booking_id && data.payment_completed) {
+    chatPanel.style.display = "block";
+    checkBookingStatusAndShowChat();
+  } else {
+    chatPanel.style.display = "none";
+  }
+}
+
+
+
+
+    document.getElementById("call-btn").addEventListener("click", async () => {
+  if (!currentBookingId) {
+    alert("No active booking to call.");
+    return;
+  }
+
+  try {
+    const res = await fetch(`/initiate_call/${currentBookingId}`, { method: "POST" });
+    const data = await res.json();
+    if (data.status === "success") {
+      alert("📞 Call initiated! Please wait for your phone to ring.");
+    } else {
+      alert("❌ " + (data.message || "Failed to initiate call."));
+    }
+  } catch (err) {
+    alert("⚠️ Error while initiating call.");
+    console.error(err);
+  }
+});
+
+const slider = document.getElementById("reached-slider");
+slider.addEventListener("change", async () => {
+  if (slider.value == 100) {  // only when fully slid
+    if (!navigator.geolocation) {
+      alert("❌ Geolocation not supported");
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(async pos => {
+      const lat = pos.coords.latitude, lon = pos.coords.longitude;
+
+      const res = await fetch(`/verify_worker_location/${currentBookingId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ latitude: lat, longitude: lon })
+      });
+
+      const data = await res.json();
+      const msgEl = document.getElementById("reached-msg");
+
+      if (data.allow_otp) {
+        msgEl.style.color = "green";
+        msgEl.textContent = "✅ You are at the job location!";
+        setTimeout(() => { msgEl.textContent = ""; }, 2000);
+
+        // Show OTP input box
+        document.getElementById("otp-input-section").style.display = "block";
+        document.getElementById("reached-location-section").style.display = "none";
+
+        markArrivalConfirmed(); // ✅ cancel warn timer when worker confirms arrival
+
+          try {
+            await fetch(`/worker_arrived/${currentBookingId}`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ arrived: true })
+            });
+            // no need to await response body; server should persist and subsequent /get_booking_details will include arrival_confirmed
+          } catch (err) {
+            console.warn("Failed to notify server about arrival:", err);
+          }
+
+      } else {
+        msgEl.style.color = "red";
+        msgEl.textContent = data.message;
+        setTimeout(() => { msgEl.textContent = ""; }, 3000);
+        slider.value = 0; // reset slider
+      }
+    });
+  }
+});
+
+
+// Toggle profile dropdown
+document.getElementById("profile-btn").addEventListener("click", () => {
+  const box = document.getElementById("profile-box");
+  box.style.display = (box.style.display === "none" || box.style.display === "") ? "block" : "none";
+});
+
+// Close if clicked outside
+document.addEventListener("click", (e) => {
+  if (!e.target.closest("#profile-btn") && !e.target.closest("#profile-box")) {
+    document.getElementById("profile-box").style.display = "none";
+  }
+});
+
+
+function toggleBookingUI(isBookingLive) {
+  const heroActions = document.getElementById("hero-actions");
+  const chatPanel = document.getElementById("chat-direction-panel");
+
+  if (isBookingLive) {
+    heroActions.style.display = "none";
+    chatPanel.style.display = "block";
+  } else {
+    heroActions.style.display = "block";
+    chatPanel.style.display = "none";
+  }
+}
+
+// Example: check from backend if booking is live
+async function checkBookingStatus() {
+  try {
+    const res = await fetch("/check_booking_status");
+    const data = await res.json();
+    toggleBookingUI(data.live);
+  } catch (err) {
+    console.error("Booking status check failed:", err);
+  }
+}
+
+// Run immediately and poll every 10 seconds
+checkBookingStatus();
+setInterval(checkBookingStatus, 10000);
+
+function updateMapButtonVisibility() {
+    const mapBtn = document.getElementById('map-btn');
+    const CURRENT_USER_ROLE = "{{ 'worker' if current_user.is_worker else 'giver' }}";
+
+    if (CURRENT_USER_ROLE === 'worker') {
+        mapBtn.style.display = 'inline-block';
+    } else {
+        mapBtn.style.display = 'none';
+    }
+}
+
+
+/* 🕒 Improved Warn Sahayi Timer Logic (full functions) */
+let warnTimerHandle = null;
+let arrivalConfirmed = false;
+
+/**
+ * startDriveTimer: schedule the warn button and persist expiry.
+ * - driveSeconds: ETA seconds (number)
+ * - bookingId: booking identifier (string/number)
+ */
+async function startDriveTimer(driveSeconds, bookingId) {
+  // Cancel any previous in-memory timer
+  if (warnTimerHandle) {
+    clearTimeout(warnTimerHandle);
+    warnTimerHandle = null;
+  }
+
+  // Only the GIVER should see or manage the warn timer
+  if (CURRENT_USER_ROLE !== 'giver') {
+    const warnBtnOnly = document.getElementById('warn-sahayi-btn');
+    if (warnBtnOnly) warnBtnOnly.style.display = 'none';
+    // remove persisted entries for non-giver if present
+    if (bookingId) {
+      try {
+        localStorage.removeItem(`warn_expiry_${bookingId}`);
+        localStorage.removeItem(`warn_shown_${bookingId}`);
+      } catch (e) { /* ignore */ }
+    }
+    window._warnTimerStartedFor = null;
+    return;
+  }
+
+  const warnBtn = document.getElementById('warn-sahayi-btn');
+  if (warnBtn) warnBtn.style.display = 'none';
+
+  // Compute expiry timestamp (ms). If driveSeconds invalid, fallback later.
+  let expiryTs = null;
+  if (typeof driveSeconds === 'number' && driveSeconds > 0) {
+    expiryTs = Date.now() + driveSeconds * 1000;
+  }
+
+  // If no expiry computed yet and bookingId provided, try ETA endpoint
+  if (!expiryTs && bookingId) {
+    try {
+      const res = await fetch(`/get_estimated_drive_time_by_booking?booking_id=${encodeURIComponent(bookingId)}`);
+      if (res.ok) {
+        const j = await res.json();
+        if (j?.seconds && j.seconds > 0) {
+          expiryTs = Date.now() + j.seconds * 1000;
+        }
+      }
+    } catch (err) {
+      console.warn('ETA API fallback failed:', err);
+    }
+  }
+
+  // Final fallback: 60 seconds
+  if (!expiryTs) expiryTs = Date.now() + 60 * 1000;
+
+  // Persist expiry so reload can restore it
+  if (bookingId) {
+    try {
+      localStorage.setItem(`warn_expiry_${bookingId}`, String(expiryTs));
+      localStorage.setItem('warn_booking_id', String(bookingId)); // optional
+    } catch (e) {
+      console.warn('Failed to persist warn expiry:', e);
+    }
+  }
+
+  // Compute remaining delay
+  const delay = Math.max(0, expiryTs - Date.now());
+
+  // If already expired, show immediately and persist shown flag
+  if (delay === 0) {
+    if (warnBtn) warnBtn.style.display = 'inline-block';
+    if (bookingId) {
+      try { localStorage.setItem(`warn_shown_${bookingId}`, '1'); } catch (e) { /* ignore */ }
+    }
+    warnTimerHandle = null;
+    window._warnTimerStartedFor = bookingId;
+    return;
+  }
+
+  // Otherwise schedule a timeout for remaining time
+  warnTimerHandle = setTimeout(() => {
+    // If arrival already confirmed, do nothing
+    if (arrivalConfirmed) {
+      warnTimerHandle = null;
+      return;
+    }
+
+    if (warnBtn) warnBtn.style.display = 'inline-block';
+
+    // Persist that warn button was shown for this booking
+    if (bookingId) {
+      try {
+        localStorage.setItem(`warn_shown_${bookingId}`, '1');
+      } catch (e) {
+        console.warn("Failed to persist warn_shown flag:", e);
+      }
+    }
+
+    // timeout fired, clear handle
+    warnTimerHandle = null;
+  }, delay);
+
+  // Remember which booking the timer belongs to
+  window._warnTimerStartedFor = bookingId;
+}
+
+
+/**
+ * restoreWarnTimerForBooking: call on DOMContentLoaded and whenever booking changes.
+ * Keeps the warn button visible across reloads if it was already shown.
+ */
+function restoreWarnTimerForBooking(bookingId) {
+  if (!bookingId || CURRENT_USER_ROLE !== 'giver') {
+    // if not giver or no booking, ensure warn button hidden
+    const warnBtn = document.getElementById('warn-sahayi-btn');
+    if (warnBtn) warnBtn.style.display = 'none';
+    return;
+  }
+
+  // clear any existing in-memory timer
+  if (warnTimerHandle) {
+    clearTimeout(warnTimerHandle);
+    warnTimerHandle = null;
+  }
+
+  const warnBtn = document.getElementById('warn-sahayi-btn');
+  const expiryRaw = localStorage.getItem(`warn_expiry_${bookingId}`);
+  const shownFlag = localStorage.getItem(`warn_shown_${bookingId}`);
+
+  // If warn was already shown (persisted), keep it visible until arrival confirmed
+  if (shownFlag === '1') {
+    if (warnBtn) warnBtn.style.display = 'inline-block';
+    window._warnTimerStartedFor = bookingId;
+    // do NOT remove the shown flag here — it remains until markArrivalConfirmed()
+    return;
+  }
+
+  // If there's no expiry stored, keep warn hidden for now
+  if (!expiryRaw) {
+    if (warnBtn) warnBtn.style.display = 'none';
+    return;
+  }
+
+  const expiryTs = parseInt(expiryRaw, 10);
+  if (isNaN(expiryTs)) {
+    // invalid stored value: cleanup and hide
+    localStorage.removeItem(`warn_expiry_${bookingId}`);
+    if (warnBtn) warnBtn.style.display = 'none';
+    return;
+  }
+
+  const remaining = expiryTs - Date.now();
+
+  if (remaining <= 0) {
+    // expired already → show warn button immediately and persist shown flag
+    if (warnBtn) warnBtn.style.display = 'inline-block';
+    try { localStorage.setItem(`warn_shown_${bookingId}`, '1'); } catch (e) { /* ignore */ }
+    window._warnTimerStartedFor = bookingId;
+    return;
+  }
+
+  // schedule a timeout for remaining ms
+  warnTimerHandle = setTimeout(() => {
+    if (!arrivalConfirmed && warnBtn) warnBtn.style.display = 'inline-block';
+    // persist shown flag
+    try { localStorage.setItem(`warn_shown_${bookingId}`, '1'); } catch (e) { /* ignore */ }
+    warnTimerHandle = null;
+  }, remaining);
+
+  window._warnTimerStartedFor = bookingId;
+}
+
+
+/**
+ * markArrivalConfirmed: cancels timer, hides button, and removes persisted flags.
+ * Call this when OTP verified / arrival confirmed by server or user.
+ */
+function markArrivalConfirmed() {
+  arrivalConfirmed = true;
+
+  if (warnTimerHandle) {
+    clearTimeout(warnTimerHandle);
+    warnTimerHandle = null;
+  }
+
+  const warnBtn = document.getElementById("warn-sahayi-btn");
+  if (warnBtn) {
+    warnBtn.style.display = "none";
+  }
+
+  console.log("✅ Arrival confirmed → Warn button hidden");
+
+  // cleanup persisted expiry & shown flag for the booking
+  const id = window._warnTimerStartedFor || currentBookingId;
+  if (id) {
+    try {
+      localStorage.removeItem(`warn_expiry_${id}`);
+      localStorage.removeItem(`warn_shown_${id}`);
+      localStorage.removeItem('warn_booking_id');
+    } catch (e) {
+      console.warn("Failed to remove persisted warn keys:", e);
+    }
+    window._warnTimerStartedFor = null;
+  } else if (currentBookingId) {
+    // extra fallback cleanup
+    try {
+      localStorage.removeItem(`warn_expiry_${currentBookingId}`);
+      localStorage.removeItem(`warn_shown_${currentBookingId}`);
+    } catch (e) { /* ignore */ }
+  }
+}
+
+/*
+  Warn flow (client-side):
+  - Giver: clicking warn will call /issue_warning and schedule next warn timer locally
+  - Worker: polls /worker_check_warning every 3s, shows modal + sound when a warning appears
+  - Final stage triggers /cancel_booking_by_giver (giver's click) which cancels booking on server
+*/
+
+const WARN_DELAYS_MIN = [20, 10, 5]; // minutes for stage 1,2,3 wait AFTER a warn is pressed
+// stage index: 0 => after first warn (20), 1 => after second (10), 2 => after third (5), 3 => final cancel
+
+// Helper: booking id global (your page already sets currentBookingId variable)
+function getBookingId() {
+  return window.currentBookingId || parseInt(localStorage.getItem('currentBookingId') || '0') || null;
+}
+
+/* ---------- GIVER SIDE ---------- */
+const warnBtn = document.getElementById('warn-sahayi-btn');
+if (warnBtn) {
+  warnBtn.addEventListener('click', async () => {
+    const bookingId = getBookingId();
+    if (!bookingId) return alert('No active booking.');
+
+    // Determine current stage stored locally (0 initial). We'll increment.
+    let stageKey = `warn_stage_${bookingId}`;
+    let stage = parseInt(localStorage.getItem(stageKey) || '0', 10);
+
+    // If stage already reached 3 (meaning 3 warnings sent) then send cancel request immediately
+    if (stage >= 3) {
+      if (!confirm('This will cancel the booking due to repeated delays. Proceed?')) return;
+      // send cancel request
+      try {
+        const resp = await fetch('/cancel_booking_by_giver', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ booking_id: bookingId })
+        });
+        const j = await resp.json();
+        if (j.success) {
+          alert('Booking cancelled and refund will be credited.');
+          // clear local warn state
+          localStorage.removeItem(stageKey);
+          localStorage.removeItem(`warn_timer_ts_${bookingId}`);
+          // hide button
+          warnBtn.style.display = 'none';
+        } else {
+          alert(j.message || 'Failed to cancel booking.');
+        }
+      } catch (err) {
+        console.error(err);
+        alert('Error cancelling booking.');
+      }
+      return;
+    }
+
+    // increment stage and send issue_warning
+    const newStage = stage + 1;
+    const remainingChances = 3 - stage; // 3 -> first warn shows "3 chances left"
+    try {
+      const res = await fetch('/issue_warning', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          booking_id: bookingId,
+          stage: newStage,
+          remaining: remainingChances
+        })
+      });
+      const data = await res.json();
+      if (!data.success) {
+        alert(data.message || 'Failed to send warning.');
+        return;
+      }
+
+      // hide warn button until next timer fires
+      warnBtn.style.display = 'none';
+
+      // persist stage locally
+      localStorage.setItem(stageKey, String(newStage));
+
+      // schedule next timer (if not final)
+      if (newStage <= WARN_DELAYS_MIN.length) {
+        const delayMin = WARN_DELAYS_MIN[newStage - 1];
+        const nextTs = Date.now() + delayMin * 60 * 1000;
+        localStorage.setItem(`warn_timer_ts_${bookingId}`, String(nextTs));
+
+        // set a timeout in this tab (best-effort)
+        setTimeout(() => {
+          // show the warn button again (unless arrival confirmed)
+          const arrivalConfirmed = localStorage.getItem(`arrival_confirmed_${bookingId}`) === '1';
+          if (!arrivalConfirmed) warnBtn.style.display = 'inline-block';
+        }, delayMin * 60 * 1000);
+      } else {
+        // newStage > WARN_DELAYS_MIN -> this route means next click will cancel (handled above)
+      }
+
+      alert('Warning sent to the worker.');
+    } catch (err) {
+      console.error('issue_warning error', err);
+      alert('Network error sending warning.');
+    }
+  });
+}
+
+// On load, restore warn button visibility if timer expired
+(function restoreGiverWarnFromStorage() {
+  const bookingId = getBookingId();
+  if (!bookingId || !warnBtn) return;
+
+  const arrivalConfirmed = localStorage.getItem(`arrival_confirmed_${bookingId}`) === '1';
+  if (arrivalConfirmed) {
+    warnBtn.style.display = 'none';
+    return;
+  }
+
+  const shownFlag = localStorage.getItem(`warn_shown_${bookingId}`);
+  const timerTs = parseInt(localStorage.getItem(`warn_timer_ts_${bookingId}`) || '0', 10);
+  const now = Date.now();
+
+  if (shownFlag === '1') {
+    warnBtn.style.display = 'inline-block';
+  } else if (timerTs && timerTs <= now) {
+    warnBtn.style.display = 'inline-block';
+    localStorage.setItem(`warn_shown_${bookingId}`, '1');
+  } else {
+    // not yet; schedule show if timer exists
+    if (timerTs && timerTs > now) {
+      setTimeout(() => {
+        const arrivalConfirmed2 = localStorage.getItem(`arrival_confirmed_${bookingId}`) === '1';
+        if (!arrivalConfirmed2) warnBtn.style.display = 'inline-block';
+        localStorage.setItem(`warn_shown_${bookingId}`, '1');
+      }, Math.max(0, timerTs - now));
+    }
+  }
+})();
+
+/* When arrival is confirmed anywhere in your flow, call this to cleanup (your existing markArrivalConfirmed does it).
+   We set a local flag too so giver timers won't reappear. */
+function markArrivalConfirmedLocal(bookingId) {
+  if (!bookingId) bookingId = getBookingId();
+  if (!bookingId) return;
+  localStorage.setItem(`arrival_confirmed_${bookingId}`, '1');
+  localStorage.removeItem(`warn_timer_ts_${bookingId}`);
+  localStorage.removeItem(`warn_shown_${bookingId}`);
+  localStorage.removeItem(`warn_stage_${bookingId}`);
+  const wb = document.getElementById('warn-sahayi-btn');
+  if (wb) wb.style.display = 'none';
+}
+// Hook into existing markArrivalConfirmed
+window.markArrivalConfirmed = function() {
+  try {
+    markArrivalConfirmedLocal(getBookingId());
+  } catch (e) {}
+  // preserve existing behavior (if you defined it earlier)
+  if (typeof window.__original_markArrivalConfirmed === 'function') {
+    window.__original_markArrivalConfirmed();
+  }
+};
+
+/* ---------- WORKER SIDE (polling + modal) ---------- */
+const workerModal = document.getElementById('worker-warn-modal');
+const workerWarnMsg = document.getElementById('worker-warn-msg');
+const workerWarnChances = document.getElementById('worker-warn-chances');
+const workerWarnClose = document.getElementById('worker-warn-close');
+const workerWarnAck = document.getElementById('worker-warn-ack');
+const warnSound = document.getElementById('warn-sound');
+
+let lastShownWarningId = null;
+
+async function pollForWarnings() {
+  const bookingId = getBookingId();
+  if (!bookingId) {
+    setTimeout(pollForWarnings, 3000);
+    return;
+  }
+
+  try {
+    const res = await fetch(`/worker_check_warning?booking_id=${encodeURIComponent(bookingId)}`);
+    if (!res.ok) throw new Error('network');
+    const j = await res.json();
+    if (j && j.warning) {
+      const w = j.warning;
+      if (w.id !== lastShownWarningId) {
+        lastShownWarningId = w.id;
+        showWorkerWarningPopup(w);
+      }
+    }
+  } catch (err) {
+    console.warn('Warning poll error', err);
+  } finally {
+    setTimeout(pollForWarnings, 3000); // keep polling every 3s
+  }
+}
+
+function showWorkerWarningPopup(warning) {
+  workerWarnMsg.textContent = warning.message || 'Your partner has warned you for delay in arriving.';
+  const remaining = (typeof warning.remaining !== 'undefined') ? warning.remaining : (3 - (warning.stage || 1) + 1);
+  workerWarnChances.textContent = `You have ${remaining} chance${remaining !== 1 ? 's' : ''} left.`;
+
+  // ✅ Play continuous sound
+  try {
+    warnSound.loop = true;
+    warnSound.volume = 1.0;
+    warnSound.currentTime = 0;
+    warnSound.play().catch(() => {});
+  } catch (e) { /* ignore */ }
+
+  workerModal.style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+
+  workerWarnClose.onclick = () => {
+    workerModal.style.display = 'none';
+    document.body.style.overflow = '';
+    warnSound.pause();
+    warnSound.currentTime = 0;
+  };
+
+  workerWarnAck.onclick = async () => {
+    try {
+      const bookingId = getBookingId();
+      const resp = await fetch('/ack_warning', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ booking_id: bookingId, warning_id: warning.id })
+      });
+      const j = await resp.json();
+      if (j.success) {
+        workerModal.style.display = 'none';
+        document.body.style.overflow = '';
+        warnSound.pause();
+        warnSound.currentTime = 0;
+      } else {
+        alert(j.message || 'Failed to acknowledge warning.');
+      }
+    } catch (err) {
+      alert('Network error.');
+    }
+  };
+}
+
+
+// Start polling only if current user is a worker (server template sets CURRENT_USER_ROLE)
+if (typeof CURRENT_USER_ROLE !== 'undefined' && CURRENT_USER_ROLE === 'worker') {
+  setTimeout(pollForWarnings, 1000);
+}
+
+/* ---------- Cleanup on booking change ---------- */
+(function observeBookingChangeForCleanup() {
+  // If booking resets/changes in localStorage, clear lastShownWarningId to allow new warnings for new booking
+  window.addEventListener('storage', (ev) => {
+    if (ev.key === 'currentBookingId') {
+      lastShownWarningId = null;
+    }
+  });
+})();
+
+(function(){
+  // Only run for signed-in workers (no harm if others see it; nothing will show)
+  let negId = null;
+  let pollTimer = null;
+  const overlay  = document.getElementById('neg-overlay');
+  const titleEl  = document.getElementById('neg-title');
+  const subEl    = document.getElementById('neg-subtitle');
+  const priceEl  = document.getElementById('neg-worker-price');
+  const msgEl    = document.getElementById('neg-msg');
+  const btnOK    = document.getElementById('neg-confirm');
+  const btnCancel= document.getElementById('neg-cancel');
+
+  function showPopup(data){
+    negId = data.id;
+    titleEl.textContent = 'Custom price confirmation';
+    subEl.textContent = `From: ${data.giver_name || 'Job Giver'} • Job: ${data.job_title || 'Custom job'}`;
+    priceEl.value = '';
+    msgEl.textContent = 'Enter your price. Booking unlocks when prices match.';
+    overlay.style.display = 'flex';
+    priceEl.focus();
+    if (pollTimer) clearInterval(pollTimer);
+    pollTimer = setInterval(checkStatus, 2000);
+  }
+
+  function hidePopup(){
+    overlay.style.display = 'none';
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    negId = null;
+  }
+
+  async function checkInbox(){
+    if (negId) return; // already handling a negotiation
+    try{
+      const r = await fetch('/negotiation/pending', {credentials:'same-origin'});
+      const j = await r.json();
+      if (j && j.ok && j.negotiation) showPopup(j.negotiation);
+    }catch(e){ /* ignore */ }
+  }
+
+  async function checkStatus() {
+    if (!negId) return;
+    try {
+      const r = await fetch('/negotiation/status?negotiation_id=' + negId, { credentials: 'same-origin' });
+      const d = await r.json();
+      if (!d || !d.ok) return;
+
+      const giver = d.giver_price ? Number(d.giver_price).toFixed(2) : null;
+      const worker = d.worker_price ? Number(d.worker_price).toFixed(2) : null;
+
+      // === dynamic UI messages ===
+      if (d.status === 'confirmed') {
+        msgEl.textContent = `✅ Price matched at ₹${giver || worker}. You can book now.`;
+        setTimeout(hidePopup, 1000);
+      } else if (d.status === 'cancelled') {
+        msgEl.textContent = '❌ Negotiation cancelled.';
+        setTimeout(hidePopup, 800);
+      } else {
+        // Status: open
+        if (worker && !giver) {
+          msgEl.textContent = `Your offer: ₹${worker}. Waiting for job giver to respond…`;
+        } else if (giver && !worker) {
+          msgEl.textContent = `Job giver offered ₹${giver}. Enter your price to match.`;
+        } else if (giver && worker && giver !== worker) {
+          msgEl.textContent = `You: ₹${worker} • Job giver: ₹${giver} — amounts must match.`;
+        } else {
+          msgEl.textContent = 'Enter your price. Booking unlocks when prices match.';
+        }
+      }
+    } catch (e) {
+      console.error('Negotiation polling error', e);
+    }
+  }
+
+
+  btnOK?.addEventListener('click', async () => {
+    if (!negId) return;
+    const val = priceEl.value;
+    if (!val) {
+      priceEl.focus();
+      return;
+    }
+    try {
+      const r = await fetch('/negotiation/offer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({
+          negotiation_id: negId,
+          role: 'worker',
+          price: val
+        })
+      });
+      const d = await r.json();
+
+      const worker = Number(val).toFixed(2);
+      const giver = d.giver_price ? Number(d.giver_price).toFixed(2) : null;
+
+      // === update the message immediately ===
+      if (d.status === 'confirmed') {
+        msgEl.textContent = `✅ Price matched at ₹${giver || worker}. You can book now.`;
+        setTimeout(hidePopup, 1000);
+      } else if (giver) {
+        msgEl.textContent = `Your offer: ₹${worker}. Job giver offered ₹${giver}. Amounts must match.`;
+      } else {
+        msgEl.textContent = `Your offer: ₹${worker}. Waiting for job giver to enter price…`;
+      }
+    } catch (e) {
+      console.error('Negotiation offer error', e);
+      msgEl.textContent = 'Network error. Try again.';
+    }
+  });
+
+
+  btnCancel?.addEventListener('click', async ()=>{
+    if (!negId) return hidePopup();
+    try{
+      await fetch('/negotiation/cancel', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ negotiation_id: negId })
+      });
+    }catch(e){}
+    hidePopup();
+  });
+
+  // Start polling inbox every 3 seconds, and once immediately.
+  setInterval(checkInbox, 3000);
+  checkInbox();
+})();
+</script>
+</body>
+</html>

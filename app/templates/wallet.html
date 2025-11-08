@@ -1,0 +1,114 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Wallet</title>
+  <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; padding:24px; }
+    .card { max-width: 720px; margin:auto; border:1px solid #e5e7eb; border-radius:14px; padding:20px; }
+    .row { display:flex; justify-content:space-between; margin:8px 0; }
+    .muted { color:#6b7280; }
+    .btn { padding:10px 14px; border-radius:10px; border:none; cursor:pointer; }
+    .btn-primary { background:#2563eb; color:#fff; }
+    input { padding:10px; border:1px solid #e5e7eb; border-radius:10px; width:160px; }
+    table { width:100%; border-collapse:collapse; margin-top:12px; }
+    th,td { padding:8px; border-bottom:1px solid #eef2f7; font-size:14px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>💳 Wallet</h2>
+    <div class="row"><span>Balance</span><strong>₹{{ balance }}</strong></div>
+    <div class="row"><span>Integrity</span><span class="muted">{{ "OK" if integrity_ok else "⚠️ FAILED" }}</span></div>
+
+    <div style="margin-top:16px;">
+      <label>Add money (₹): </label>
+      <input id="amt" type="number" min="1" step="1" placeholder="500" />
+      <button class="btn btn-primary" id="addBtn" {% if not has_razor %}disabled{% endif %}>Add Money</button>
+      {% if not has_razor %}<div class="muted" style="margin-top:6px;">Razorpay keys not configured.</div>{% endif %}
+    </div>
+
+    <div style="margin-top:16px;">
+      <label>Withdraw (₹): </label>
+      <input id="wd" type="number" min="1" step="1" placeholder="500" />
+      <button class="btn" id="wdBtn">Request Withdraw</button>
+      <div class="muted" style="margin-top:6px;">We’ll review and pay out to your bank (from your Profile → Bank details).</div>
+    </div>
+
+    <h3 style="margin-top:18px;">Recent Transactions</h3>
+    <table>
+      <thead><tr><th>When</th><th>Kind</th><th>Amount</th><th>Ref</th></tr></thead>
+      <tbody>
+      {% for t in txns %}
+        <tr>
+          <td>{{ t.created_at.strftime("%Y-%m-%d %H:%M") }}</td>
+          <td>{{ t.kind }}</td>
+          <td>{{ '₹%.2f' % (t.amount or 0) }}</td>
+          <td>{{ t.reference or "" }}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="4" class="muted">No transactions yet</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+<script>
+async function addMoney(){
+  const v = parseInt(document.getElementById('amt').value || '0', 10);
+  if (!v || v <= 0) return alert('Enter a valid amount');
+
+  // 1) Create order
+  const r = await fetch('/wallet/create_order', {
+    method: 'POST', headers: {'Content-Type':'application/json'}, credentials: 'same-origin',
+    body: JSON.stringify({ amount_rupees: v })
+  });
+  const d = await r.json();
+  if (!r.ok) return alert(d.detail || 'Failed to create order');
+
+  // 2) Open Razorpay
+  const rz = new Razorpay({
+    key: d.key_id,
+    amount: d.amount,
+    currency: d.currency || 'INR',
+    name: 'Sahayi',
+    description: 'Wallet top-up',
+    order_id: d.order_id,
+    handler: async function(resp){
+      // 3) Verify + ledger credit
+      const vr = await fetch('/wallet/verify_topup', {
+        method: 'POST', headers: {'Content-Type':'application/json'}, credentials: 'same-origin',
+        body: JSON.stringify({
+          amount_rupees: v,
+          razorpay_payment_id: resp.razorpay_payment_id,
+          razorpay_order_id: resp.razorpay_order_id,
+          razorpay_signature: resp.razorpay_signature
+        })
+      });
+      const vv = await vr.json();
+      if (vr.ok && vv.success) { alert('✅ Added to wallet'); location.reload(); }
+      else alert(vv.detail || 'Verification failed');
+    }
+  });
+  rz.open();
+}
+
+async function withdraw(){
+  const v = parseInt(document.getElementById('wd').value || '0', 10);
+  if (!v || v <= 0) return alert('Enter a valid amount');
+  const r = await fetch('/wallet/request_withdraw', {
+    method: 'POST', headers: {'Content-Type':'application/json'}, credentials: 'same-origin',
+    body: JSON.stringify({ amount_rupees: v })
+  });
+  const d = await r.json();
+  if (r.ok && d.success) alert('✅ Withdrawal request submitted');
+  else alert(d.detail || 'Failed to submit request');
+}
+
+document.getElementById('addBtn').addEventListener('click', addMoney);
+document.getElementById('wdBtn').addEventListener('click', withdraw);
+</script>
+</body>
+</html>

@@ -1,0 +1,111 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Pay Tokens</title>
+  <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; padding: 24px; }
+    .card { max-width: 520px; margin: auto; border: 1px solid #e5e7eb; border-radius: 12px; padding: 20px; }
+    .row { display: flex; justify-content: space-between; margin: 8px 0; }
+    .btn { display: inline-block; padding: 12px 16px; border-radius: 10px; border: none; cursor: pointer; }
+    .btn-primary { background: #2563eb; color: white; }
+    .muted { color: #6b7280; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>Confirm Payment</h2>
+    <div class="row"><span>Booking #</span><strong>{{ booking.id }}</strong></div>
+    <div class="row"><span>Worker</span><strong>{{ booking.worker.name if booking.worker else "-" }}</strong></div>
+    <div class="row"><span>Tokens (₹)</span><strong>{{ total_tokens }}</strong></div>
+    {% if time_left and time_left > 0 %}
+      <p class="muted">Expires in <span id="countdown"></span></p>
+    {% endif %}
+    <button class="btn btn-primary" id="payBtn">Pay ₹{{ total_tokens }} with Razorpay</button>
+    <p class="muted" style="margin-top:10px">Payments are processed securely. On success, chat will unlock automatically.</p>
+  </div>
+
+  <script>
+  const token = "{{ booking.token }}";
+  const totalRupees = {{ total_tokens | int }};
+  const payBtn = document.getElementById("payBtn");
+
+  payBtn.addEventListener("click", async () => {
+    payBtn.disabled = true;
+    try {
+      // 1) Ask server to create/return an order for this booking token
+      const res = await fetch(`/razorpay/create_order/${token}`, {
+        method: "POST",
+        credentials: "same-origin"
+      });
+      if (!res.ok) {
+        const t = await res.text();
+        alert("Could not create order: " + t);
+        payBtn.disabled = false;
+        return;
+      }
+      const data = await res.json();
+
+      // 2) Open Razorpay Checkout
+      const rzp = new Razorpay({
+        key: data.key_id,
+        amount: data.amount,              // in paise
+        currency: data.currency || "INR",
+        name: "Sahayi",
+        description: "Booking payment",
+        order_id: data.order_id,
+        prefill: {
+          name: "{{ current_user.name or '' }}",
+          email: "{{ current_user.email or '' }}"
+        },
+        handler: async function (resp) {
+          // 3) Send details to backend for verification and DB updates
+          const verifyRes = await fetch("/razorpay/verify_payment", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "same-origin",
+            body: JSON.stringify({
+              token: token,
+              razorpay_payment_id: resp.razorpay_payment_id,
+              razorpay_order_id: resp.razorpay_order_id,
+              razorpay_signature: resp.razorpay_signature
+            })
+          });
+          const v = await verifyRes.json();
+          if (verifyRes.ok && v.success) {
+            alert("✅ Payment Successful");
+            window.location.replace("/welcome");
+          } else {
+            alert("Payment verification failed: " + (v.detail || v.message || "Unknown error"));
+            payBtn.disabled = false;
+          }
+        }
+      });
+      rzp.open();
+    } catch (e) {
+      console.error(e);
+      alert("Something went wrong while starting payment.");
+      payBtn.disabled = false;
+    }
+  });
+
+  // Optional: countdown
+  {% if time_left and time_left > 0 %}
+  (function(){
+    let left = {{ time_left | int }};
+    const el = document.getElementById("countdown");
+    const tick = () => {
+      if (left <= 0) { location.reload(); return; }
+      const m = Math.floor(left/60), s = left%60;
+      el.textContent = `${m}m ${s}s`;
+      left--;
+    };
+    tick();
+    setInterval(tick, 1000);
+  })();
+  {% endif %}
+  </script>
+</body>
+</html>

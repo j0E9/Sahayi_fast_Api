@@ -1,0 +1,51 @@
+{% extends 'admin/base.html' %}
+{% block content %}
+<h4>Booking #{{ booking.id }}</h4>
+
+<div class="row">
+  <div class="col-md-6">
+    <div class="card mb-3 p-3">
+      <h6>Details</h6>
+      <div><strong>Token:</strong> {{ booking.token }}</div>
+      <div><strong>Skill:</strong> {{ booking.skill_name }}</div>
+      <div><strong>Status:</strong> {{ booking.status }}</div>
+      <div><strong>Rate:</strong> {{ booking.rate }} {{ booking.rate_type or '' }}</div>
+      <div><strong>Quantity:</strong> {{ booking.quantity }}</div>
+    </div>
+
+    <form method="post" action="{{ url_for('admin.booking_action', booking_id=booking.id) }}">
+      <input type="hidden" name="action" id="actionInput" value="">
+      <button type="button" class="btn btn-danger me-2" onclick="doAction('cancel')">Cancel Booking</button>
+      <button type="button" class="btn btn-success" onclick="doAction('mark_paid')">Mark Paid</button>
+    </form>
+  </div>
+
+  <div class="col-md-6">
+    <div class="card mb-3 p-3">
+      <h6>Provider</h6>
+      <div>{{ booking.provider.name if booking.provider else '-' }}</div>
+      <div>{{ booking.provider.phone if booking.provider else '-' }}</div>
+    </div>
+    <div class="card p-3">
+      <h6>Worker</h6>
+      <div>{{ booking.worker.name if booking.worker else '-' }}</div>
+      <div>{{ booking.worker.phone if booking.worker else '-' }}</div>
+    </div>
+  </div>
+</div>
+
+<script>
+async function doAction(action){
+  if (!confirm('Are you sure?')) return;
+  const form = new FormData();
+  form.append('action', action);
+  const res = await fetch('{{ url_for("admin.booking_action", booking_id=booking.id) }}', {method:'POST', body: form, credentials: 'same-origin'});
+  const data = await res.json();
+  if (data.success) {
+    location.reload();
+  } else {
+    alert(data.message || 'Action failed');
+  }
+}
+</script>
+{% endblock %}
