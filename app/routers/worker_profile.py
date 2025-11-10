@@ -13,7 +13,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from werkzeug.utils import secure_filename  # pip install werkzeug
-
+from itertools import zip_longest  # add this import at the top
 from app.database import get_db
 from app.models import (
     User, WorkerProfile, Skill, ShowcaseImage, Rating
@@ -221,10 +221,11 @@ async def create_worker_profile_post(
     ifsc: str = Form(...),
     account_number: str = Form(...),
 
-    # ✅ Match your HTML fields name="skills[]", "rates[]", "rate_types[]"
+    # arrays from form
     skills: list[str] = Form(default_factory=list, alias="skills[]"),
     rates: list[str] = Form(default_factory=list, alias="rates[]"),
     rate_types: list[str] = Form(default_factory=list, alias="rate_types[]"),
+    skill_categories: list[str] = Form(default_factory=list, alias="skill_categories[]"),  # ✅ NEW
 
     photo: UploadFile | None = File(None),
     id_front: UploadFile | None = File(None),
@@ -266,13 +267,20 @@ async def create_worker_profile_post(
     )
     db.add(profile)
 
-    # Normalize and insert skills (zip keeps array lengths aligned)
-    for name, rate, rt in zip(skills, rates, rate_types):
+    # Insert skills with category; zip_longest tolerates length mismatches
+    for name, rate, rt, cat in zip_longest(skills, rates, rate_types, skill_categories, fillvalue=None):
         n = (name or "").strip().lower()
         r = (rate or "").strip()
-        t = (rt or "").strip()
+        t = (rt or "").strip() or None
+        c = (cat or "Other").strip()
         if n and r:
-            db.add(Skill(name=n, rate=r, rate_type=t, user_id=current_user.id))
+            db.add(Skill(
+                name=n,
+                category=c,      # ← NEW
+                rate=r,
+                rate_type=t,
+                user_id=current_user.id
+            ))
 
     db.commit()
     return RedirectResponse(url="/welcome", status_code=status.HTTP_303_SEE_OTHER)
@@ -314,10 +322,11 @@ async def edit_worker_profile_post(
     # Single optional video: name="video"
     video: UploadFile | None = File(None),
 
-    # Skills replace set:
+    # Skills replace set (repeated keys)
     skills: List[str] = Form([]),
     rates: List[str] = Form([]),
     rate_types: List[str] = Form([]),
+    categories: List[str] = Form([]),  # 👈 NEW (use alias="categories[]" if your HTML uses [] )
 
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -340,7 +349,6 @@ async def edit_worker_profile_post(
 
     # Handle profile video (replace if provided)
     if video and video.filename and allowed_file(video.filename, VIDEO_EXTS):
-        # delete old if exists
         if profile.video:
             old_path = os.path.join(UPLOAD_ROOT, profile.video)
             if os.path.exists(old_path):
@@ -358,21 +366,27 @@ async def edit_worker_profile_post(
             if saved:
                 db.add(ShowcaseImage(user_id=current_user.id, image_url=saved))
 
-    # Replace skills
-    db.query(Skill).filter_by(user_id=current_user.id).delete()
-    for name, rate, rt in zip(skills, rates, rate_types):
+    # Replace skills (now includes category)
+    db.query(Skill).filter_by(user_id=current_user.id).delete(synchronize_session=False)
+
+    for name, rate, rt, cat in zip_longest(skills, rates, rate_types, categories, fillvalue=None):
         name = (name or "").strip().lower()
         rate = (rate or "").strip()
-        rt = (rt or "").strip()
+        rt   = (rt or "").strip() or None
+        cat  = (cat or "Other").strip()
         if name and rate:
             db.add(Skill(
-                name=name, rate=rate, rate_type=rt,
-                location=full_location, user_id=current_user.id
+                name=name,
+                category=cat,        # 👈 NEW
+                rate=rate,
+                rate_type=rt,
+                location=full_location,
+                user_id=current_user.id
             ))
 
     db.commit()
-    # Mirror Flask: return JSON with redirect
     return {"success": True, "redirect": "/seek_job"}
+
 
 
 @router.post("/delete_media/{media_type}/{media_id}")

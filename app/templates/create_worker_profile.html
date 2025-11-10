@@ -99,6 +99,20 @@
         <div id="skills-section">
           <div class="skill-row d-flex gap-2 mt-2">
             <input type="text" class="form-control" name="skills[]" placeholder="Skill" required>
+
+            <!-- NEW: Skill Category -->
+            <select class="form-select" name="skill_categories[]" required>
+              <option value="" selected disabled>Select category</option>
+              <option>Plumbing</option>
+              <option>Electrical</option>
+              <option>Cleaning</option>
+              <option>Carpentry</option>
+              <option>Delivery</option>
+              <option>Cooking</option>
+              <option>Tutoring</option>
+              <option>Other</option>
+            </select>
+
             <input type="number" class="form-control" name="rates[]" placeholder="Rate (₹)" required>
             <select class="form-select" name="rate_types[]" required>
               <option value="per hour">₹/Hour</option>
@@ -109,6 +123,7 @@
           </div>
         </div>
         <button type="button" class="btn btn-outline-secondary mt-2" onclick="addSkill()">➕ Add Skill</button>
+
 
         <div class="step-btns d-flex justify-content-between mt-4">
           <button type="button" class="btn btn-secondary prev">⬅️ Back</button>
@@ -149,23 +164,34 @@
     });
   });
 
-  function addSkill() {
-    const container = document.getElementById("skills-section");
-    const row = document.createElement("div");
-    row.className = "skill-row d-flex gap-2 mt-2";
-    row.innerHTML = `
-      <input type="text" class="form-control" name="skills[]" placeholder="Skill" required>
-      <input type="number" class="form-control" name="rates[]" placeholder="Rate (₹)" required>
-      <select class="form-select" name="rate_types[]" required>
-        <option value="per hour">₹/Hour</option>
-        <option value="per job">₹/Job</option>
-        <option value="per kilogram">₹/Kilogram</option>
-        <option value="custom">₹/Custom</option>
-      </select>
-      <button type="button" class="btn btn-danger" onclick="this.parentElement.remove()">✖</button>
-    `;
-    container.appendChild(row);
-  }
+    function addSkill() {
+      const container = document.getElementById("skills-section");
+      const row = document.createElement("div");
+      row.className = "skill-row d-flex gap-2 mt-2";
+      row.innerHTML = `
+        <input type="text" class="form-control" name="skills[]" placeholder="Skill" required>
+        <select class="form-select" name="skill_categories[]" required>
+          <option value="" selected disabled>Select category</option>
+          <option>Plumbing</option>
+          <option>Electrical</option>
+          <option>Cleaning</option>
+          <option>Carpentry</option>
+          <option>Delivery</option>
+          <option>Cooking</option>
+          <option>Tutoring</option>
+          <option>Other</option>
+        </select>
+        <input type="number" class="form-control" name="rates[]" placeholder="Rate (₹)" required>
+        <select class="form-select" name="rate_types[]" required>
+          <option value="per hour">₹/Hour</option>
+          <option value="per job">₹/Job</option>
+          <option value="per kilogram">₹/Kilogram</option>
+          <option value="custom">₹/Custom</option>
+        </select>
+        <button type="button" class="btn btn-danger" onclick="this.parentElement.remove()">✖</button>
+      `;
+      container.appendChild(row);
+    }
 
   showStep(currentStep);
 </script>

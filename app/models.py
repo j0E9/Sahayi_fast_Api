@@ -77,7 +77,7 @@ class Skill(Base):
     rate_type: Mapped[str | None] = mapped_column(String(50))
     location: Mapped[str | None] = mapped_column(String(100))
     user_id: Mapped[int] = mapped_column(ForeignKey("user.id"), nullable=False)
-
+    category: Mapped[str | None] = mapped_column(String(50), index=True)
     user: Mapped["User"] = relationship("User", back_populates="skills")
 
 

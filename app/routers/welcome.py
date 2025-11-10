@@ -20,6 +20,8 @@ def get_current_user(request: Request, db: Session = Depends(get_db)) -> User | 
     return db.get(User, int(uid))
 
 
+# app/routers/welcome.py
+
 @router.get("/welcome", response_class=HTMLResponse)
 def welcome(
     request: Request,
@@ -44,8 +46,6 @@ def welcome(
         .first()
     )
 
-    # ✅ Treat “having a WorkerProfile” as being a worker.
-    # Also allow user fields if you have them.
     is_worker = bool(
         profile
         or getattr(current_user, "is_worker", False)
@@ -53,14 +53,19 @@ def welcome(
         or getattr(current_user, "user_type", "") == "worker"
     )
 
+    has_profile = bool(profile)
+
     return templates.TemplateResponse(
         "welcome.html",
         {
             "request": request,
             "current_user": current_user,
             "unread_count": unread_count,
-            "is_worker": is_worker,                        # <-- authoritative flag
+            "is_worker": is_worker,
             "is_online": bool(profile and profile.is_online),
             "show_worker_toggle": bool(profile),
+            "has_profile": has_profile,                     # 👈 add this
+            "worker_profile_url": "/seek_job",              # 👈 optional convenience
+            "create_worker_url": "/create_worker_profile",  # 👈 optional convenience
         },
     )

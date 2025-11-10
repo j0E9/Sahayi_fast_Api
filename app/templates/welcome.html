@@ -403,6 +403,79 @@
         background: #007bff;
         color: white;
       }
+
+      /* Center the hero content */
+      .hero {
+        min-height: 100vh;                /* take up full screen height */
+        display: flex;
+        flex-direction: column;
+        justify-content: center;          /* center vertically */
+        align-items: center;              /* center horizontally */
+        padding: 0 16px;                  /* remove extra top/bottom padding */
+        background: linear-gradient(to right, #e0f7fa, #ffffff);
+      }
+
+      .container-hero {
+        width: 100%;
+        max-width: 980px;
+        text-align: center;
+      }
+      /* Cute, centered pill search */
+      .search-wrap{
+        max-width: 520px;
+        margin: 8px auto 14px;     /* center */
+      }
+      @media (max-width:576px){ .search-wrap{ max-width:92%; } }
+      .search-pill{
+        position: relative;
+        border-radius: 999px;
+        overflow: hidden;
+        box-shadow: 0 6px 16px rgba(0,0,0,.06);
+      }
+      .search-pill .form-control{
+        height: 42px; border: none; padding-left: 38px;
+      }
+      .search-pill .btn{ height: 42px; border: none; border-radius: 0; }
+      .search-pill .search-icon{
+        position: absolute; left: 12px; top: 50%;
+        transform: translateY(-50%); font-size: 16px; opacity: .6;
+        pointer-events: none;
+      }
+
+      /* Centered, tidy category grid */
+      #category-grid {
+        margin: 16px auto 0;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, 220px); /* fixed-width cards */
+        gap: 16px;
+        justify-content: center; /* ✅ centers grid as a block */
+      }
+
+      .cat-card {
+        width: 220px;
+        background: #fff;
+        border-radius: 14px;
+        padding: 18px 12px;
+        box-shadow: 0 4px 14px rgba(0,0,0,.08);
+        text-align: center;
+        cursor: pointer;
+        transition: transform .12s, box-shadow .12s;
+      }
+
+      .cat-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 8px 18px rgba(0,0,0,.10);
+      }
+
+      .cat-emoji { font-size: 22px; display: block; margin-bottom: 6px; }
+      .cat-title { font-weight: 600; font-size: 15px; }
+
+      @media (max-width: 576px) {
+        #category-grid { grid-template-columns: repeat(auto-fit, 160px); }
+        .cat-card { width: 160px; }
+      }
+
+
     </style>
 
 </head>
@@ -509,27 +582,73 @@
       <div id="profile-box" style="display:none; position:absolute; right:0; margin-top:5px;
            background:white; border-radius:10px; box-shadow:0 4px 12px rgba(0,0,0,0.2);
            width:220px; padding:10px; z-index:2000;">
-        <div class="profile-option"><a href="/profile">⚙️ Profile Settings</a></div>
+
+        <!-- NEW: worker action -->
+        <div class="profile-option">
+          {% if has_profile %}
+            <a href="{{ worker_profile_url }}">👷 Sahayi Profile</a>
+          {% else %}
+            <a href="{{ create_worker_url }}">🛠️ Be a Sahayi</a>
+          {% endif %}
+        </div>
         <div class="profile-option"><a href="/wallet">💳 Wallet</a></div>
         <div class="profile-option"><a href="/payment_history">📂 History</a></div>
         <div class="profile-option"><a href="/agreement">📜 Agreement</a></div>
         <div class="profile-option"><a href="/support">❓ Help & Support</a></div>
         <div class="profile-option"><a href="/logout">🚪 Logout</a></div>
       </div>
+
     </div>
 
 </div>
 
   <div class="hero">
-    <h1>Welcome, {{ current_user.name }} 👋</h1>
-    <p>Your gateway to finding and offering jobs nearby</p>
-    <div id="hero-actions">
-        <div class="card-options">
-      <div class="option-card"><a href='/provide_job'>🛠️ Get a Sahayi</a></div>
-      <div class="option-card"><a href='/seek_job'>🤝 Be a Sahayi</a></div>
-     </div>
-    </div>
+    <div class="container-hero">
+
+      <form id="get-sahayi-search" class="search-wrap" method="POST" action="/provide_job">
+      <div class="input-group input-group-sm search-pill">
+        <span class="search-icon">🔎</span>
+        <input id="service-search"
+               name="job_type"
+               class="form-control"
+               placeholder="Get a Sahayi 👷"
+               required />
+        <button id="service-search-btn" class="btn btn-primary" type="submit">Search</button>
+      </div>
+    </form>
+
+
+      <!-- Categories -->
+      <div id="category-grid" class="mt-3">
+        <div class="cat-card" data-cat="Plumbing">
+          <span class="cat-emoji">🔧</span><span class="cat-title">Plumbing</span>
+        </div>
+        <div class="cat-card" data-cat="Electrical">
+          <span class="cat-emoji">💡</span><span class="cat-title">Electrical</span>
+        </div>
+        <div class="cat-card" data-cat="Cleaning">
+          <span class="cat-emoji">🧹</span><span class="cat-title">Cleaning</span>
+        </div>
+        <div class="cat-card" data-cat="Carpentry">
+          <span class="cat-emoji">🪵</span><span class="cat-title">Carpentry</span>
+        </div>
+        <div class="cat-card" data-cat="Delivery">
+          <span class="cat-emoji">📦</span><span class="cat-title">Delivery</span>
+        </div>
+        <div class="cat-card" data-cat="Cooking">
+          <span class="cat-emoji">🍳</span><span class="cat-title">Cooking</span>
+        </div>
+        <div class="cat-card" data-cat="Tutoring">
+          <span class="cat-emoji">📘</span><span class="cat-title">Tutoring</span>
+        </div>
+        <div class="cat-card" data-cat="Painting">
+          <span class="cat-emoji">🎨</span><span class="cat-title">Painting</span>
+        </div>
+      </div>
+
   </div>
+</div>
+
 
   <!-- Chat Popup -->
   <div id="chat-direction-panel" style="display:none;">
@@ -783,7 +902,16 @@
 </div>
 
 <script>
-
+  // When a category tile is clicked → redirect to category page
+  document.querySelectorAll(".cat-card").forEach(card => {
+    card.addEventListener("click", () => {
+      const category = card.dataset.cat;
+      if (category) {
+        // Redirect to the backend route for category browsing
+        window.location.href = `/jobs/by_category?c=${encodeURIComponent(category)}`;
+      }
+    });
+  });
 
 // === Rating helpers ===
 let __currentRating = 0;
@@ -3269,6 +3397,8 @@ function updateBellCount(count) {
 
   updateUnreadCount();
 })();
+
+
 
 </script>
 </body>

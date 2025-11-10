@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 from geopy.distance import geodesic
-
+from sqlalchemy import func
 from app.database import get_db
 from app.models import User, Skill, WorkerProfile, Job
 from app.settings import settings
@@ -327,3 +327,165 @@ def provide_job_submit(
     </html>
     """
     return HTMLResponse(content=html)
+
+
+
+
+# --- helper to render results (same look as your POST) ---
+def _render_results_page(
+    *, heading: str, matched_workers: Dict[int, dict], user_lat: float, user_lon: float
+) -> HTMLResponse:
+    from app.settings import settings
+    MAPBOX = settings.MAPBOX_ACCESS_TOKEN or ""
+
+    matched_list = ""
+    for data in matched_workers.values():
+        rate = f"₹{data['rate']} / {data['rate_type']}" if data["rate"] and data["rate_type"] else "N/A"
+        matched_list += f"""
+        <div class="col-12 col-md-6 col-lg-4">
+          <div class="card shadow-sm mb-4">
+            <div class="card-body">
+              <h5 class="card-title">{data["user"].name}</h5>
+              <p class="card-text">
+                <b>Skill:</b> {(data["skill_name"] or "").title()}<br>
+                <b>Rate:</b> {rate}<br>
+                <b>Driving Distance:</b>
+                <span id="distance-{data["user"].id}">Calculating...</span>
+              </p>
+              <a href="/worker/{data["user"].id}?job_id={data.get("job_id","")}&skill_id={data["skill_id"]}" class="btn btn-primary w-100">👤 View Profile</a>
+            </div>
+          </div>
+        </div>
+        """
+
+    html = f"""
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+      <title>Matching Workers</title>
+      <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+      <style>
+        body {{ background:#f2f2f2; font-family: 'Segoe UI', sans-serif; }}
+        .card:hover {{ transform:scale(1.02); box-shadow:0 8px 16px rgba(0,0,0,0.1); transition:all .3s; }}
+        .title-banner {{ background:linear-gradient(135deg,#007bff,#00c6ff); color:#fff; padding:30px; text-align:center; border-radius:0 0 12px 12px; }}
+        .title-banner h2 {{ font-size:28px; margin-bottom:10px; }}
+        .title-banner p {{ font-size:18px; margin-bottom:0; }}
+      </style>
+    </head>
+    <body>
+      <div class="title-banner">
+        <h2>🔎 {heading}</h2>
+        <p>Here are matching workers near you</p>
+      </div>
+
+      <div class="container mt-4">
+        <div class="row">
+          {matched_list or "<div class='col-12'><div class='alert alert-warning text-center'>😞 No matching workers found within 105 km radius.</div></div>"}
+        </div>
+        <div class="text-center mt-4">
+          <a href="/provide_job" class="btn btn-outline-primary">🔄 Start a New Search</a>
+        </div>
+      </div>
+
+      <script>
+        const MAPBOX_TOKEN = "{MAPBOX}";
+        async function getDrivingDistance(workerLat, workerLon, userLat, userLon, spanId) {{
+          const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${{userLon}},${{userLat}};${{workerLon}},${{workerLat}}?access_token=${{MAPBOX_TOKEN}}&overview=false`;
+          try {{
+            const res = await fetch(url);
+            const data = await res.json();
+            const span = document.getElementById(spanId);
+            if (data.code === "Ok" && data.routes && data.routes.length > 0) {{
+              const distanceKm = (data.routes[0].distance / 1000).toFixed(2);
+              const durationMin = (data.routes[0].duration / 60).toFixed(1);
+              span.textContent = `${{distanceKm}} km (~${{durationMin}} mins)`;
+            }} else {{
+              span.textContent = "❌ Not available";
+            }}
+          }} catch (err) {{
+            const el = document.getElementById(spanId);
+            if (el) el.textContent = "⚠️ Error";
+          }}
+        }}
+        {{}}
+      </script>
+    </body>
+    </html>
+    """
+
+    # inject calls for distance calculation
+    calls = []
+    for data in matched_workers.values():
+        calls.append(
+            f'getDrivingDistance({data["user"].latitude}, {data["user"].longitude}, {user_lat}, {user_lon}, "distance-{data["user"].id}");'
+        )
+    html = html.replace("{}", "\n".join(calls))
+    return HTMLResponse(content=html)
+
+
+@router.get("/jobs/by_category", response_class=HTMLResponse)
+def jobs_by_category(
+    request: Request,
+    c: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    category = (c or "").strip()
+    if not category:
+        return HTMLResponse("<p>Error: category is required.</p>", status_code=400)
+
+    user_lat = current_user.latitude
+    user_lon = current_user.longitude
+    if user_lat is None or user_lon is None:
+        return HTMLResponse("<p>Error: Please enable location so we can find nearby workers.</p>", status_code=400)
+
+    # ✅ Create a lightweight job so the worker page has job_id
+    job = Job(
+        title=f"{category.title()}",
+        description=f"You are seeking help for: {category.title()}",
+        user_id=current_user.id,
+    )
+    db.add(job)
+    db.commit()
+    db.refresh(job)
+
+    skills_q = (
+        db.query(Skill)
+        .filter(func.lower(func.trim(Skill.category)) == category.lower().strip())
+        .all()
+    )
+
+    matched_workers: Dict[int, dict] = {}
+    for skill in skills_q:
+        worker_user = db.get(User, skill.user_id)
+        if not worker_user or worker_user.latitude is None or worker_user.longitude is None:
+            continue
+
+        profile = db.query(WorkerProfile).filter(WorkerProfile.user_id == worker_user.id).first()
+        if not profile or not profile.is_online or worker_user.busy:
+            continue
+
+        distance_km = geodesic(
+            (user_lat, user_lon),
+            (worker_user.latitude, worker_user.longitude),
+        ).km
+
+        if distance_km <= 105 and worker_user.id not in matched_workers:
+            matched_workers[worker_user.id] = {
+                "user": worker_user,
+                "skill_id": skill.id,
+                "skill_name": skill.name,
+                "rate": getattr(skill, "rate", None),
+                "rate_type": getattr(skill, "rate_type", None),
+                "distance": round(distance_km, 2),
+                "job_id": job.id,
+            }
+
+    heading = f"Category: {category.title()}"
+    return _render_results_page(
+        heading=heading,
+        matched_workers=matched_workers,
+        user_lat=user_lat,
+        user_lon=user_lon,
+    )

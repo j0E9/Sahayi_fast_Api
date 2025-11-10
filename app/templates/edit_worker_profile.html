@@ -78,30 +78,49 @@
             <hr class="my-4">
             <h5 class="text-primary">🛠️ Skills</h5>
             <div id="skills-section">
-                {% for skill in skills %}
-                <div class="row g-2 align-items-center mb-2 skill-group">
-                    <div class="col-md-4">
-                        <input type="text" class="form-control form-control-sm" name="skills" value="{{ skill.name }}" required>
-                    </div>
-                    <div class="col-md-3">
-                        <input type="number" class="form-control form-control-sm" name="rates" value="{{ skill.rate }}" required>
-                    </div>
-                    <div class="col-md-3">
-                        <select class="form-select form-select-sm" name="rate_types" required>
-                            <option value="per hour" {% if skill.rate_type == 'per hour' %}selected{% endif %}>₹/Hour</option>
-                            <option value="per job" {% if skill.rate_type == 'per job' %}selected{% endif %}>₹/Job</option>
-                            <option value="per kilogram" {% if skill.rate_type == 'per kilogram' %}selected{% endif %}>₹/Kilogram</option>
-                            <option value="custom" {% if skill.rate_type == 'custom' %}selected{% endif %}>₹/Custom</option>
-                        </select>
-                    </div>
-                    <div class="col-md-2">
-                        {% if not loop.first %}
-                        <button type="button" class="btn btn-outline-danger btn-sm w-100" onclick="removeSkill(this)">❌ Remove</button>
-                        {% endif %}
-                    </div>
+              {% for skill in skills %}
+              <div class="row g-2 align-items-center mb-2 skill-group">
+                <div class="col-md-3">
+                  <input type="text" class="form-control form-control-sm" name="skills" value="{{ skill.name }}" required>
                 </div>
-                {% endfor %}
+
+                <!-- NEW: Skill Category -->
+                <div class="col-md-3">
+                  <select class="form-select form-select-sm" name="categories" required>
+                    <option value="" disabled {% if not skill.category %}selected{% endif %}>Select category</option>
+                    <option value="Plumbing"   {% if skill.category == 'Plumbing' %}selected{% endif %}>Plumbing</option>
+                    <option value="Electrical" {% if skill.category == 'Electrical' %}selected{% endif %}>Electrical</option>
+                    <option value="Cleaning"   {% if skill.category == 'Cleaning' %}selected{% endif %}>Cleaning</option>
+                    <option value="Carpentry"  {% if skill.category == 'Carpentry' %}selected{% endif %}>Carpentry</option>
+                    <option value="Delivery"   {% if skill.category == 'Delivery' %}selected{% endif %}>Delivery</option>
+                    <option value="Cooking"    {% if skill.category == 'Cooking' %}selected{% endif %}>Cooking</option>
+                    <option value="Tutoring"   {% if skill.category == 'Tutoring' %}selected{% endif %}>Tutoring</option>
+                    <option value="Other"      {% if skill.category == 'Other' %}selected{% endif %}>Other</option>
+                  </select>
+                </div>
+
+                <div class="col-md-2">
+                  <input type="number" class="form-control form-control-sm" name="rates" value="{{ skill.rate }}" required>
+                </div>
+
+                <div class="col-md-3">
+                  <select class="form-select form-select-sm" name="rate_types" required>
+                    <option value="per hour"     {% if skill.rate_type == 'per hour' %}selected{% endif %}>₹/Hour</option>
+                    <option value="per job"      {% if skill.rate_type == 'per job' %}selected{% endif %}>₹/Job</option>
+                    <option value="per kilogram" {% if skill.rate_type == 'per kilogram' %}selected{% endif %}>₹/Kilogram</option>
+                    <option value="custom"       {% if skill.rate_type == 'custom' %}selected{% endif %}>₹/Custom</option>
+                  </select>
+                </div>
+
+                <div class="col-md-1">
+                  {% if not loop.first %}
+                  <button type="button" class="btn btn-outline-danger btn-sm w-100" onclick="removeSkill(this)">❌ Remove</button>
+                  {% endif %}
+                </div>
+              </div>
+              {% endfor %}
             </div>
+
             <div>
                 <button type="button" class="btn btn-outline-primary btn-sm" onclick="addSkill()">➕ Add Skill</button>
             </div>
@@ -166,23 +185,42 @@
 <!-- Scripts -->
 <script>
 function addSkill() {
-    const container = document.getElementById('skills-section');
-    const row = document.createElement('div');
-    row.className = 'row g-2 align-items-center mb-2 skill-group';
-    row.innerHTML = `
-        <div class="col-md-4"><input type="text" name="skills" class="form-control form-control-sm" placeholder="Skill" required></div>
-        <div class="col-md-3"><input type="number" name="rates" class="form-control form-control-sm" placeholder="Rate ₹" required></div>
-        <div class="col-md-3">
-            <select class="form-select form-select-sm" name="rate_types" required>
-                <option value="per hour">₹/Hour</option>
-                <option value="per job">₹/Job</option>
-                <option value="per kilogram">₹/Kilogram</option>
-                <option value="custom">₹/Custom</option>
-            </select>
-        </div>
-        <div class="col-md-2"><button type="button" class="btn btn-outline-danger btn-sm w-100" onclick="removeSkill(this)">❌</button></div>
-    `;
-    container.appendChild(row);
+  const container = document.getElementById('skills-section');
+  const row = document.createElement('div');
+  row.className = 'row g-2 align-items-center mb-2 skill-group';
+  row.innerHTML = `
+    <div class="col-md-3">
+      <input type="text" name="skills" class="form-control form-control-sm" placeholder="Skill" required>
+    </div>
+    <div class="col-md-3">
+      <select class="form-select form-select-sm" name="categories" required>
+        <option value="" selected disabled>Select category</option>
+        <option>Plumbing</option>
+        <option>Electrical</option>
+        <option>Cleaning</option>
+        <option>Carpentry</option>
+        <option>Delivery</option>
+        <option>Cooking</option>
+        <option>Tutoring</option>
+        <option>Other</option>
+      </select>
+    </div>
+    <div class="col-md-2">
+      <input type="number" name="rates" class="form-control form-control-sm" placeholder="Rate ₹" required>
+    </div>
+    <div class="col-md-3">
+      <select class="form-select form-select-sm" name="rate_types" required>
+        <option value="per hour">₹/Hour</option>
+        <option value="per job">₹/Job</option>
+        <option value="per kilogram">₹/Kilogram</option>
+        <option value="custom">₹/Custom</option>
+      </select>
+    </div>
+    <div class="col-md-1">
+      <button type="button" class="btn btn-outline-danger btn-sm w-100" onclick="removeSkill(this)">❌</button>
+    </div>
+  `;
+  container.appendChild(row);
 }
 
 function removeSkill(btn) {
