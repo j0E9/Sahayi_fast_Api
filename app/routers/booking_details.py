@@ -67,58 +67,32 @@ def has_giver_rated(db: Session, booking: Booking) -> bool:
         Rating.job_giver_id == booking.provider_id,
     ).first() is not None
 
-
-
-def _rating_payload(booking: Booking, is_giver: bool, name: str, map_url: str) -> dict:
-    """Payload that tells the frontend to show the rating popup to the giver."""
-    return {
-        "show": True,
-        "completed": True,
-        "rating_pending": is_giver and True,           # force popup for giver
-        "role": {"self": "giver" if is_giver else "worker"},
-        "booking_id": booking.id,
-        "giver_name": name,
-        "chat_url": chat_url_for(booking.id),
-        "map_url": map_url,
-    }
-
-
-@router.post("/get_booking_details")
-def get_booking_details(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    user_id = current_user.id
-
-    booking: Booking | None = (
-        db.query(Booking)
-        .options(
-            joinedload(Booking.provider),
-            joinedload(Booking.worker),
-        )
-        .filter((Booking.worker_id == user_id) | (Booking.provider_id == user_id))
-        .order_by(Booking.id.desc())
-        .first()
-    )
-
+def _payload_for_booking(booking: Booking, viewer: User, db: Session) -> dict:
+    """
+    Returns the same payload shape your frontend already expects,
+    computed for the given `booking` as seen by `viewer`.
+    Mirrors feature parity with get_booking_details.
+    """
     if not booking:
         return {"show": False, "message": "No active chat."}
 
+    user_id = viewer.id
+
     # Close chat for terminal states (Rejected/Cancelled = hard close)
     if booking.status in ["Rejected", "Cancelled"]:
-        if booking.provider: booking.provider.busy = False
-        if booking.worker:   booking.worker.busy = False
+        if booking.worker:
+            booking.worker.busy = False  # don't flip provider busy anymore
         db.commit()
         return {"show": False, "message": "No active chat. Job ended or rejected."}
 
     # ✅ Completed: allow rating popup for the giver
     if booking.status == "Completed":
-        if booking.provider: booking.provider.busy = False
-        if booking.worker:   booking.worker.busy = False
+        if booking.worker:
+            booking.worker.busy = False  # don't flip provider busy anymore
         db.commit()
 
-        is_giver = booking.provider_id == user_id
-        is_worker = booking.worker_id == user_id
+        is_giver = (booking.provider_id == user_id)
+        is_worker = (booking.worker_id == user_id)
 
         name = booking.provider.name if is_worker else booking.worker.name
         lat = booking.provider.latitude if is_worker else booking.worker.latitude
@@ -130,10 +104,8 @@ def get_booking_details(
 
         return {"show": False, "message": "✅ Job completed."}
 
-    # Pending → restrict giver; chat not visible yet
+    # Pending → restrict giver; chat not visible yet (do not mark giver busy)
     if booking.status == "Pending":
-        if booking.provider:
-            booking.provider.busy = True
         db.commit()
         return {"show": False, "message": "⏳ Waiting for worker response."}
 
@@ -141,17 +113,16 @@ def get_booking_details(
     if booking.status not in ["Token Paid", "In Progress", "Extra Time"]:
         return {"show": False, "message": "No active chat. Payment not done or job ended."}
 
-    is_giver = booking.provider_id == user_id
-    is_worker = booking.worker_id == user_id
+    is_giver = (booking.provider_id == user_id)
+    is_worker = (booking.worker_id == user_id)
 
+    # Warnings throttle
     allowed, remaining = _next_warning_allowed(db, booking)
-
-    can_warn_now = bool(is_giver and allowed and not getattr(booking, "otp_verified", False))
-
+    can_warn_now = bool(is_giver and allowed and not getattr(booking, "worker_arrived", False))
     if is_worker:
         can_warn_now = False
 
-    # Counterpart information
+    # Counterpart info
     name = booking.provider.name if is_worker else booking.worker.name
     lat = booking.provider.latitude if is_worker else booking.worker.latitude
     lon = booking.provider.longitude if is_worker else booking.worker.longitude
@@ -164,20 +135,19 @@ def get_booking_details(
 
     # ✅ Generate initial OTP to start the job (giver only)
     if is_giver and not getattr(booking, "otp_code", None):
-        # replace with your helper
-        booking.otp_code = generate_otp()  # type: ignore[name-defined]
+        booking.otp_code = generate_otp()
         db.commit()
 
     # ✅ Quantity-based flow
     if is_quantity_based and (booking.completed_quantity or 0) >= (booking.quantity or 0):
         if not getattr(booking, "final_otp_code", None):
-            booking.final_otp_code = generate_otp()  # type: ignore[name-defined]
+            booking.final_otp_code = generate_otp()
             db.commit()
 
         if getattr(booking, "final_otp_verified", False):
             booking.status = "Completed"
-            if booking.worker:   booking.worker.busy = False
-            if booking.provider: booking.provider.busy = False
+            if booking.worker:
+                booking.worker.busy = False
             db.commit()
             if is_giver and not has_giver_rated(db, booking):
                 return _rating_payload(booking, is_giver, name, map_url)
@@ -224,7 +194,7 @@ def get_booking_details(
             if extra_requested or recent_request:
                 # ensure extra OTP
                 if not getattr(booking, "extra_otp_code", None):
-                    booking.extra_otp_code = generate_otp()  # type: ignore[name-defined]
+                    booking.extra_otp_code = generate_otp()
                     db.commit()
 
                 if not getattr(booking, "extra_otp_verified", False):
@@ -269,11 +239,11 @@ def get_booking_details(
                         "warnings_remaining": remaining if can_warn_now else None,
                     }
 
-                # Extra timer stopped
+                # Extra timer stopped (await/after confirm)
                 if getattr(booking, "extra_timer_confirmed_stop", False):
                     booking.status = "Completed"
-                    if booking.worker:   booking.worker.busy = False
-                    if booking.provider: booking.provider.busy = False
+                    if booking.worker:
+                        booking.worker.busy = False
                     db.commit()
                     if is_giver and not has_giver_rated(db, booking):
                         return _rating_payload(booking, is_giver, name, map_url)
@@ -294,8 +264,8 @@ def get_booking_details(
 
             # No extra timer requested → expire chat
             booking.status = "Completed"
-            if booking.worker:   booking.worker.busy = False
-            if booking.provider: booking.provider.busy = False
+            if booking.worker:
+                booking.worker.busy = False
             db.commit()
             if is_giver and not has_giver_rated(db, booking):
                 return _rating_payload(booking, is_giver, name, map_url)
@@ -337,7 +307,7 @@ def get_booking_details(
         "show_reached_slider": is_worker and not getattr(booking, "worker_arrived", False),
         "otp_verified": getattr(booking, "otp_verified", False),
         "chat_active": True,
-        "time_left": time_left if is_hourly else None,
+        "time_left": time_left if is_hourly else None,  # ✅ parity fix vs route
         "rate_type": booking.rate_type,
         "quantity": booking.quantity or 0,
         "completed_quantity": booking.completed_quantity or 0,
@@ -348,6 +318,87 @@ def get_booking_details(
         "rating_pending": (booking.status == "Completed") and (is_giver and not has_giver_rated(db, booking)),
         "role": {"self": "giver" if is_giver else "worker"},
     }
+
+
+def _rating_payload(booking: Booking, is_giver: bool, name: str, map_url: str) -> dict:
+    """Payload that tells the frontend to show the rating popup to the giver."""
+    return {
+        "show": True,
+        "completed": True,
+        "rating_pending": is_giver and True,           # force popup for giver
+        "role": {"self": "giver" if is_giver else "worker"},
+        "booking_id": booking.id,
+        "giver_name": name,
+        "chat_url": chat_url_for(booking.id),
+        "map_url": map_url,
+    }
+
+
+@router.get("/get_active_bookings")
+def get_active_bookings(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    q = (
+        db.query(Booking)
+        .options(joinedload(Booking.provider), joinedload(Booking.worker))
+        .filter(
+            ( (Booking.provider_id == current_user.id) | (Booking.worker_id == current_user.id) )
+            & (Booking.status.in_(["Token Paid", "In Progress", "Extra Time"]))
+        )
+        .order_by(Booking.id.desc())
+    )
+
+    items = []
+    for b in q.all():
+        # partner name relative to viewer
+        is_giver = (b.provider_id == current_user.id)
+        partner = b.worker.name if is_giver else b.provider.name
+        items.append({
+            "booking_id": b.id,
+            "partner": partner,
+            "status": b.status,
+            "role": "giver" if is_giver else "worker"
+        })
+    return {"items": items}
+
+@router.post("/get_booking_details_by_id/{booking_id}")
+def get_booking_details_by_id(
+    booking_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    booking = (
+        db.query(Booking)
+        .options(joinedload(Booking.provider), joinedload(Booking.worker))
+        .filter(Booking.id == booking_id)
+        .first()
+    )
+    if not booking:
+        return {"show": False, "message": "No such booking."}
+
+    # Optional: security guard — make sure viewer is party to this booking
+    if booking.provider_id != current_user.id and booking.worker_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not allowed")
+
+    return _payload_for_booking(booking, current_user, db)
+
+
+@router.post("/get_booking_details")
+def get_booking_details(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    booking = (
+        db.query(Booking)
+        .options(joinedload(Booking.provider), joinedload(Booking.worker))
+        .filter((Booking.worker_id == current_user.id) | (Booking.provider_id == current_user.id))
+        .order_by(Booking.id.desc())
+        .first()
+    )
+    if not booking:
+        return {"show": False, "message": "No active chat."}
+    return _payload_for_booking(booking, current_user, db)
 
 
 @router.post("/rate_worker")

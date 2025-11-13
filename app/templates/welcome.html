@@ -406,12 +406,12 @@
 
       /* Center the hero content */
       .hero {
-        min-height: 100vh;                /* take up full screen height */
+        min-height: 100vh; /* full screen */
         display: flex;
         flex-direction: column;
-        justify-content: center;          /* center vertically */
-        align-items: center;              /* center horizontally */
-        padding: 0 16px;                  /* remove extra top/bottom padding */
+        justify-content: center; /* center vertically */
+        align-items: center; /* center horizontally */
+        padding: 0 16px;
         background: linear-gradient(to right, #e0f7fa, #ffffff);
       }
 
@@ -420,25 +420,45 @@
         max-width: 980px;
         text-align: center;
       }
+
       /* Cute, centered pill search */
-      .search-wrap{
+      .search-wrap {
         max-width: 520px;
-        margin: 8px auto 14px;     /* center */
+        margin: 8px auto 14px;
       }
-      @media (max-width:576px){ .search-wrap{ max-width:92%; } }
-      .search-pill{
+
+      @media (max-width: 576px) {
+        .search-wrap {
+          max-width: 92%;
+        }
+      }
+
+      .search-pill {
         position: relative;
         border-radius: 999px;
         overflow: hidden;
-        box-shadow: 0 6px 16px rgba(0,0,0,.06);
+        box-shadow: 0 6px 16px rgba(0, 0, 0, 0.06);
       }
-      .search-pill .form-control{
-        height: 42px; border: none; padding-left: 38px;
+
+      .search-pill .form-control {
+        height: 42px;
+        border: none;
+        padding-left: 38px;
       }
-      .search-pill .btn{ height: 42px; border: none; border-radius: 0; }
-      .search-pill .search-icon{
-        position: absolute; left: 12px; top: 50%;
-        transform: translateY(-50%); font-size: 16px; opacity: .6;
+
+      .search-pill .btn {
+        height: 42px;
+        border: none;
+        border-radius: 0;
+      }
+
+      .search-pill .search-icon {
+        position: absolute;
+        left: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        font-size: 16px;
+        opacity: 0.6;
         pointer-events: none;
       }
 
@@ -446,9 +466,9 @@
       #category-grid {
         margin: 16px auto 0;
         display: grid;
-        grid-template-columns: repeat(auto-fit, 220px); /* fixed-width cards */
+        grid-template-columns: repeat(auto-fit, 220px);
         gap: 16px;
-        justify-content: center; /* ✅ centers grid as a block */
+        justify-content: center;
       }
 
       .cat-card {
@@ -456,26 +476,79 @@
         background: #fff;
         border-radius: 14px;
         padding: 18px 12px;
-        box-shadow: 0 4px 14px rgba(0,0,0,.08);
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
         text-align: center;
         cursor: pointer;
-        transition: transform .12s, box-shadow .12s;
+        transition: transform 0.12s, box-shadow 0.12s;
       }
 
       .cat-card:hover {
         transform: translateY(-3px);
-        box-shadow: 0 8px 18px rgba(0,0,0,.10);
+        box-shadow: 0 8px 18px rgba(0, 0, 0, 0.1);
       }
 
-      .cat-emoji { font-size: 22px; display: block; margin-bottom: 6px; }
-      .cat-title { font-weight: 600; font-size: 15px; }
-
-      @media (max-width: 576px) {
-        #category-grid { grid-template-columns: repeat(auto-fit, 160px); }
-        .cat-card { width: 160px; }
+      .cat-emoji {
+        font-size: 22px;
+        display: block;
+        margin-bottom: 6px;
       }
 
+      .cat-title {
+        font-weight: 600;
+        font-size: 15px;
+      }
 
+      /* 📱 Responsive improvements for mobile */
+      @media (max-width: 768px) {
+        .hero {
+          min-height: 100vh;
+          justify-content: center; /* keep vertically centered */
+          align-items: center;
+          padding: 0 12px;
+        }
+
+        .container-hero {
+          max-width: 90%;
+        }
+
+        .search-pill .form-control {
+          height: 36px;
+          font-size: 14px;
+          padding-left: 32px;
+        }
+
+        .search-pill .btn {
+          height: 36px;
+          font-size: 14px;
+          padding: 0 12px;
+        }
+
+        .search-pill .search-icon {
+          font-size: 14px;
+          left: 10px;
+        }
+
+        #category-grid {
+          grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+          gap: 12px;
+        }
+
+        .cat-card {
+          width: 100%;
+          padding: 12px 8px;
+          border-radius: 10px;
+          box-shadow: 0 3px 10px rgba(0, 0, 0, 0.08);
+        }
+
+        .cat-emoji {
+          font-size: 18px;
+          margin-bottom: 4px;
+        }
+
+        .cat-title {
+          font-size: 13px;
+        }
+      }
     </style>
 
 </head>
@@ -632,8 +705,8 @@
         <div class="cat-card" data-cat="Carpentry">
           <span class="cat-emoji">🪵</span><span class="cat-title">Carpentry</span>
         </div>
-        <div class="cat-card" data-cat="Delivery">
-          <span class="cat-emoji">📦</span><span class="cat-title">Delivery</span>
+        <div class="cat-card" data-cat="Construction">
+          <span class="cat-emoji">🏗️</span><span class="cat-title">Construction</span>
         </div>
         <div class="cat-card" data-cat="Cooking">
           <span class="cat-emoji">🍳</span><span class="cat-title">Cooking</span>
@@ -641,8 +714,8 @@
         <div class="cat-card" data-cat="Tutoring">
           <span class="cat-emoji">📘</span><span class="cat-title">Tutoring</span>
         </div>
-        <div class="cat-card" data-cat="Painting">
-          <span class="cat-emoji">🎨</span><span class="cat-title">Painting</span>
+        <div class="cat-card" data-cat="Other">
+          <span class="cat-emoji">...</span><span class="cat-title">Other</span>
         </div>
       </div>
 
@@ -652,6 +725,17 @@
 
   <!-- Chat Popup -->
   <div id="chat-direction-panel" style="display:none;">
+    <div id="chat-multi-toolbar" style="display:flex;align-items:center;gap:8px;margin:-4px 0 10px;">
+      <button id="chat-prev" class="btn btn-light btn-sm" title="Previous">◀</button>
+      <div style="font-weight:600;">
+        <span id="chat-index">1</span>/<span id="chat-total">1</span>
+        <span class="badge bg-primary" id="chat-live-count" style="margin-left:6px;">1 live</span>
+      </div>
+      <button id="chat-next" class="btn btn-light btn-sm" title="Next">▶</button>
+      <div style="flex:1"></div>
+      <button id="chat-minimize" class="btn btn-outline-secondary btn-sm" title="Minimize">—</button>
+    </div>
+
     <div id="chat-content">
       <h5>Booking Found</h5>
       <p><strong>Job Partner:</strong> <span id="partner-name">Loading...</span></p>
@@ -769,6 +853,20 @@
     <div id="rating-msg" class="small text-muted" style="margin-top:8px;"></div>
   </div>
 </div>
+
+<div id="chat-fab"
+     style="display:none;position:fixed;left:14px;bottom:14px;z-index:4600;width:56px;height:56px;
+            border-radius:50%;background:#0d6efd;color:#fff;box-shadow:0 8px 18px rgba(0,0,0,.25);
+            align-items:center;justify-content:center;cursor:pointer;font-weight:700;">
+  💬 <span id="chat-fab-count" style="margin-left:4px;"></span>
+</div>
+
+<style>
+@media (max-width:576px){
+  #chat-fab{ width:48px;height:48px; left:10px; bottom:10px; }
+}
+</style>
+
 
 <!-- Worker warning modal -->
 <div id="worker-warn-modal"
@@ -900,6 +998,51 @@
     </div>
   </div>
 </div>
+
+
+<script>
+  // --- Location persistence keys ---
+  const LOC_KEY = 'sahayi_location_display';
+  const LOC_STATE_KEY = 'sahayi_location_state';
+  const LOC_ZIP_KEY = 'sahayi_location_zip';
+  const LOC_FIRST_DONE = 'sahayi_location_first_done';
+
+  function setLocationDisplay(text, {state=null, zip=null} = {}) {
+    const el = document.getElementById('location-display');
+    if (el) el.textContent = text || '';
+    try {
+      localStorage.setItem(LOC_KEY, text || '');
+      if (state !== null) localStorage.setItem(LOC_STATE_KEY, state ?? '');
+      if (zip !== null) localStorage.setItem(LOC_ZIP_KEY, zip ?? '');
+    } catch {}
+  }
+
+  function restoreLocationDisplay() {
+    const el = document.getElementById('location-display');
+    if (!el) return;
+    try {
+      const saved = localStorage.getItem(LOC_KEY);
+      el.textContent = (saved && saved.trim()) ? saved : 'Location paused';
+    } catch {
+      el.textContent = 'Location paused';
+    }
+  }
+
+  // First-load initializer:
+  async function initLocationOnLoad() {
+    const firstDone = localStorage.getItem(LOC_FIRST_DONE) === '1';
+    if (!firstDone) {
+      // FIRST EVER PAGE OPEN → do an auto-fetch once
+      await fetchLocationAndUpdate();
+      // mark as done so future reloads won't auto fetch
+      try { localStorage.setItem(LOC_FIRST_DONE, '1'); } catch {}
+    } else {
+      // Subsequent reloads → do NOT fetch; just restore the last shown text
+      restoreLocationDisplay();
+    }
+  }
+</script>
+
 
 <script>
   // When a category tile is clicked → redirect to category page
@@ -1349,6 +1492,7 @@ window.addEventListener('resize', positionWorkerToggle); // ← add this line
   const sosBtn = document.getElementById('sos-btn');
   const sosSheet = document.getElementById('sos-sheet');
   const sosBackdrop = document.getElementById('sos-backdrop');
+  if (!sosBtn || !sosSheet || !sosBackdrop) return;
 
   function openSheet(){ sosSheet.style.display = 'block'; sosBackdrop.style.display = 'block'; sosSheet.setAttribute('aria-hidden','false'); }
   function closeSheet(){ sosSheet.style.display = 'none'; sosBackdrop.style.display = 'none'; sosSheet.setAttribute('aria-hidden','true'); }
@@ -1466,15 +1610,33 @@ function ensureWorkerPollsStarted() {
 
 
 function setRoleFromBookingData(data) {
+  // Prefer explicit server-sent role
   if (data && data.role && (data.role.self === 'giver' || data.role.self === 'worker')) {
     CURRENT_USER_ROLE = data.role.self;
-    document.body.dataset.role = CURRENT_USER_ROLE;  // single source of truth
-  } else if (data && data.debug) {
-    CURRENT_USER_ROLE = data.debug.is_giver ? 'giver'
-                      : (data.debug.is_worker ? 'worker' : null);
-    if (CURRENT_USER_ROLE) document.body.dataset.role = CURRENT_USER_ROLE;
+    document.body.dataset.role = CURRENT_USER_ROLE;
+    return;
   }
+
+  // Backwards-compat / debug fallback
+  if (data && data.debug) {
+    if (data.debug.is_giver) {
+      CURRENT_USER_ROLE = 'giver';
+      document.body.dataset.role = 'giver';
+      return;
+    }
+    if (data.debug.is_worker) {
+      CURRENT_USER_ROLE = 'worker';
+      document.body.dataset.role = 'worker';
+      return;
+    }
+  }
+
+  // Conservative default: hide privileged UI
+  console.warn('Booking payload missing role; hiding privileged UI. Payload:', data);
+  CURRENT_USER_ROLE = null;
+  document.body.dataset.role = '';
 }
+
 
 
 function applyRoleUI(data){
@@ -1484,7 +1646,8 @@ function applyRoleUI(data){
   const otpIn   = document.getElementById('otp-input-section');
 
   if (mapBtn)  mapBtn.style.display  = (CURRENT_USER_ROLE === 'worker') ? 'inline-block' : 'none';
-  if (warnBtn) warnBtn.style.display = (CURRENT_USER_ROLE === 'giver' && !!data?.can_issue_warning) ? 'inline-block' : 'none';
+  if (warnBtn) warnBtn.style.display = (CURRENT_USER_ROLE === 'giver' && (data?.can_issue_warning || data?.allow_warn)) ? 'inline-block' : 'none';
+  console.debug('applyRoleUI: role=', CURRENT_USER_ROLE, 'can_issue_warning=', data?.can_issue_warning, 'warnBtnShown=', warnBtn.style.display);
   if (reached) reached.style.display = (CURRENT_USER_ROLE === 'worker' && !!data?.show_reached_slider) ? 'block' : 'none';
   if (otpIn)   otpIn.style.display   = (CURRENT_USER_ROLE === 'worker' && !!data?.show_otp_input) ? 'block' : 'none';
 }
@@ -1544,7 +1707,9 @@ async function fetchLocationAndUpdate() {
   const locError = document.getElementById("location-error");
 
   if (!navigator.geolocation) {
-    if (locDisplay) locDisplay.textContent = "❌ Not supported";
+    if (locDisplay) {
+      setLocationDisplay("❌ Not supported"); // persist
+    }
     return;
   }
   if (_locInFlight) return;
@@ -1559,7 +1724,6 @@ async function fetchLocationAndUpdate() {
         const lat = pos.coords.latitude;
         const lon = pos.coords.longitude;
 
-        // 1) Ask backend first
         let loc = { state: "Unknown", zipcode: "Unknown" };
         try {
           const res = await fetch("/get_location_details", {
@@ -1568,9 +1732,8 @@ async function fetchLocationAndUpdate() {
             body: JSON.stringify({ latitude: lat, longitude: lon }),
           });
           if (res.ok) loc = await res.json();
-        } catch { /* ignore */ }
+        } catch {}
 
-        // 2) Fallback to OSM if backend didn’t resolve
         const needsFallback =
           (!loc.state || loc.state === "Unknown") &&
           (!loc.zipcode || loc.zipcode === "Unknown");
@@ -1583,10 +1746,11 @@ async function fetchLocationAndUpdate() {
           }
         }
 
-        // 3) Render → always prefer “State, Pincode”
-        if (locDisplay) locDisplay.textContent = prettyLocation(loc, lat, lon);
+        const pretty = prettyLocation(loc, lat, lon);
 
-        // 4) Persist best-known values (non-blocking)
+        // ✅ render + persist
+        setLocationDisplay(pretty, { state: loc.state || 'Unknown', zip: loc.zipcode || 'Unknown' });
+
         try {
           await fetch("/update_location", {
             method: "POST",
@@ -1603,10 +1767,8 @@ async function fetchLocationAndUpdate() {
         if (typeof positionWorkerToggle === "function") positionWorkerToggle();
       } catch (e) {
         console.warn("Reverse geocode/update failed:", e);
-        if (locDisplay) {
-          const lat = pos.coords.latitude, lon = pos.coords.longitude;
-          locDisplay.textContent = `Approx. ${lat.toFixed(3)}, ${lon.toFixed(3)}`;
-        }
+        const approx = `Approx. ${pos.coords.latitude.toFixed(3)}, ${pos.coords.longitude.toFixed(3)}`;
+        setLocationDisplay(approx); // ✅ persist fallback
       } finally {
         _locInFlight = false;
       }
@@ -1616,13 +1778,16 @@ async function fetchLocationAndUpdate() {
       if (locError) locError.style.display = "block";
       _locInFlight = false;
 
-      if (!locationRetryInterval) {
+      // On first load you might have a retry loop. After first success,
+      // you can keep this off; it won't run on reloads anyway because we don't call this.
+      if (!locationRetryInterval && localStorage.getItem(LOC_FIRST_DONE) !== '1') {
         locationRetryInterval = setInterval(fetchLocationAndUpdate, 10000);
       }
     },
     { enableHighAccuracy: true, timeout: 10000 }
   );
 }
+
 
 // Manual retry button
 function retryLocation() {
@@ -1700,7 +1865,7 @@ document.getElementById("show-save-location")?.addEventListener("click", () => {
 
 
 
-document.getElementById("change-location-btn").addEventListener("click", async () => {
+document.getElementById("change-location-btn")?.addEventListener("click", async () => {
   try {
     const res = await fetch('/get_saved_locations');
     if (!res.ok) throw new Error("Failed to fetch saved locations");
@@ -1754,12 +1919,12 @@ document.getElementById("change-location-btn").addEventListener("click", async (
 });
 
 // Close button
-document.getElementById("close-change-location").addEventListener("click", () => {
+document.getElementById("close-change-location")?.addEventListener("click", () => {
   document.getElementById("change-location-box").style.display = "none";
 });
 
 // Use live location
-document.getElementById("use-live-location").addEventListener("click", async () => {
+document.getElementById("use-live-location")?.addEventListener("click", async () => {
   await fetchLocationAndUpdate(); // existing function
   document.getElementById("change-location-box").style.display = "none";
 });
@@ -1771,13 +1936,6 @@ const chatBox = document.getElementById("chat-box");
 const chatInput = document.getElementById("chat-input");
 const sendBtn = document.getElementById("send-chat-btn");
 
-function appendMessage(sender, text) {
-    const msgDiv = document.createElement("div");
-    msgDiv.innerHTML = `<strong>${sender}:</strong> ${text}`;
-    chatBox.appendChild(msgDiv);
-    chatBox.scrollTop = chatBox.scrollHeight;
-}
-
 
 
 async function checkPendingPayment() {
@@ -1787,64 +1945,75 @@ async function checkPendingPayment() {
 }
 
 async function checkBookingStatusAndShowChat() {
-  const res = await fetch('/get_booking_details', { method: 'POST' });
-  const data = await res.json();
-  setRoleFromBookingData(data);
-  applyRoleUI(data);
-  ensureWorkerPollsStarted(); // PATCH: start worker warning + booking polls once role is set
+  let data;
 
-
-
-
-    if (data.status === 'cancelled' || data.cancelled) {
-      handleBookingCancelledUI();
+  // Use injected payload if available (renderChatPayload uses this)
+  if (window.__lastBookingPayload) {
+    data = window.__lastBookingPayload;
+  } else {
+    const id = (typeof getCurrentBookingId === 'function') ? getCurrentBookingId() : null;
+    const url = id ? '/get_booking_details_by_id/' + encodeURIComponent(id) : '/get_booking_details';
+    try {
+      const res = await fetch(url, { method: 'POST' });
+      data = await res.json();
+      if (id && data && data.booking_id && Number(data.booking_id) !== Number(id)) {
+        console.warn("Skipping timer/UI update — payload for another booking", data.booking_id, "≠", id);
+        return;
+      }
+    } catch (err) {
+      console.error("Failed to fetch booking details:", err);
       return;
     }
+  }
 
+  data = data || {};
+
+  // Role/UI/worker-poll setup (defensive)
+  try { setRoleFromBookingData(data); } catch (e) { console.warn("setRoleFromBookingData failed", e); }
+  try { applyRoleUI(data); } catch (e) { console.warn("applyRoleUI failed", e); }
+  try { ensureWorkerPollsStarted(); } catch (e) { console.warn("ensureWorkerPollsStarted failed", e); }
+  hideWorkerMultiControls();
+
+  // If booking canceled → show cancelled UI and stop
+  if (data.status === 'cancelled' || data.cancelled) {
+    handleBookingCancelledUI();
+    return;
+  }
 
   if (!data || !data.booking_id) return;
 
-      // If server already knows arrival / OTP verified, mark arrival locally (hide warn button)
+  // If server already knows arrival / OTP verified, mark arrival locally & hide warn button
   if (data.arrival_confirmed || data.otp_verified) {
-    try {
-      markArrivalConfirmed();
-    } catch (e) {
-      console.warn("markArrivalConfirmed() error:", e);
-    }
-    // defensive: hide warn button and clear timer for giver as well
+    try { markArrivalConfirmed(); } catch (e) { console.warn("markArrivalConfirmed() error:", e); }
     const warnBtn = document.getElementById("warn-sahayi-btn");
     if (warnBtn) warnBtn.style.display = "none";
-    if (warnTimerHandle) {
+    if (typeof warnTimerHandle !== 'undefined' && warnTimerHandle) {
       clearTimeout(warnTimerHandle);
       warnTimerHandle = null;
     }
   }
 
+  // If completed → render completion UI and stop
+  if (data.completed) {
+    const panel = document.getElementById("chat-direction-panel");
+    const wrap  = document.getElementById("chat-completion-wrap");
+    if (panel) panel.style.display = "block";
+    if (wrap) {
+      wrap.innerHTML = `
+        <h5>✅ Work Completed</h5>
+        <p><strong>Partner:</strong> ${data.giver_name || ''}</p>
+        <p>✅ Your work has been marked as complete.</p>
+        <a href="${data.chat_url || '#'}" target="_blank" class="btn btn-primary mt-2">💬 View Chat</a>
+        <a href="${data.map_url || '#'}" target="_blank" class="btn btn-success mt-2">📍 Get Directions</a>
+        <button class="btn btn-secondary mt-3" onclick="document.getElementById('chat-direction-panel').style.display='none'">Close</button>
+      `;
+    }
+    window._warnTimerStartedFor = null;
+    try { maybeShowRating(data); } catch(e){ console.warn('rating popup failed', e); }
+    return;
+  }
 
-   if (data.completed) {
-     const chatPanel = document.getElementById("chat-direction-panel");
-     if (chatPanel) {
-       chatPanel.style.display = "block";
-       chatPanel.innerHTML = `
-         <h5>✅ Work Completed</h5>
-         <p><strong>Partner:</strong> ${data.giver_name}</p>
-         <p>✅ Your work has been marked as complete.</p>
-         <a href="${data.chat_url}" target="_blank" class="btn btn-primary mt-2">💬 View Chat</a>
-         <a href="${data.map_url}" target="_blank" class="btn btn-success mt-2">📍 Get Directions</a>
-         <button class="btn btn-secondary mt-3" onclick="document.getElementById('chat-direction-panel').style.display='none'">Close</button>
-       `;
-     }
-     window._warnTimerStartedFor = null;
-
-     // ⭐ New: force rating popup for Job Giver
-     try { maybeShowRating(data); } catch(e){ console.warn('rating popup failed', e); }
-
-     return;
-   }
-
-
-
-
+  // Select UI elements we'll update
   const chatPanel = document.getElementById("chat-direction-panel");
   const otpDisplay = document.getElementById("otp-display");
   const generatedOtp = document.getElementById("generated-otp");
@@ -1852,187 +2021,186 @@ async function checkBookingStatusAndShowChat() {
   const chatInput = document.getElementById("chat-input");
   const chatTimer = document.getElementById("chat-timer");
 
-  chatPanel.style.display = "block";
+  if (chatPanel) chatPanel.style.display = isChatMinimized() ? "none" : "block";
 
-    // ✅ Start drive timer only for JOB GIVER side
-    if (CURRENT_USER_ROLE === "giver" && data.booking_id) {
-      if (window._warnTimerStartedFor !== data.booking_id) {
+  // ----- Drive timer (GIVER only) -----
+  // NOTE: only start the drive/warn timer while OTP is NOT verified (i.e. worker hasn't arrived).
+  // If OTP is verified, treat as arrival and clear/hide any warn state immediately.
+  if (CURRENT_USER_ROLE === "giver" && data.booking_id) {
+    // If OTP verified → worker arrived: ensure warn is removed and persisted flags cleaned
+    if (data.otp_verified) {
+      try {
+        // mark arrival locally (clears persisted warn flags for this booking)
+        markArrivalConfirmedLocal(data.booking_id);
+      } catch (e) {
+        console.warn("markArrivalConfirmedLocal failed", e);
+      }
+      try {
+        const warnBtn = document.getElementById('warn-sahayi-btn');
+        if (warnBtn) warnBtn.style.display = 'none';
+      } catch (e) {}
+      // don't start any warn timer
+      window._warnTimerStartedFor = null;
+    } else {
+      // OTP NOT verified → worker hasn't arrived yet: start/schedule warn timer as before
+      const currentId = (typeof getCurrentBookingId === 'function') ? getCurrentBookingId() : null;
+      if (currentId && Number(currentId) !== Number(data.booking_id)) {
+        console.debug("Not starting drive timer — different booking selected.");
+      } else if (window._warnTimerStartedFor !== data.booking_id) {
+        // cleanup previous booking timer if any
+        if (window._warnTimerStartedFor && window._warnTimerStartedFor !== data.booking_id) {
+          if (typeof warnTimerHandle !== 'undefined' && warnTimerHandle) clearTimeout(warnTimerHandle);
+          warnTimerHandle = null;
+        }
         arrivalConfirmed = false;
-        if (warnTimerHandle) clearTimeout(warnTimerHandle);
-        warnTimerHandle = null;
-        startDriveTimer(data.drive_seconds || 0, data.booking_id);
+        try {
+          startDriveTimer(Number(data.drive_seconds) || 0, data.booking_id);
+        } catch (e) {
+          console.warn("startDriveTimer failed", e);
+        }
         window._warnTimerStartedFor = data.booking_id;
       }
     }
-    restoreWarnTimerForBooking(data.booking_id); // PATCH: make sure warn button shows when ETA/cooldown passes
+  }
 
 
+  // Restore persisted warn timer state for this booking (respects cooldowns etc)
+  try { restoreWarnTimerForBooking(data.booking_id); } catch (e) { console.warn("restoreWarnTimerForBooking failed", e); }
 
+  /* ---------- DEBUG / DEV: force-show warn button immediately ----------
+     Uncomment these lines temporarily only for local testing.
+     DO NOT leave enabled in production because it only affects client UI —
+     server must still validate /issue_warning requests.
+  */
+  // try {
+  //   localStorage.setItem(`warn_shown_${data.booking_id}`, '1');
+  //   document.getElementById('warn-sahayi-btn')?.style.display = 'inline-block';
+  //   window._warnTimerStartedFor = data.booking_id;
+  // } catch (e) { console.warn('Failed to force-show warn button:', e); }
+  /* -------------------------------------------------------------------- */
 
+  // --- populate OTP/chat UI and other fields ---
+  try {
+    const partnerNameEl = document.getElementById("partner-name");
+    if (partnerNameEl) partnerNameEl.textContent = data.giver_name || '';
 
+    const chatLinkEl = document.getElementById("chat-link");
+    if (chatLinkEl) chatLinkEl.href = data.chat_url || '#';
+    if (data.map_url) localStorage.setItem("mapUrl", data.map_url);
 
+    if (otpDisplay) otpDisplay.style.display = data.otp_code ? "block" : "none";
+    if (generatedOtp) generatedOtp.textContent = data.otp_code || "";
 
-  if (data.show) {
-    // 🆕 Final OTP logic
+    // final OTP
     const finalOTPDisplay = document.getElementById("final-otp-display");
     const finalOTPInput = document.getElementById("final-otp-input-section");
+    if (finalOTPDisplay) finalOTPDisplay.style.display = data.final_otp_code ? "block" : "none";
+    if (finalOTPDisplay && data.final_otp_code) document.getElementById("final-otp-code").textContent = data.final_otp_code || '';
+    if (finalOTPInput) finalOTPInput.style.display = data.show_final_otp_input ? "block" : "none";
 
-    if (data.final_otp_code) {
-      finalOTPDisplay.style.display = "block";
-      document.getElementById("final-otp-code").textContent = data.final_otp_code;
-    } else {
-      finalOTPDisplay.style.display = "none";
-    }
-
-    if (data.show_final_otp_input) {
-      finalOTPInput.style.display = "block";
-    } else {
-      finalOTPInput.style.display = "none";
-    }
-
-  // Extra OTP display for giver
+    // extra OTP
     const extraOtpDisplay = document.getElementById("extra-otp-display");
     const extraOtpCodeEl = document.getElementById("extra-otp-code");
     const extraOtpInputSection = document.getElementById("extra-otp-input-section");
+    if (extraOtpDisplay) extraOtpDisplay.style.display = data.extra_otp_code ? "block" : "none";
+    if (extraOtpDisplay && extraOtpCodeEl) extraOtpCodeEl.textContent = data.extra_otp_code || "";
+    if (extraOtpInputSection) extraOtpInputSection.style.display = data.show_extra_otp_input ? "block" : "none";
 
-    if (data.extra_otp_code) {
-      extraOtpDisplay.style.display = "block";
-      extraOtpCodeEl.textContent = data.extra_otp_code;
-    } else {
-      extraOtpDisplay.style.display = "none";
-    }
+    // show/hide request extra button
+    const reqBtn = document.getElementById("request-extra-btn");
+    if (reqBtn) reqBtn.style.display = data.show_extra_timer_button ? "inline-block" : "none";
 
-    if (data.show_extra_otp_input) {
-      extraOtpInputSection.style.display = "block";
-    } else {
-      extraOtpInputSection.style.display = "none";
-    }
-
-
-    document.getElementById("partner-name").textContent = data.giver_name;
-    document.getElementById("chat-link").href = data.chat_url;
-    // Show "Request Extra Time" button if allowed
-    if (data.show_extra_timer_button) {
-      document.getElementById("request-extra-btn").style.display = "inline-block";
-    } else {
-      document.getElementById("request-extra-btn").style.display = "none";
-    }
-
-    // Handle pending extra timer state
+    // extra timer handling
     if (data.extra_timer_pending) {
-      chatInput.disabled = true;
-      chatTimer.textContent = data.message || "⏳ Extra timer will start shortly.";
+      if (chatInput) chatInput.disabled = true;
+      if (chatTimer) chatTimer.textContent = data.message || "⏳ Extra timer will start shortly.";
     }
 
-    // Handle extra timer running
     if (data.extra_timer_running) {
-  clearInterval(window.chatCountdown);  // ⛔ Stop normal timer
-  chatInput.disabled = false;
-  document.getElementById("send-chat-btn").disabled = false;
-
-  let extraTimeElapsed = Math.floor(data.extra_duration_seconds || 0);
-
-    clearInterval(window.extraChatCountdown);
-    window.extraChatCountdown = setInterval(() => {
-      const mins = Math.floor(extraTimeElapsed / 60);
-      const secs = extraTimeElapsed % 60;
-
-      chatTimer.textContent = `⏱ Extra Chat Time: ${mins}m ${secs}s`;
-
-      extraTimeElapsed++;
-
-    }, 1000);
-
-
-
-  if (CURRENT_USER_ROLE === "worker") {
-    document.getElementById("map-btn").style.display = "inline-block";
-  } else {
-    document.getElementById("map-btn").style.display = "none";
-  }
-
-
-  if (!data.stop_confirmed) {
-    document.getElementById("stop-extra-btn").style.display = "inline-block";
-  } else {
-    document.getElementById("stop-extra-btn").style.display = "none";
-  }
-}
-
-// If stop was clicked but not yet confirmed
-if (data.extra_timer_stopped && data.show_confirm_stop_button) {
-  document.getElementById("confirm-stop-btn").style.display = "inline-block";
-  document.getElementById("stop-extra-btn").style.display = "none"; // hide stop
-} else {
-  document.getElementById("confirm-stop-btn").style.display = "none";
-}
-
-
-
-
-    document.getElementById("partner-name").textContent = data.giver_name;
-    document.getElementById("chat-link").href = data.chat_url;
-    localStorage.setItem("mapUrl", data.map_url);
-
-    otpDisplay.style.display = data.otp_code ? "block" : "none";
-    document.getElementById("generated-otp").textContent = data.otp_code || "";
-
-    if (data.show_reached_slider) {
-        document.getElementById("reached-location-section").style.display = "block";
-        document.getElementById("otp-input-section").style.display = "none";
-    } else if (data.show_otp_input) {
-        document.getElementById("reached-location-section").style.display = "none";
-        document.getElementById("otp-input-section").style.display = "block";
-    }
-
-
-    if (!data.otp_verified) {
-      chatInput.disabled = false;
-      chatTimer.textContent = "🔒 Please verify OTP ";
-    } else if (data.chat_active && data.time_left > 0) {
-      let timeLeft = Math.floor(data.time_left);
-      chatInput.disabled = false;
+      if (window.chatCountdown) { clearInterval(window.chatCountdown); window.chatCountdown = null; }
+      if (chatInput) chatInput.disabled = false;
       document.getElementById("send-chat-btn").disabled = false;
 
+      let extraTimeElapsed = Math.floor(data.extra_duration_seconds || 0);
+      if (window.extraChatCountdown) clearInterval(window.extraChatCountdown);
+      window.extraChatCountdown = setInterval(() => {
+        const mins = Math.floor(extraTimeElapsed / 60);
+        const secs = extraTimeElapsed % 60;
+        if (chatTimer) chatTimer.textContent = `⏱ Extra Chat Time: ${mins}m ${secs}s`;
+        extraTimeElapsed++;
+      }, 1000);
 
-      // Show chat & map buttons
       if (CURRENT_USER_ROLE === "worker") {
         document.getElementById("map-btn").style.display = "inline-block";
       } else {
         document.getElementById("map-btn").style.display = "none";
       }
 
+      if (!data.stop_confirmed) {
+        document.getElementById("stop-extra-btn").style.display = "inline-block";
+      } else {
+        document.getElementById("stop-extra-btn").style.display = "none";
+      }
+    }
 
-      clearInterval(window.chatCountdown);
+    // reached slider vs otp input
+    if (data.show_reached_slider) {
+      document.getElementById("reached-location-section").style.display = "block";
+      document.getElementById("otp-input-section").style.display = "none";
+    } else if (data.show_otp_input) {
+      document.getElementById("reached-location-section").style.display = "none";
+      document.getElementById("otp-input-section").style.display = "block";
+    }
+
+    // chat timing logic
+    if (!data.otp_verified) {
+      if (chatInput) chatInput.disabled = false;
+      if (chatTimer) chatTimer.textContent = "🔒 Please verify OTP ";
+    } else if (data.chat_active && Number(data.time_left) > 0) {
+      let timeLeft = Math.floor(Number(data.time_left) || 0);
+      if (chatInput) chatInput.disabled = false;
+      document.getElementById("send-chat-btn").disabled = false;
+
+      if (CURRENT_USER_ROLE === "worker") {
+        document.getElementById("map-btn").style.display = "inline-block";
+      } else {
+        document.getElementById("map-btn").style.display = "none";
+      }
+
+      if (window.chatCountdown) clearInterval(window.chatCountdown);
       window.chatCountdown = setInterval(() => {
         if (timeLeft <= 0) {
           clearInterval(window.chatCountdown);
+          window.chatCountdown = null;
 
           if (data.extra_timer_pending) {
-            // Let the server handle it — do NOT mark expired
-            chatTimer.textContent = data.message || "⏳ Waiting for Extra OTP verification.";
+            if (chatTimer) chatTimer.textContent = data.message || "⏳ Waiting for Extra OTP verification.";
             return;
           }
 
-          // ❌ Only run this if extra timer not requested
-          chatInput.disabled = true;
-          chatTimer.textContent = "⛔ Chat time expired.";
+          if (chatInput) chatInput.disabled = true;
+          if (chatTimer) chatTimer.textContent = "⛔ Chat time expired.";
           document.getElementById("chat-link").style.display = "none";
           document.getElementById("map-btn").style.display = "none";
-          fetch("/end_booking", { method: "POST" });
+
+          fetch("/end_booking", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ booking_id: getCurrentBookingId() })
+          }).catch(()=>{});
+
           return;
         }
 
         const mins = Math.floor(timeLeft / 60);
         const secs = timeLeft % 60;
-        chatTimer.textContent = `🕒 Chat will expire in ${mins}m ${secs}s`;
+        if (chatTimer) chatTimer.textContent = `🕒 Chat will expire in ${mins}m ${secs}s`;
         timeLeft--;
       }, 1000);
     } else if (data.rate_type !== 'per hour' && data.chat_active) {
-      // ✅ For per job/kilo/km type (manual tracking)
-      chatInput.disabled = false;
+      // per-job: keep open until completion
+      if (chatInput) chatInput.disabled = false;
       document.getElementById("send-chat-btn").disabled = false;
-
 
       if (CURRENT_USER_ROLE === "worker") {
         document.getElementById("map-btn").style.display = "inline-block";
@@ -2040,11 +2208,9 @@ if (data.extra_timer_stopped && data.show_confirm_stop_button) {
         document.getElementById("map-btn").style.display = "none";
       }
 
+      document.getElementById("quantity-count").textContent = `${data.completed_quantity || 0} / ${data.quantity || 0}`;
+      if (chatTimer) chatTimer.textContent = `✅ Chat open until work is marked complete.`;
 
-      document.getElementById("quantity-count").textContent = `${data.completed_quantity} / ${data.quantity}`;
-      chatTimer.textContent = `✅ Chat open until work is marked complete.`;
-
-      // Only show update input to the worker
       if (data.debug && data.debug.is_worker) {
         document.getElementById("completed-input").style.display = "block";
         document.getElementById("submit-completed").style.display = "inline-block";
@@ -2054,31 +2220,29 @@ if (data.extra_timer_stopped && data.show_confirm_stop_button) {
       }
 
       document.getElementById("quantity-tracker").style.display = "block";
-
     } else {
-      chatInput.disabled = true;
-      chatTimer.textContent = "⛔ Chat time expired.";
+      if (chatInput) chatInput.disabled = true;
+      if (chatTimer) chatTimer.textContent = "⛔ Chat time expired.";
       document.getElementById("chat-link").style.display = "none";
       document.getElementById("map-btn").style.display = "none";
     }
-
-
-  } else {
-    chatPanel.style.display = "none";
+  } catch (e) {
+    console.warn("UI update failed in checkBookingStatusAndShowChat:", e);
   }
 }
 
-document.getElementById("map-btn").addEventListener("click", () => {
+
+document.getElementById("map-btn")?.addEventListener("click", () => {
   const mapUrl = localStorage.getItem("mapUrl");
   if (mapUrl) window.open(mapUrl, "_blank");
 });
 
-document.getElementById("submit-otp").addEventListener("click", async () => {
+document.getElementById("submit-otp")?.addEventListener("click", async () => {
   const otp = document.getElementById("otp-input").value;
   const res = await fetch("/verify_otp", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ otp })
+    body: JSON.stringify({ otp, booking_id: currentBookingId })
   });
   const result = await res.json();
   if (result.success) {
@@ -2099,7 +2263,7 @@ document.getElementById("submit-otp").addEventListener("click", async () => {
     document.getElementById("otp-status").style.color = "red";
   }
 });
-document.getElementById("submit-completed").addEventListener("click", async () => {
+document.getElementById("submit-completed")?.addEventListener("click", async () => {
   const completed = parseInt(document.getElementById("completed-input").value);
   const res = await fetch("/update_completed_quantity", {
     method: "POST",
@@ -2130,12 +2294,13 @@ document.getElementById("submit-completed").addEventListener("click", async () =
   }
 });
 
-document.getElementById("submit-final-otp").addEventListener("click", async () => {
+document.getElementById("submit-final-otp")?.addEventListener("click", async () => {
   const finalOtp = document.getElementById("final-otp-input").value;
   const res = await fetch("/verify_final_otp", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ otp: finalOtp })
+    body: JSON.stringify({ otp: finalOtp, booking_id: currentBookingId })
+
   });
 
   const result = await res.json();
@@ -2154,10 +2319,15 @@ document.getElementById("submit-final-otp").addEventListener("click", async () =
   }
 });
 
-document.getElementById("request-extra-btn").addEventListener("click", async () => {
+document.getElementById("request-extra-btn")?.addEventListener("click", async () => {
   const confirmed = confirm("Request extra time?");
   if (!confirmed) return;
-  const res = await fetch("/request_extra_time", { method: "POST" });
+    const res = await fetch("/request_extra_time", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ booking_id: currentBookingId })
+  });
+
   const data = await res.json();
   if (data.success) {
     alert("OTP sent to job giver. Ask them to enter it.");
@@ -2166,10 +2336,15 @@ document.getElementById("request-extra-btn").addEventListener("click", async () 
   }
 });
 
-document.getElementById("stop-extra-btn").addEventListener("click", async () => {
+document.getElementById("stop-extra-btn")?.addEventListener("click", async () => {
   const confirmed = confirm("Stop the extra timer?");
   if (!confirmed) return;
-  const res = await fetch("/stop_extra_timer", { method: "POST" });
+    const res = await fetch("/stop_extra_timer", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ booking_id: currentBookingId })
+  });
+
   const data = await res.json();
   if (data.success) {
     alert("Waiting for job giver to confirm stop.");
@@ -2178,12 +2353,13 @@ document.getElementById("stop-extra-btn").addEventListener("click", async () => 
   }
 });
 
-document.getElementById("submit-extra-otp").addEventListener("click", async () => {
+document.getElementById("submit-extra-otp")?.addEventListener("click", async () => {
   const otp = document.getElementById("extra-otp-input").value;
   const res = await fetch("/verify_extra_timer_otp", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ otp })
+    body: JSON.stringify({ otp, booking_id: currentBookingId })
+
   });
 
   const result = await res.json();
@@ -2194,7 +2370,12 @@ document.getElementById("submit-extra-otp").addEventListener("click", async () =
     statusEl.style.color = "green";
 
     // Start the extra timer
-    await fetch("/start_extra_timer", { method: "POST" });
+    await fetch("/start_extra_timer", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ booking_id: currentBookingId })
+    });
+
 
     // Refresh chat panel
     checkBookingStatusAndShowChat();
@@ -2205,11 +2386,16 @@ document.getElementById("submit-extra-otp").addEventListener("click", async () =
 });
 
 
-document.getElementById("confirm-stop-btn").addEventListener("click", async () => {
+document.getElementById("confirm-stop-btn")?.addEventListener("click", async () => {
   const confirmed = confirm("Confirm stop of extra chat?");
   if (!confirmed) return;
 
-  const res = await fetch("/confirm_stop_extra_timer", { method: "POST" });
+  const res = await fetch("/confirm_stop_extra_timer", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ booking_id: currentBookingId })
+  });
+
   const data = await res.json();
 
   if (data.success) {
@@ -2250,9 +2436,6 @@ window.addEventListener("DOMContentLoaded", () => {
     if (savedBookingId) {
         currentBookingId = parseInt(savedBookingId);
         console.log("Restored booking ID:", currentBookingId);
-
-        // restore warn timer/button state for this booking
-        restoreWarnTimerForBooking(currentBookingId);
 
         // Load messages from localStorage instantly
         const savedMessages = JSON.parse(localStorage.getItem(`chatMessages_${currentBookingId}`) || "[]");
@@ -2296,6 +2479,9 @@ window.addEventListener("DOMContentLoaded", () => {
           // Normal flow
           showOrHideChatPanel(data);
           console.log("Booking details received:", data);
+          setRoleFromBookingData(data);
+          applyRoleUI(data)
+          setTimeout(() => restoreWarnTimerForBooking(data.booking_id || currentBookingId), 0);
 
           if (data.show && data.booking_id) {
             if (currentBookingId !== data.booking_id) {
@@ -2327,31 +2513,39 @@ window.addEventListener("DOMContentLoaded", () => {
 
 
 
-    // Load messages from server & store locally
+    // Replace existing loadMessages()
     function loadMessages() {
-        if (!currentBookingId) return;
+        const bid = getCurrentBookingId();
+        if (!bid) return;
 
-        fetch(`/get_messages/${currentBookingId}`)
+        const bookingId = Number(bid);
+        if (!bookingId) return;
+
+        // Optional: cancel any in-flight fetch (advanced) — simple guard:
+        fetch(`/get_messages/${bookingId}`)
             .then(res => res.json())
             .then(messages => {
-                // Convert backend data
                 const backendMessages = messages.map(msg => ({
                     sender: msg.sender_id === CURRENT_USER_ID ? "Me" : "Partner",
                     text: msg.text
                 }));
 
-                // Merge with stored local messages
-                let stored = JSON.parse(localStorage.getItem(`chatMessages_${currentBookingId}`) || "[]");
+                // Merge into localStorage for this booking only
+                let stored = JSON.parse(localStorage.getItem(`chatMessages_${bookingId}`) || "[]");
                 const merged = mergeMessages(stored, backendMessages);
+                localStorage.setItem(`chatMessages_${bookingId}`, JSON.stringify(merged));
 
-                // Save merged messages back to localStorage
-                localStorage.setItem(`chatMessages_${currentBookingId}`, JSON.stringify(merged));
-
-                // Render merged chat
-                renderMessages(merged);
+                // Only render messages if still on the same booking
+                if (getCurrentBookingId() === bookingId) {
+                    renderMessages(merged);
+                } else {
+                    // don't overwrite UI for another booking
+                    console.debug("Skipped render: booking switched during load");
+                }
             })
             .catch(err => console.error("Error loading messages:", err));
     }
+
 
     // Merge arrays without duplicates
     function mergeMessages(localMsgs, backendMsgs) {
@@ -2389,48 +2583,72 @@ window.addEventListener("DOMContentLoaded", () => {
 }
 
 
-    // Send a message
+    // Replace existing sendMessage() with this safe version
     function sendMessage() {
-        const text = chatInput.value.trim();
+        const text = (chatInput.value || "").trim();
         if (!text) return;
-        if (!currentBookingId) {
+
+        const bid = getCurrentBookingId();
+        if (!bid) {
             alert("Booking ID is not set yet.");
             return;
         }
 
-        // Show immediately
+        // Use a snapshot of booking id & current user id
+        const bookingIdAtSend = Number(bid);
+        const senderId = typeof CURRENT_USER_ID !== 'undefined' ? CURRENT_USER_ID : null;
+
+        // Show immediately in UI (for the current booking only)
         appendMessage("Me", text);
 
-        // Save to localStorage immediately
-        let stored = JSON.parse(localStorage.getItem(`chatMessages_${currentBookingId}`) || "[]");
-        stored.push({ sender: "Me", text: text });
-        localStorage.setItem(`chatMessages_${currentBookingId}`, JSON.stringify(stored));
+        // Save to localStorage under the specific booking snapshot
+        try {
+          let stored = JSON.parse(localStorage.getItem(`chatMessages_${bookingIdAtSend}`) || "[]");
+          stored.push({ sender: "Me", text: text });
+          localStorage.setItem(`chatMessages_${bookingIdAtSend}`, JSON.stringify(stored));
+        } catch (e) { console.warn("localStorage save failed", e); }
 
-        // Clear input
+        // Clear input immediately
         chatInput.value = "";
 
-        // Send to backend
+        // Send to backend, include the booking_id snapshot and sender_id
         fetch("/send_message", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-            message: text,
-            booking_id: currentBookingId,
-            sender_id: CURRENT_USER_ID  // ✅ Ensure backend knows who sent it
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                message: text,
+                booking_id: bookingIdAtSend,
+                sender_id: senderId
+            })
         })
-    })
-
         .then(res => res.json())
         .then(() => {
-            // Wait a moment for DB commit, then reload messages
-            setTimeout(() => loadMessages(), 800);
+            // wait a short time, then reload messages for this booking only
+            setTimeout(() => {
+                // only reload messages for the same booking we sent to
+                if (getCurrentBookingId() === bookingIdAtSend) {
+                    loadMessages();
+                } else {
+                    // still attempt to refresh that booking's messages (background)
+                    fetch(`/get_messages/${bookingIdAtSend}`)
+                      .then(r => r.json())
+                      .then(msgs => {
+                        // merge into localStorage for that booking id
+                        let stored = JSON.parse(localStorage.getItem(`chatMessages_${bookingIdAtSend}`) || "[]");
+                        const backendMessages = msgs.map(m => ({ sender: m.sender_id === senderId ? "Me" : "Partner", text: m.text }));
+                        const merged = mergeMessages(stored, backendMessages);
+                        localStorage.setItem(`chatMessages_${bookingIdAtSend}`, JSON.stringify(merged));
+                      }).catch(()=>{});
+                }
+            }, 800);
         })
         .catch(err => console.error("Error sending message:", err));
     }
 
+
     // Event listeners
     sendBtn.addEventListener("click", sendMessage);
-    fetchLocationAndUpdate();
+    initLocationOnLoad();
     chatInput.addEventListener("keydown", e => {
         if (e.key === "Enter") {
             e.preventDefault();
@@ -2492,7 +2710,7 @@ function showOrHideChatPanel(data) {
 
 
 
-    document.getElementById("call-btn").addEventListener("click", async () => {
+    document.getElementById("call-btn")?.addEventListener("click", async () => {
   if (!currentBookingId) {
     alert("No active booking to call.");
     return;
@@ -2513,7 +2731,7 @@ function showOrHideChatPanel(data) {
 });
 
 const slider = document.getElementById("reached-slider");
-slider.addEventListener("change", async () => {
+slider?.addEventListener("change", async () => {
   if (slider.value == 100) {  // only when fully slid
     if (!navigator.geolocation) {
       alert("❌ Geolocation not supported");
@@ -2566,7 +2784,7 @@ slider.addEventListener("change", async () => {
 
 
 // Toggle profile dropdown
-document.getElementById("profile-btn").addEventListener("click", () => {
+document.getElementById("profile-btn")?.addEventListener("click", () => {
   const box = document.getElementById("profile-box");
   box.style.display = (box.style.display === "none" || box.style.display === "") ? "block" : "none";
 });
@@ -2583,14 +2801,27 @@ function toggleBookingUI(isBookingLive) {
   const heroActions = document.getElementById("hero-actions");
   const chatPanel = document.getElementById("chat-direction-panel");
 
-  if (isBookingLive) {
-    heroActions.style.display = "none";
-    chatPanel.style.display = "block";
-  } else {
-    heroActions.style.display = "block";
-    chatPanel.style.display = "none";
+  // Update elements that exist — do NOT return early, since other code relies on the function running.
+  if (heroActions) heroActions.style.display = isBookingLive ? "none" : "block";
+  if (chatPanel)  chatPanel.style.display  = isBookingLive ? "block" : "none";
+
+  // Optional: if one is missing, attempt to recover later
+  if (!heroActions || !chatPanel) {
+    console.warn("toggleBookingUI: missing elements", {
+      heroActions: !!heroActions, chatPanel: !!chatPanel
+    });
+    // try re-running a short time later to catch async DOM inserts
+    setTimeout(() => {
+      const ha = document.getElementById("hero-actions");
+      const cp = document.getElementById("chat-direction-panel");
+      if ((ha && !heroActions) || (cp && !chatPanel)) {
+        // rerun to ensure we set the right visibility if nodes appear later
+        toggleBookingUI(isBookingLive);
+      }
+    }, 500);
   }
 }
+
 
 // Example: check from backend if booking is live
 async function checkBookingStatus() {
@@ -2603,9 +2834,16 @@ async function checkBookingStatus() {
   }
 }
 
-// Run immediately and poll every 10 seconds
-checkBookingStatus();
-setInterval(checkBookingStatus, 10000);
+// ensure DOM is ready before running functions that touch DOM nodes
+document.addEventListener('DOMContentLoaded', () => {
+  // start these once DOM exists
+  checkBookingStatus();
+  setInterval(checkBookingStatus, 10000);
+  // safe restore: use the persisted currentBookingId (if any)
+  restoreWarnTimerForBooking(getCurrentBookingId());
+});
+
+
 
 function updateMapButtonVisibility() {
     const mapBtn = document.getElementById('map-btn');
@@ -2653,6 +2891,12 @@ function scheduleWarnReveal(bookingId, whenMs) {
 
 
 async function startDriveTimer(driveSeconds, bookingId) {
+  // If this timer was scheduled for some other booking, abort early.
+  if (bookingId && typeof getBookingId === 'function' && Number(bookingId) !== Number(getBookingId())) {
+    console.debug("startDriveTimer aborted: bookingId does not match selected booking", bookingId, getBookingId());
+    return;
+  }
+
   // Cancel any previous in-memory timer
   if (warnTimerHandle) { clearTimeout(warnTimerHandle); warnTimerHandle = null; }
 
@@ -2697,8 +2941,13 @@ async function startDriveTimer(driveSeconds, bookingId) {
     }
   }
 
-  // Final fallback: 60 seconds
-  if (!expiryTs) expiryTs = Date.now() + 60_000;
+  // If server explicitly gave 0, show immediately; else fallback to 60s
+  if (Number.isFinite(driveSeconds) && driveSeconds === 0) {
+    expiryTs = Date.now(); // immediate
+  } else if (!expiryTs) {
+    expiryTs = Date.now() + 60_000;
+  }
+
 
   // Persist expiry so reload can restore it
   if (bookingId) {
@@ -2721,7 +2970,7 @@ async function startDriveTimer(driveSeconds, bookingId) {
   };
 
   // If already expired, show immediately (respecting cooldown/arrival)
-  if (delay === 0) {
+  if (delay <= 0) {
     if (warnBtn && canShowButtonNow()) {
       warnBtn.style.display = 'inline-block';
       if (bookingId) {
@@ -2932,88 +3181,85 @@ function handleBookingCancelledUI() {
 }
 
 
-/* ---------- GIVER SIDE ---------- */
-const warnBtn = document.getElementById('warn-sahayi-btn');
-if (warnBtn) {
-    warnBtn.addEventListener('click', async () => {
-      const bookingId = getBookingId();
-      if (!bookingId) return alert('No active booking.');
+/* ---------- GIVER SIDE (delegated handler) ---------- */
+document.addEventListener('click', async (ev) => {
+  const el = ev.target;
+  if (!el || el.id !== 'warn-sahayi-btn') return;
 
-      const stageKey = `warn_stage_${bookingId}`;
-      const currentStage = parseInt(localStorage.getItem(stageKey) || '0', 10);
+  // same body as before, but using getBookingId() and `el` as the button
+  const bookingId = getBookingId();
+  if (!bookingId) return alert('No active booking.');
 
-      // === 3rd warning -> cancel immediately ===
-      if (currentStage >= 3) {
-        if (!confirm('This will cancel the booking due to repeated delays. Proceed?')) return;
+  const stageKey = `warn_stage_${bookingId}`;
+  const currentStage = parseInt(localStorage.getItem(stageKey) || '0', 10);
 
-        try {
-          const resp = await fetch('/cancel_booking_by_giver', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ booking_id: bookingId })
-          });
-          const j = await resp.json();
-          if (j.success) {
-            alert('❌ Booking cancelled due to repeated delays.');
-            handleBookingCancelledUI();
-            localStorage.removeItem(stageKey);
-          } else {
-            alert(j.message || 'Failed to cancel booking.');
-          }
-        } catch (err) {
-          console.error(err);
-          alert('Error cancelling booking.');
-        }
-        return;
+  if (currentStage >= 3) {
+    if (!confirm('This will cancel the booking due to repeated delays. Proceed?')) return;
+    try {
+      const resp = await fetch('/cancel_booking_by_giver', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ booking_id: bookingId })
+      });
+      const j = await resp.json();
+      if (j.success) {
+        alert('❌ Booking cancelled due to repeated delays.');
+        handleBookingCancelledUI();
+        localStorage.removeItem(stageKey);
+      } else {
+        alert(j.message || 'Failed to cancel booking.');
       }
+    } catch (err) {
+      console.error(err);
+      alert('Error cancelling booking.');
+    }
+    return;
+  }
 
-      // === Send new warning ===
-      try {
-        const res = await fetch('/issue_warning', {
+  // === Send new warning ===
+  try {
+    const res = await fetch('/issue_warning', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ booking_id: bookingId })
+    });
+    const data = await res.json();
+    if (!data.success) {
+      alert(data.message || 'Failed to send warning.');
+      return;
+    }
+
+    const nextStage = currentStage + 1;
+    localStorage.setItem(stageKey, String(nextStage));
+
+    // Hide button after sending
+    el.style.display = 'none';
+
+    // Store hidden timer (different per stage)
+    const delayMap = { 1: 20, 2: 10, 3: 5 }; // minutes
+    const delayMin = delayMap[nextStage] || 5;
+    const hiddenUntil = Date.now() + delayMin * 60 * 1000;
+    localStorage.setItem(`warn_hidden_until_${bookingId}`, String(hiddenUntil));
+    scheduleWarnReveal(bookingId, hiddenUntil);
+
+    alert(`⚠ Warning ${nextStage}/3 sent.`);
+
+    if (nextStage >= 3) {
+      setTimeout(async () => {
+        await fetch('/cancel_booking_by_giver', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ booking_id: bookingId })
         });
-        const data = await res.json();
-        if (!data.success) {
-          alert(data.message || 'Failed to send warning.');
-          return;
-        }
+        handleBookingCancelledUI();
+      }, 1000);
+    }
+  } catch (err) {
+    console.error('Warning error:', err);
+    alert('Network error sending warning.');
+  }
+});
 
-        const nextStage = currentStage + 1;
-        localStorage.setItem(stageKey, String(nextStage));
-
-        // Hide button after sending
-        warnBtn.style.display = 'none';
-
-        // Store hidden timer (different per stage)
-        const delayMap = { 1: 20, 2: 10, 3: 5 }; // minutes
-        const delayMin = delayMap[nextStage] || 5;
-        const hiddenUntil = Date.now() + delayMin * 60 * 1000;
-        localStorage.setItem(`warn_hidden_until_${bookingId}`, String(hiddenUntil));
-        scheduleWarnReveal(bookingId, hiddenUntil);
-
-
-        alert(`⚠ Warning ${nextStage}/3 sent.`);
-
-        // Auto-cancel after 3rd warn
-        if (nextStage >= 3) {
-          setTimeout(async () => {
-            await fetch('/cancel_booking_by_giver', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ booking_id: bookingId })
-            });
-            handleBookingCancelledUI();
-          }, 1000);
-        }
-      } catch (err) {
-        console.error('Warning error:', err);
-        alert('Network error sending warning.');
-      }
-    });
-
-}
 
 
 /* When arrival is confirmed anywhere in your flow, call this to cleanup (your existing markArrivalConfirmed does it).
@@ -3398,6 +3644,187 @@ function updateBellCount(count) {
   updateUnreadCount();
 })();
 
+
+function hideWorkerMultiControls() {
+  if (CURRENT_USER_ROLE !== 'worker') return;
+  ['chat-prev','chat-next','chat-index','chat-total','chat-live-count','chat-minimize','chat-fab']
+    .forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
+}
+
+// --- Chat minimize persistence ---
+const CHAT_MIN_KEY = 'chat_minimized';
+const isChatMinimized = () => localStorage.getItem(CHAT_MIN_KEY) === '1';
+const setChatMinimized = (v) => {
+  try { localStorage.setItem(CHAT_MIN_KEY, v ? '1' : '0'); } catch {}
+};
+
+
+
+/* ===== Multi-Booking Switcher & Minimize ===== */
+let ACTIVE_BOOKINGS = [];   // [{booking_id, partner, status, role}, ...]
+let ACTIVE_INDEX = 0;
+
+const $ = (id) => document.getElementById(id);
+const toolbar = {
+  prev: () => $('chat-prev'),
+  next: () => $('chat-next'),
+  idx:  () => $('chat-index'),
+  tot:  () => $('chat-total'),
+  live: () => $('chat-live-count'),
+  min:  () => $('chat-minimize')
+};
+const getChatPanel = () => $('chat-direction-panel');
+const fab = () => $('chat-fab');
+const fabCount = () => $('chat-fab-count');
+
+function setCurrentBookingId(id){
+  window.currentBookingId = id;
+  try { localStorage.setItem('currentBookingId', id ? String(id) : ''); } catch {}
+}
+function getCurrentBookingId(){
+  return window.currentBookingId || parseInt(localStorage.getItem('currentBookingId') || '0', 10) || null;
+}
+
+async function refreshActiveBookings(){
+  try{
+    const r = await fetch('/get_active_bookings', {cache:'no-store'});
+    const j = await r.json();
+    ACTIVE_BOOKINGS = Array.isArray(j.items) ? j.items : [];
+
+    if (!ACTIVE_BOOKINGS.length){
+      hidePanel(); hideFab();
+      setCurrentBookingId(null);
+      return;
+    }
+
+    const cur = getCurrentBookingId();
+    const keep = ACTIVE_BOOKINGS.findIndex(b => String(b.booking_id) === String(cur));
+    ACTIVE_INDEX = keep >= 0 ? keep : 0;
+
+    updateToolbar();
+    showPanel();
+    switchToIndex(ACTIVE_INDEX, {force:true});
+  }catch(e){ console.warn('active bookings fetch failed', e); }
+}
+
+function updateToolbar(){
+  const n = ACTIVE_BOOKINGS.length;
+  const isWorker = (CURRENT_USER_ROLE === 'worker');
+
+  // numbers
+  if (toolbar.idx())  toolbar.idx().textContent  = n ? (ACTIVE_INDEX+1) : 0;
+  if (toolbar.tot())  toolbar.tot().textContent  = n;
+  if (toolbar.live()) toolbar.live().textContent = `${n} live`;
+
+  // visibility
+  const showNav = !isWorker && n > 1;
+  const showMin = !isWorker;
+
+  // prev / next
+  if (toolbar.prev()) toolbar.prev().style.display = showNav ? 'inline-flex' : 'none';
+  if (toolbar.next()) toolbar.next().style.display = showNav ? 'inline-flex' : 'none';
+
+  // text badges
+  if (toolbar.idx())  toolbar.idx().style.display  = showNav ? 'inline' : 'none';
+  if (toolbar.tot())  toolbar.tot().style.display  = showNav ? 'inline' : 'none';
+  if (toolbar.live()) toolbar.live().style.display = (!isWorker && n) ? 'inline' : 'none';
+
+  // minimize
+  if (toolbar.min())  toolbar.min().style.display  = showMin ? 'inline-flex' : 'none';
+
+  // FAB should not show for workers
+  const f = document.getElementById('chat-fab');
+  if (f) f.style.display = (!isWorker && n > 1) ? 'flex' : 'none';
+
+  // keep FAB count in sync for givers only
+  if (!isWorker && fabCount()) fabCount().textContent = n;
+}
+
+async function refreshCurrentChat(){
+  const id = getCurrentBookingId();
+  if (!id) { if (typeof checkBookingStatusAndShowChat==='function') checkBookingStatusAndShowChat(); return; }
+  try{
+    const res = await fetch(`/get_booking_details_by_id/${id}`, { method:'POST' });
+    const data = await res.json();
+    renderChatPayload(data);
+  }catch(e){ console.warn('refreshCurrentChat failed', e); }
+}
+
+// Feed payload into your existing renderer without re-fetching
+window.__lastBookingPayload = null;
+function renderChatPayload(payload){
+  window.__lastBookingPayload = payload;
+  try {
+    if (typeof checkBookingStatusAndShowChat==='function') checkBookingStatusAndShowChat();
+  } finally {
+    window.__lastBookingPayload = null;
+  }
+}
+
+function switchToIndex(i, {force=false}={}){
+  if (!ACTIVE_BOOKINGS.length) return;
+  const n = ACTIVE_BOOKINGS.length;
+  const idx = ((i % n) + n) % n;
+  if (!force && idx === ACTIVE_INDEX) return;
+  ACTIVE_INDEX = idx;
+
+    const b = ACTIVE_BOOKINGS[ACTIVE_INDEX];
+
+  // --- cleanup any timers from the previous booking before switching ---
+  if (warnTimerHandle) { clearTimeout(warnTimerHandle); warnTimerHandle = null; }
+  if (window.chatCountdown)  { clearInterval(window.chatCountdown); window.chatCountdown = null; }
+  if (window.extraChatCountdown) { clearInterval(window.extraChatCountdown); window.extraChatCountdown = null; }
+  window._warnTimerStartedFor = null;
+  arrivalConfirmed = false;
+
+  // Now set the newly selected booking
+  setCurrentBookingId(b.booking_id);
+  updateToolbar();
+
+  // Clear/refresh chat UI for the selected booking
+  if (typeof loadMessages==='function') loadMessages();
+  refreshCurrentChat();
+
+}
+
+// minimize/restore
+function showPanel(){
+  const p = getChatPanel();
+  if (!p) return;
+  setChatMinimized(false);
+  p.style.display = 'block';
+  hideFab();
+}
+function hidePanel(){
+  const p = getChatPanel();
+  if (!p) return;
+  setChatMinimized(true);
+  p.style.display = 'none';
+  showFab();
+}
+function showFab(){
+  if (CURRENT_USER_ROLE === 'worker') return;
+  const f = fab(); if (f) f.style.display = 'flex';
+}
+function hideFab(){ const f = fab(); if (f) f.style.display = 'none'; }
+
+// wire buttons
+toolbar.prev()?.addEventListener('click', () => switchToIndex(ACTIVE_INDEX-1));
+toolbar.next()?.addEventListener('click', () => switchToIndex(ACTIVE_INDEX+1));
+toolbar.min()?.addEventListener('click', hidePanel);
+fab()?.addEventListener('click', showPanel);
+
+// boot & polling
+window.addEventListener('DOMContentLoaded', () => {
+  const saved = getCurrentBookingId();
+  if (saved) setCurrentBookingId(saved);
+
+  refreshActiveBookings();
+  setInterval(refreshActiveBookings, 7000);  // keep list/count fresh
+
+  refreshCurrentChat();
+  setInterval(refreshCurrentChat, 5000);     // keep current chat fresh
+});
 
 
 </script>

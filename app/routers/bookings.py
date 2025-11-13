@@ -250,7 +250,6 @@ async def confirm_booking_post(
 
     db.add(booking)
     db.flush()
-    current_user.busy = True
     db.commit()
     db.refresh(booking)
 
