@@ -172,56 +172,89 @@ class Booking(Base):
     __tablename__ = "booking"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    token: Mapped[str] = mapped_column(String(32), unique=True, nullable=False, default=lambda: secrets.token_hex(16))
+    token: Mapped[str] = mapped_column(
+        String(32), unique=True, nullable=False, default=lambda: secrets.token_hex(16)
+    )
+
+    # foreign keys
     job_id: Mapped[int | None] = mapped_column(ForeignKey("job.id"))
-    provider_id: Mapped[int | None] = mapped_column(ForeignKey("user.id"))  # job giver
-    worker_id: Mapped[int | None] = mapped_column(ForeignKey("user.id"))    # worker
-    status: Mapped[str] = mapped_column(String(20), default="pending")      # pending/accepted/declined
+    provider_id: Mapped[int | None] = mapped_column(ForeignKey("user.id"))
+    worker_id: Mapped[int | None] = mapped_column(ForeignKey("user.id"))
+
+    status: Mapped[str] = mapped_column(String(20), default="pending")
+
+    # core fields
     rate: Mapped[float | None] = mapped_column(Float)
     rate_type: Mapped[str | None] = mapped_column(String(20))
     quantity: Mapped[float | None] = mapped_column(Float)
     completed_quantity: Mapped[float] = mapped_column(Float, default=0)
     skill_name: Mapped[str | None] = mapped_column(String(100))
-    expires_at: Mapped[datetime | None] = mapped_column(DateTime)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
-    popup_shown_to_worker: Mapped[bool] = mapped_column(Boolean, default=False)
-    popup_shown_to_provider: Mapped[bool] = mapped_column(Boolean, default=False)
+    popup_shown_to_worker: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    popup_shown_to_provider: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
     otp_code: Mapped[str | None] = mapped_column(String(6))
-    otp_verified: Mapped[bool] = mapped_column(Boolean, default=False)
-    otp_verified_time: Mapped[datetime | None] = mapped_column(DateTime)
-    job_duration_minutes: Mapped[int | None] = mapped_column(Integer)
+    otp_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    otp_verified_time: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    job_duration_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     verify_completion_otp: Mapped[str | None] = mapped_column(String(10))
     final_otp_code: Mapped[str | None] = mapped_column(String(10))
-    final_otp_verified: Mapped[bool] = mapped_column(Boolean, default=False)
-    razor_order_id: Mapped[str | None] = mapped_column(String(64))
-    razor_payment_id: Mapped[str | None] = mapped_column(String(64))
+    final_otp_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+    # Main payment fields
+    razor_order_id: Mapped[str | None] = mapped_column(String(64), index=True, nullable=True)
+    razor_payment_id: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True)
     razor_currency: Mapped[str | None] = mapped_column(String(10))
-    razor_amount: Mapped[float | None] = mapped_column(Float)  # store rupees for quick display
+    razor_amount: Mapped[float | None] = mapped_column(Float)
     payment_required: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     payment_completed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    razorpay_status: Mapped[str | None] = mapped_column(String(32))  # "created" | "captured" | "manual"
-    razor_order_id: Mapped[str | None]   = mapped_column(String(64), index=True)   # NEW index
-    razor_payment_id: Mapped[str | None] = mapped_column(String(64), unique=True)
+    razorpay_status: Mapped[str | None] = mapped_column(String(32))
 
+    # ---------------- Minimal Extra-time fields ----------------
+    extra_timer_requested: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    extra_timer_requested_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
+    # Minutes the giver entered (server must persist this)
+    proposed_extra_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
-    # Extra timer
-    extra_timer_requested: Mapped[bool] = mapped_column(Boolean, default=False)
-    extra_otp_code: Mapped[str | None] = mapped_column(String(6))
-    extra_otp_verified: Mapped[bool] = mapped_column(Boolean, default=False)
-    extra_timer_started_at: Mapped[datetime | None] = mapped_column(DateTime)
-    extra_timer_stopped: Mapped[bool] = mapped_column(Boolean, default=False)
-    extra_timer_confirmed_stop: Mapped[bool] = mapped_column(Boolean, default=False)
-    extra_timer_requested_at: Mapped[datetime | None] = mapped_column(DateTime)
-    main_timer_paused: Mapped[bool] = mapped_column(Boolean, default=False)
-    extra_timer_stopped_by: Mapped[str | None] = mapped_column(String(20))  # 'worker' | 'provider'
-    extra_timer_payment_done: Mapped[bool] = mapped_column(Boolean, default=False)
-    worker_arrived: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Extra payment / order (Razorpay)
+    extra_razor_order_id: Mapped[str | None] = mapped_column(String(64), index=True, nullable=True)
+    extra_razor_payment_id: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True)
+    extra_razor_amount: Mapped[float | None] = mapped_column(Float, nullable=True)
 
-    # relations
-    job: Mapped["Job | None"] = relationship("Job", back_populates="bookings")
+    # DB column that exists in your DB: extra_timer_payment_done
+    extra_timer_payment_done: Mapped[bool] = mapped_column(
+        Boolean, name="extra_timer_payment_done", default=False, nullable=False
+    )
+
+    @property
+    def extra_payment_completed(self) -> bool:
+        return bool(getattr(self, "extra_timer_payment_done", False))
+
+    @extra_payment_completed.setter
+    def extra_payment_completed(self, val: bool) -> None:
+        self.extra_timer_payment_done = bool(val)
+
+    # authoritative timer fields
+    extra_timer_started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    extra_timer_ends_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    # fields expected by booking_details / other routes
+    extra_timer_stopped: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    extra_timer_confirmed_stop: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    extra_timer_stopped_by: Mapped[int | None] = mapped_column(ForeignKey("user.id"), nullable=True)
+
+    main_timer_paused: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    worker_arrived: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+    # relations (reciprocal relationship for Job added here)
+    job: Mapped["Job | None"] = relationship("Job", back_populates="bookings", foreign_keys=[job_id])
     provider: Mapped["User | None"] = relationship("User", foreign_keys=[provider_id])
     worker: Mapped["User | None"] = relationship("User", foreign_keys=[worker_id])
+
+
 
 
 class Notification(Base):
@@ -251,13 +284,15 @@ class ShowcaseImage(Base):
 
 
 class Message(Base):
-    __tablename__ = "message"
+    __tablename__ = "message"   # <- singular, matches DB
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    booking_id: Mapped[int] = mapped_column(ForeignKey("booking.id"), nullable=False)
-    sender_id: Mapped[int] = mapped_column(ForeignKey("user.id"), nullable=False)
+    booking_id: Mapped[int] = mapped_column(ForeignKey("booking.id"), nullable=False)  # <- booking (singular)
+    sender_id: Mapped[int] = mapped_column(ForeignKey("user.id"), nullable=False)      # <- user (singular)
     text: Mapped[str] = mapped_column(Text, nullable=False)
-    timestamp: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    client_nonce: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    timestamp: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
 
 
 class SavedLocation(Base):
@@ -360,3 +395,16 @@ class PriceNegotiation(Base):
     __table_args__ = (
         UniqueConstraint("provider_id", "worker_id", "job_id", name="uq_price_neg_triplet"),
     )
+
+
+class ActionAudit(Base):
+    __tablename__ = "action_audit"
+    id = Column(Integer, primary_key=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    user_id = Column(String, nullable=True)        # store as string to be flexible
+    action = Column(String(64), nullable=False)
+    booking_id = Column(String(64), nullable=True)
+    jti = Column(String(64), nullable=True, index=True)
+    ip = Column(String(45), nullable=True)
+    success = Column(Boolean, nullable=False, default=False)
+    detail = Column(Text, nullable=True)           # store error messages or extra metadata

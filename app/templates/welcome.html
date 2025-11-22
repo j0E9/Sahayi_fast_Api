@@ -552,7 +552,8 @@
     </style>
 
 </head>
-<body data-role="">
+<body data-role="{{ role|default('') }}">
+
 
 <!-- Location Box -->
 <div class="location-box" style="position:fixed; top:10px; left:10px; z-index:1050;
@@ -737,6 +738,18 @@
     </div>
 
     <div id="chat-content">
+      <!-- Inline Extra Time Box for Job Giver -->
+      <div id="extra-time-inline"
+           style="display:none; margin-bottom:12px; padding:12px; border:1px solid #ddd; border-radius:8px; background:#fff;">
+          <h6 style="margin:0 0 6px; font-weight:600;">⏱ Worker requested extra time</h6>
+          <input id="extra-inline-minutes" type="number" min="1" class="form-control mb-2"
+                 placeholder="Enter extra minutes (e.g. 30)">
+          <div style="display:flex; gap:8px;">
+              <button id="extra-inline-confirm" class="btn btn-primary flex-grow-1">Confirm & Pay</button>
+              <button id="extra-inline-cancel" class="btn btn-outline-secondary">Cancel</button>
+          </div>
+      </div>
+
       <h5>Booking Found</h5>
       <p><strong>Job Partner:</strong> <span id="partner-name">Loading...</span></p>
 
@@ -783,19 +796,7 @@
         <button id="submit-final-otp" class="btn btn-success btn-sm mt-2">Verify Final OTP</button>
         <div id="final-otp-status" class="mt-2" style="font-weight: bold;"></div>
       </div>
-      <!-- Extra OTP Display for Giver -->
-     <div id="extra-otp-display" style="display: none; margin-top: 10px;">
-       <label><strong>⏱ Extra OTP for Worker:</strong></label>
-       <div id="extra-otp-code" style="font-size: 22px; font-weight: bold; color: #ff5722;"></div>
-     </div>
 
-     <!-- Extra OTP Input for Worker -->
-     <div id="extra-otp-input-section" style="display: none; margin-top: 10px;">
-       <label><strong>⏱ Enter Extra OTP from Giver:</strong></label>
-       <input type="text" id="extra-otp-input" class="form-control mt-1" placeholder="Enter extra OTP here">
-       <button id="submit-extra-otp" class="btn btn-info btn-sm mt-2">Verify Extra OTP</button>
-       <div id="extra-otp-status" class="mt-2" style="font-weight: bold;"></div>
-     </div>
 
 
 
@@ -813,16 +814,74 @@
           <input type="text" id="chat-input" placeholder="Type your message..." disabled style="flex: 1;" />
           <button id="send-chat-btn" class="btn btn-primary btn-sm" disabled>Send</button>
         </div>
-        <script>
-            const CURRENT_USER_ID = {{ current_user.id }};
-        </script>
         <a id="chat-link" style="display: none;"></a>
 
       <button id="map-btn" class="btn btn-success btn-sm mt-2" style="display: none;">📍 Get Directions</button>
       <button id="call-btn" class="btn btn-info btn-sm mt-2">📞 Call Partner</button>
       <button id="request-extra-btn" class="btn btn-warning mt-2" style="display:none;">⏱ Request Extra Time</button>
-      <button id="stop-extra-btn" class="btn btn-danger mt-2" style="display:none;">🛑 Stop Extra Time</button>
-      <button id="confirm-stop-btn" class="btn btn-dark mt-2" style="display:none;">✅ Confirm Stop</button>
+      <script>
+            // =========================
+        // NEW EXTRA TIME FLOW
+        // =========================
+
+        // Worker → Request extra time
+        document.getElementById("request-extra-btn")?.addEventListener("click", async () => {
+            const res = await fetch("/request_extra_time", {
+                method: "POST",
+                credentials: "same-origin"
+            });
+            const j = await res.json();
+            if (j.success) {
+                alert("Extra time request sent to Job Giver.");
+            } else {
+                alert(j.message || "Failed to request extra time.");
+            }
+        });
+
+        // Giver → Cancel modal
+        document.getElementById("extra-cancel-btn")?.addEventListener("click", () => {
+            document.getElementById("extra-confirm-modal").style.display = "none";
+        });
+
+        // Giver → Confirm + Razorpay payment
+        document.getElementById("extra-confirm-btn")?.addEventListener("click", async () => {
+            const minutes = Number(document.getElementById("extra-minutes-input").value);
+            if (!minutes || minutes < 1) {
+                alert("Enter valid minutes");
+                return;
+            }
+
+            const bookingId = window.CURRENT_BOOKING_ID;
+            const res = await fetch(`/razorpay/create_order_for_extra/${bookingId}`, {
+                method: "POST",
+                credentials: "same-origin",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ extra_minutes: minutes })
+            });
+
+            const j = await res.json();
+            if (!res.ok) {
+                alert(j.detail || "Failed");
+                return;
+            }
+
+            const options = {
+                key: j.key_id,
+                amount: j.amount,
+                currency: j.currency,
+                name: "Sahayi - Extra Time",
+                order_id: j.order_id,
+                handler: async function () {
+                    alert("Payment Successful! Extra time started.");
+                    document.getElementById("extra-confirm-modal").style.display = "none";
+                    startExtraTimer(minutes);
+                }
+            };
+
+            const razor = new Razorpay(options);
+            razor.open();
+        });
+      </script>
            <!-- 🚨 Warn Sahayi Button -->
       <button id="warn-sahayi-btn" class="btn btn-danger mt-3" style="display:none;">⚠ Warn Sahayi</button>
     </div>
@@ -853,6 +912,26 @@
     <div id="rating-msg" class="small text-muted" style="margin-top:8px;"></div>
   </div>
 </div>
+
+<!-- Provider: Extra-time confirm modal (appears when worker requested extra) -->
+<div id="extra-confirm-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:5100; align-items:center; justify-content:center;">
+  <div style="background:#fff; border-radius:10px; padding:16px; width:92%; max-width:420px; box-shadow:0 8px 30px rgba(0,0,0,0.25);">
+    <h5 style="margin:0 0 8px;">Worker requested extra time</h5>
+    <p class="small text-muted">Enter extra minutes to approve and pay (no timer for payment).</p>
+
+    <div style="display:flex; gap:8px; align-items:center; margin-top:8px;">
+      <input id="extra-minutes-input" type="number" min="1" step="1" class="form-control" placeholder="Extra minutes (e.g. 30)" style="flex:1;">
+    </div>
+
+    <div style="display:flex; gap:8px; margin-top:12px;">
+      <button id="extra-confirm-btn" class="btn btn-primary flex-grow-1">Confirm & Pay</button>
+      <button id="extra-cancel-btn"  class="btn btn-outline-secondary">Cancel</button>
+    </div>
+
+    <div id="extra-confirm-msg" style="margin-top:10px; font-size:13px; color:#666;"></div>
+  </div>
+</div>
+
 
 <div id="chat-fab"
      style="display:none;position:fixed;left:14px;bottom:14px;z-index:4600;width:56px;height:56px;
@@ -999,6 +1078,15 @@
   </div>
 </div>
 
+<script>
+  // make user id + role available globally for client checks
+  window.CURRENT_USER_ID = {{ current_user.id if current_user and current_user.id else 'null' }};
+  // optional: useful to have a global role too (server should set this)
+  window.CURRENT_USER_ROLE = "{{ role|default('') }}";
+</script>
+
+
+<script src="/static/js/actions.js" defer></script>
 
 <script>
   // --- Location persistence keys ---
@@ -1645,13 +1733,45 @@ function applyRoleUI(data){
   const reached = document.getElementById('reached-location-section');
   const otpIn   = document.getElementById('otp-input-section');
 
-  if (mapBtn)  mapBtn.style.display  = (CURRENT_USER_ROLE === 'worker') ? 'inline-block' : 'none';
-  if (warnBtn) warnBtn.style.display = (CURRENT_USER_ROLE === 'giver' && (data?.can_issue_warning || data?.allow_warn)) ? 'inline-block' : 'none';
-  console.debug('applyRoleUI: role=', CURRENT_USER_ROLE, 'can_issue_warning=', data?.can_issue_warning, 'warnBtnShown=', warnBtn.style.display);
-  if (reached) reached.style.display = (CURRENT_USER_ROLE === 'worker' && !!data?.show_reached_slider) ? 'block' : 'none';
-  if (otpIn)   otpIn.style.display   = (CURRENT_USER_ROLE === 'worker' && !!data?.show_otp_input) ? 'block' : 'none';
-}
+  // ensure role is applied first
+  // (setRoleFromBookingData should have run already; fallback to body dataset)
+  const role = (typeof CURRENT_USER_ROLE === 'string') ? CURRENT_USER_ROLE : document.body.dataset.role;
 
+  // defensive booleans (coerce to strict booleans)
+  const canIssue = !!(data && (data.can_issue_warning || data.allow_warn));
+  const isExtraFlow = !!(
+    data &&
+    (
+      data.extra_time_proposal ||
+      data.extra_timer_running ||
+      data.extra_timer_pending ||
+      data.status === "Extra Time"   // 🔥 Add this line
+    )
+  );
+
+  const otpVerified = !!(data && data.otp_verified);
+  const workerArrived = !!(data && data.worker_arrived);
+  const showReached = !!(data && data.show_reached_slider);
+  const showOtpInput = !!(data && data.show_otp_input);
+
+  // map button only for worker
+  if (mapBtn) mapBtn.style.display = (role === 'worker') ? 'inline-block' : 'none';
+
+  // WARN: only show for giver AND explicitly allowed AND not in extra/otp/arrived states
+  if (warnBtn) {
+    const shouldShowWarn = (role === 'giver') && canIssue && !isExtraFlow && !otpVerified && !workerArrived;
+    warnBtn.style.display = shouldShowWarn ? 'inline-block' : 'none';
+  }
+
+  // reached slider & otp input for worker
+  if (reached) reached.style.display = (role === 'worker' && showReached) ? 'block' : 'none';
+  if (otpIn)   otpIn.style.display   = (role === 'worker' && showOtpInput) ? 'block' : 'none';
+
+  console.debug('applyRoleUI: role=', role,
+                'canIssue=', canIssue, 'isExtraFlow=', isExtraFlow,
+                'otpVerified=', otpVerified, 'workerArrived=', workerArrived,
+                'warnBtnShown=', (warnBtn && warnBtn.style.display));
+}
 
 // --- simple in-memory cache (≈100m cell via 3-decimal rounding) ---
 const _geoCache = new Map();
@@ -1944,6 +2064,20 @@ async function checkPendingPayment() {
   if (data.redirect_url) setTimeout(() => window.location.href = data.redirect_url, 1000);
 }
 
+// NEW: Show extra-time modal for job giver when worker requests extra time
+function showExtraTimeModal() {
+  const modal = document.getElementById("extra-confirm-modal");
+  if (!modal) return;
+  modal.style.display = "block";
+
+  // Reset message + input
+  const msg = document.getElementById("extra-confirm-msg");
+  const inp = document.getElementById("extra-minutes-input");
+  if (msg) msg.textContent = "";
+  if (inp) inp.value = "";
+}
+
+
 async function checkBookingStatusAndShowChat() {
   let data;
 
@@ -1968,10 +2102,45 @@ async function checkBookingStatusAndShowChat() {
 
   data = data || {};
 
+  // DEBUG: inspect booking payload to verify flags for extra-time
+  try {
+    console.debug("DEBUG booking payload:", {
+      booking_id: data.booking_id,
+      role: data.role,
+      extra_timer_requested: data.extra_timer_requested,
+      extra_timer_pending: data.extra_timer_pending,
+      extra_timer_running: data.extra_timer_running,
+      extra_payment_completed: data.extra_payment_completed,
+      show_extra_otp_input: data.show_extra_otp_input,
+      show_extra_timer_button: data.show_extra_timer_button
+    });
+  } catch(e){/* ignore debug error */ }
+
+
   // Role/UI/worker-poll setup (defensive)
   try { setRoleFromBookingData(data); } catch (e) { console.warn("setRoleFromBookingData failed", e); }
   try { applyRoleUI(data); } catch (e) { console.warn("applyRoleUI failed", e); }
   try { ensureWorkerPollsStarted(); } catch (e) { console.warn("ensureWorkerPollsStarted failed", e); }
+    // --- role fallback (helpful when payload lacks explicit role) ---
+  try {
+    if (!CURRENT_USER_ROLE || CURRENT_USER_ROLE === null) {
+      // attempt to infer from payload
+      if (data && typeof data.giver_id !== 'undefined' && typeof CURRENT_USER_ID !== 'undefined') {
+        if (Number(data.giver_id) === Number(CURRENT_USER_ID)) {
+          CURRENT_USER_ROLE = 'giver';
+          document.body.dataset.role = 'giver';
+        } else if (Number(data.worker_id) === Number(CURRENT_USER_ID)) {
+          CURRENT_USER_ROLE = 'worker';
+          document.body.dataset.role = 'worker';
+        }
+      }
+    }
+  } catch(e) { console.warn('role fallback failed', e); }
+
+  // --- decide whether to show extra-time modal for giver (provider) ---
+  try { maybeShowExtraConfirmForProvider(data); } catch (e) { console.warn('maybeShowExtraConfirmForProvider failed', e); }
+
+
   hideWorkerMultiControls();
 
   // If booking canceled → show cancelled UI and stop
@@ -2054,7 +2223,9 @@ async function checkBookingStatusAndShowChat() {
         }
         arrivalConfirmed = false;
         try {
-          startDriveTimer(Number(data.drive_seconds) || 0, data.booking_id);
+          const ds = (typeof data.drive_seconds === 'number') ? Number(data.drive_seconds) : null;
+          startDriveTimer(ds, data.booking_id);
+
         } catch (e) {
           console.warn("startDriveTimer failed", e);
         }
@@ -2065,7 +2236,8 @@ async function checkBookingStatusAndShowChat() {
 
 
   // Restore persisted warn timer state for this booking (respects cooldowns etc)
-  try { restoreWarnTimerForBooking(data.booking_id); } catch (e) { console.warn("restoreWarnTimerForBooking failed", e); }
+  try { restoreWarnTimerForBooking(data.booking_id, !!data.can_issue_warning); } catch (e) { console.warn("restoreWarnTimerForBooking failed", e); }
+
 
   /* ---------- DEBUG / DEV: force-show warn button immediately ----------
      Uncomment these lines temporarily only for local testing.
@@ -2098,17 +2270,23 @@ async function checkBookingStatusAndShowChat() {
     if (finalOTPDisplay && data.final_otp_code) document.getElementById("final-otp-code").textContent = data.final_otp_code || '';
     if (finalOTPInput) finalOTPInput.style.display = data.show_final_otp_input ? "block" : "none";
 
-    // extra OTP
+    // Extra-OTP flow removed in new flow — keep elements hidden to avoid confusion.
     const extraOtpDisplay = document.getElementById("extra-otp-display");
-    const extraOtpCodeEl = document.getElementById("extra-otp-code");
     const extraOtpInputSection = document.getElementById("extra-otp-input-section");
-    if (extraOtpDisplay) extraOtpDisplay.style.display = data.extra_otp_code ? "block" : "none";
-    if (extraOtpDisplay && extraOtpCodeEl) extraOtpCodeEl.textContent = data.extra_otp_code || "";
-    if (extraOtpInputSection) extraOtpInputSection.style.display = data.show_extra_otp_input ? "block" : "none";
+    if (extraOtpDisplay) extraOtpDisplay.style.display = "none";
+    if (extraOtpInputSection) extraOtpInputSection.style.display = "none";
 
     // show/hide request extra button
     const reqBtn = document.getElementById("request-extra-btn");
     if (reqBtn) reqBtn.style.display = data.show_extra_timer_button ? "inline-block" : "none";
+
+        // NEW: Show/hide the provider extra-time modal based on payload
+    try {
+      maybeShowExtraConfirmForProvider(data);
+    } catch (e) {
+      console.warn("maybeShowExtraConfirmForProvider failed", e);
+    }
+
 
     // extra timer handling
     if (data.extra_timer_pending) {
@@ -2121,25 +2299,62 @@ async function checkBookingStatusAndShowChat() {
       if (chatInput) chatInput.disabled = false;
       document.getElementById("send-chat-btn").disabled = false;
 
-      let extraTimeElapsed = Math.floor(data.extra_duration_seconds || 0);
-      if (window.extraChatCountdown) clearInterval(window.extraChatCountdown);
-      window.extraChatCountdown = setInterval(() => {
-        const mins = Math.floor(extraTimeElapsed / 60);
-        const secs = extraTimeElapsed % 60;
-        if (chatTimer) chatTimer.textContent = `⏱ Extra Chat Time: ${mins}m ${secs}s`;
-        extraTimeElapsed++;
-      }, 1000);
+      // compute remaining seconds using server-provided end time (preferred)
+      let remaining = null;
+      if (data.extra_timer_ends_at) {
+        // if server sends ISO string like "2025-11-21T12:34:56Z"
+        const endsAtMs = Date.parse(data.extra_timer_ends_at);
+        const nowMs = Date.now();
+        remaining = Math.max(0, Math.floor((endsAtMs - nowMs) / 1000));
+      } else {
+        // fallback: proposed minutes minus elapsed seconds
+        const proposedMin = Number(data.proposed_extra_minutes || 0);
+        const elapsed = Math.floor(Number(data.extra_duration_seconds || 0));
+        if (proposedMin > 0) {
+          remaining = Math.max(0, Math.floor(proposedMin * 60 - elapsed));
+        } else {
+          remaining = null; // unknown length -> treat defensively
+        }
+      }
+
+      if (window.extraChatCountdown) { clearInterval(window.extraChatCountdown); window.extraChatCountdown = null; }
+      if (remaining === null) {
+        // no end info — show as running but do not count forever (optional)
+        let elapsed = Math.floor(Number(data.extra_duration_seconds || 0));
+        window.extraChatCountdown = setInterval(() => {
+          const mins = Math.floor(elapsed / 60);
+          const secs = elapsed % 60;
+          if (chatTimer) chatTimer.textContent = `⏱ Extra Chat Time: ${mins}m ${secs}s`;
+          elapsed++;
+        }, 1000);
+      } else {
+        // countdown to server end
+        window.extraChatCountdown = setInterval(async () => {
+          if (remaining <= 0) {
+            clearInterval(window.extraChatCountdown);
+            window.extraChatCountdown = null;
+            // tell server to finalize (server will double-check ends_at)
+            try {
+              await fetch("/end_booking", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ booking_id: getCurrentBookingId() })
+              }).catch(()=>{});
+            } catch(e){/*ignore*/}
+            if (chatTimer) chatTimer.textContent = "⏳ Extra time ended.";
+            return;
+          }
+          const m = Math.floor(remaining / 60);
+          const s = remaining % 60;
+          if (chatTimer) chatTimer.textContent = `⏱ Extra Time: ${m}m ${s}s`;
+          remaining--;
+        }, 1000);
+      }
 
       if (CURRENT_USER_ROLE === "worker") {
         document.getElementById("map-btn").style.display = "inline-block";
       } else {
         document.getElementById("map-btn").style.display = "none";
-      }
-
-      if (!data.stop_confirmed) {
-        document.getElementById("stop-extra-btn").style.display = "inline-block";
-      } else {
-        document.getElementById("stop-extra-btn").style.display = "none";
       }
     }
 
@@ -2155,7 +2370,6 @@ async function checkBookingStatusAndShowChat() {
     // chat timing logic
     if (!data.otp_verified) {
       if (chatInput) chatInput.disabled = false;
-      if (chatTimer) chatTimer.textContent = "🔒 Please verify OTP ";
     } else if (data.chat_active && Number(data.time_left) > 0) {
       let timeLeft = Math.floor(Number(data.time_left) || 0);
       if (chatInput) chatInput.disabled = false;
@@ -2319,96 +2533,497 @@ document.getElementById("submit-final-otp")?.addEventListener("click", async () 
   }
 });
 
-document.getElementById("request-extra-btn")?.addEventListener("click", async () => {
-  const confirmed = confirm("Request extra time?");
-  if (!confirmed) return;
-    const res = await fetch("/request_extra_time", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ booking_id: currentBookingId })
-  });
 
-  const data = await res.json();
-  if (data.success) {
-    alert("OTP sent to job giver. Ask them to enter it.");
-  } else {
-    alert(data.message || "Failed to request extra time.");
+// ---- Provider modal handlers (Confirm/Cancel + Razorpay checkout)
+// Deferred init: wire modal elements & listeners after DOM is ready.
+let extraModal, extraConfirmBtn, extraCancelBtn, extraMinutesInput, extraMsg;
+
+function initExtraModalHandlers() {
+  extraModal = document.getElementById("extra-confirm-modal");
+  extraConfirmBtn = document.getElementById("extra-confirm-btn");
+  extraCancelBtn  = document.getElementById("extra-cancel-btn");
+  extraMinutesInput = document.getElementById("extra-minutes-input");
+  extraMsg = document.getElementById("extra-confirm-msg");
+
+    // === Inline extra-time control wiring (Confirm & Cancel that sit on top of chat) ===
+  (function wireInlineExtraControls() {
+    const inlineConfirm = document.getElementById('extra-inline-confirm');
+    const inlineCancel  = document.getElementById('extra-inline-cancel');
+    const inlineInput   = document.getElementById('extra-inline-minutes');
+
+    // cancel -> hide inline box
+    if (inlineCancel) {
+      inlineCancel.addEventListener('click', (e) => {
+        e.preventDefault();
+        const inline = document.getElementById('extra-time-inline');
+        if (inline) inline.style.display = 'none';
+      });
+    }
+
+    // confirm -> reuse the same confirm logic as modal (create order + open razorpay)
+    if (inlineConfirm) {
+      inlineConfirm.addEventListener('click', async (e) => {
+        e.preventDefault();
+        const minutes = Number(inlineInput?.value || 0);
+        if (!minutes || minutes < 1) {
+          alert('Enter valid minutes');
+          if (inlineInput) inlineInput.focus();
+          return;
+        }
+
+        // Determine booking id in the same safe way your modal logic does
+        function _getBookingIdForExtraInline() {
+          if (typeof getCurrentBookingId === 'function') try { return getCurrentBookingId(); } catch {}
+          if (typeof currentBookingId !== 'undefined' && currentBookingId) return currentBookingId;
+          const el = document.querySelector('[data-booking-id]');
+          if (el) return el.dataset.bookingId;
+          return null;
+        }
+
+        const bookingId = _getBookingIdForExtraInline();
+        if (!bookingId) {
+          alert('Booking id not found. Refresh the page and try again.');
+          return;
+        }
+
+        // Create order server-side
+        try {
+          const res = await fetch(`/razorpay/create_order_for_extra/${encodeURIComponent(bookingId)}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ extra_minutes: minutes })
+          });
+          const j = await res.json();
+          if (!res.ok) {
+            alert(j.detail || 'Failed to create order');
+            return;
+          }
+
+          // load razorpay script if not present (same as your modal flow)
+          if (!window.Razorpay) {
+            await new Promise((resolve, reject) => {
+              const s = document.createElement('script');
+              s.src = 'https://checkout.razorpay.com/v1/checkout.js';
+              s.onload = resolve;
+              s.onerror = reject;
+              document.head.appendChild(s);
+            });
+          }
+
+          const options = {
+            key: j.key_id,
+            order_id: j.order_id,
+            amount: j.amount,
+            currency: j.currency || 'INR',
+            name: 'Sahayi - Extra Time',
+            description: `${minutes} extra minutes`,
+            handler: async function (response) {
+              try {
+                // inform your server to start the extra timer
+                const startRes = await fetch('/start_extra_timer', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ booking_id: bookingId, extra_minutes: minutes })
+                });
+
+                const startJson = await startRes.json().catch(()=>({success:!!startRes.ok}));
+                if (!startRes.ok || !startJson.success) {
+                  alert((startJson && startJson.message) ? startJson.message : 'Payment received but failed to start extra time on server.');
+                  // still start local timer for UX
+                  if (typeof startLocalExtraTimer === 'function') startLocalExtraTimer(minutes, bookingId);
+                  document.getElementById('extra-time-inline').style.display = 'none';
+                  return;
+                }
+
+                // success -> hide inline & start local timer UI
+                document.getElementById('extra-time-inline').style.display = 'none';
+                if (typeof startLocalExtraTimer === 'function') startLocalExtraTimer(minutes, bookingId);
+
+                // refresh booking status a few times to pick up server changes
+                const start = Date.now();
+                const poll = setInterval(async () => {
+                  try { await checkBookingStatusAndShowChat(); } catch (e) {}
+                  if (Date.now() - start > 20000) clearInterval(poll);
+                }, 1500);
+              } catch (err) {
+                console.error('Failed to confirm/start extra timer after payment', err);
+                alert('Payment received but failed to start extra time. Please contact support.');
+              }
+            },
+            modal: {
+              ondismiss: function() { /* user cancelled checkout */ }
+            },
+            notes: { booking_id: String(bookingId), extra_minutes: String(minutes) }
+          };
+
+          const rzp = new window.Razorpay(options);
+          rzp.open();
+
+        } catch (err) {
+          console.error('Extra time confirm (inline) failed', err);
+          alert('Unable to open payment window.');
+        }
+      });
+    }
+
+  })();
+
+
+  // safe-noop if modal missing
+  if (!extraModal) return;
+
+  if (extraCancelBtn) {
+    extraCancelBtn.addEventListener("click", () => {
+      if (extraModal) extraModal.style.display = "none";
+      if (extraMinutesInput) extraMinutesInput.value = "";
+      if (extraMsg) extraMsg.textContent = "";
+    });
   }
-});
 
-document.getElementById("stop-extra-btn")?.addEventListener("click", async () => {
-  const confirmed = confirm("Stop the extra timer?");
-  if (!confirmed) return;
-    const res = await fetch("/stop_extra_timer", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ booking_id: currentBookingId })
-  });
-
-  const data = await res.json();
-  if (data.success) {
-    alert("Waiting for job giver to confirm stop.");
-  } else {
-    alert(data.message || "Stop request failed.");
+  // Helper to safely get booking id (same as before)
+  function _getBookingIdForExtra() {
+    if (typeof getCurrentBookingId === 'function') try { return getCurrentBookingId(); } catch {}
+    if (typeof currentBookingId !== 'undefined' && currentBookingId) return currentBookingId;
+    const el = document.querySelector('[data-booking-id]');
+    if (el) return el.dataset.bookingId;
+    return null;
   }
-});
 
-document.getElementById("submit-extra-otp")?.addEventListener("click", async () => {
-  const otp = document.getElementById("extra-otp-input").value;
-  const res = await fetch("/verify_extra_timer_otp", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ otp, booking_id: currentBookingId })
+  // Start a local extra-timer UI (for visual feedback).
+  // Accepts an options object so we can pass server-provided endsAtIso when available.
+  function startLocalExtraTimer({ minutes = 0, bookingId = null, endsAtIso = null, extra_duration_seconds = null } = {}) {
+    const chatTimer = document.getElementById("chat-timer");
+    if (!chatTimer) return;
 
+    // compute remaining seconds (preference: server-provided end time)
+    let remaining = null;
+
+    if (endsAtIso) {
+      const endsAtMs = Date.parse(endsAtIso);
+      if (!isNaN(endsAtMs)) {
+        remaining = Math.max(0, Math.floor((endsAtMs - Date.now()) / 1000));
+      }
+    }
+
+    // fallback: use proposed minutes minus elapsed seconds (if provided)
+    if (remaining === null) {
+      const mins = Math.max(0, Math.floor(Number(minutes) || 0));
+      const elapsed = Math.floor(Number(extra_duration_seconds || 0));
+      if (mins > 0 && elapsed >= 0) {
+        remaining = Math.max(0, mins * 60 - elapsed);
+      } else {
+        // last fallback: treat minutes alone as total length
+        remaining = Math.max(0, Math.floor(Number(minutes || 0) * 60));
+      }
+    }
+
+    // clear any existing timer
+    if (window.extraChatCountdown) {
+      clearInterval(window.extraChatCountdown);
+      window.extraChatCountdown = null;
+    }
+
+    // immediate UI update
+    const fmt = (s) => `${Math.floor(s/60)}m ${s%60}s`;
+    chatTimer.textContent = `⏱ Extra Time: ${fmt(remaining)}`;
+
+    // countdown
+    window.extraChatCountdown = setInterval(async () => {
+      if (remaining <= 0) {
+        clearInterval(window.extraChatCountdown);
+        window.extraChatCountdown = null;
+
+        // Best-effort notify server to finalize booking (server will double-check ends_at)
+        if (bookingId) {
+          try {
+            await fetch("/end_booking", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ booking_id: bookingId })
+            });
+          } catch (e) {
+            console.warn("Failed to notify server to end booking:", e);
+          }
+        }
+
+        chatTimer.textContent = "⏳ Extra time ended.";
+        return;
+      }
+
+      remaining--;
+      chatTimer.textContent = `⏱ Extra Time: ${fmt(remaining)}`;
+    }, 1000);
+  }
+
+
+  // Attach confirm handler (this is your original confirm logic — keep behaviour)
+  extraConfirmBtn?.addEventListener("click", async () => {
+    const mins = Number(extraMinutesInput.value || 0);
+    if (!mins || mins <= 0) {
+      extraMsg.style.color = "red";
+      extraMsg.textContent = "Please enter a valid number of minutes.";
+      extraMinutesInput.focus();
+      return;
+    }
+
+    extraMsg.style.color = "#666";
+    extraMsg.textContent = "Creating payment order…";
+
+    const bookingId = _getBookingIdForExtra();
+    if (!bookingId) {
+      extraMsg.style.color = "red";
+      extraMsg.textContent = "Booking id not found. Refresh the page and try again.";
+      return;
+    }
+
+    try {
+      const res = await fetch(`/razorpay/create_order_for_extra/${encodeURIComponent(bookingId)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ extra_minutes: mins })
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(()=>({detail:"Failed to create order"}));
+        extraMsg.style.color = "red";
+        extraMsg.textContent = err.detail || "Failed to create order.";
+        return;
+      }
+      const orderData = await res.json();
+      extraMsg.textContent = "Opening payment window…";
+
+      if (!window.Razorpay) {
+        await new Promise((resolve, reject) => {
+          const s = document.createElement("script");
+          s.src = "https://checkout.razorpay.com/v1/checkout.js";
+          s.onload = resolve;
+          s.onerror = reject;
+          document.head.appendChild(s);
+        });
+      }
+
+      const options = {
+        key: orderData.key_id,
+        order_id: orderData.order_id,
+        amount: orderData.amount,
+        currency: orderData.currency || "INR",
+        name: "Sahayi - Extra Time",
+        description: `${mins} extra minutes`,
+        handler: async function (response) {
+          extraMsg.style.color = "#28a745";
+          extraMsg.textContent = "Payment success — starting extra time…";
+
+          try {
+            const startRes = await fetch("/start_extra_timer", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ booking_id: bookingId, extra_minutes: mins })
+            });
+
+            const startJson = await startRes.json().catch(()=>({success:!!startRes.ok}));
+
+            if (!startRes.ok || !startJson.success) {
+              extraMsg.style.color = "red";
+              extraMsg.textContent = (startJson && startJson.message) ? startJson.message : "Payment received but failed to start extra time on server.";
+              startLocalExtraTimer(mins, bookingId);
+              setTimeout(() => { if (extraModal) extraModal.style.display = 'none'; }, 1500);
+              return;
+            }
+
+            if (extraModal) extraModal.style.display = "none";
+            startLocalExtraTimer(mins, bookingId);
+
+            const start = Date.now();
+            const poll = setInterval(async () => {
+              try { await checkBookingStatusAndShowChat(); } catch (e) {}
+              if (Date.now() - start > 20000) clearInterval(poll);
+            }, 1500);
+
+          } catch (err) {
+            console.error("Failed to confirm/start extra timer after payment", err);
+            extraMsg.style.color = "red";
+            extraMsg.textContent = "Payment received but failed to start extra time. Please contact support.";
+          }
+        },
+        modal: {
+          ondismiss: function() {
+            extraMsg.style.color = "#666";
+            extraMsg.textContent = "Payment cancelled or closed. No change made.";
+          }
+        },
+        notes: {
+          booking_id: String(bookingId),
+          extra_minutes: String(mins)
+        }
+      };
+
+      const rzp = new window.Razorpay(options);
+      rzp.open();
+
+    } catch (err) {
+      console.error("Payment flow failed", err);
+      extraMsg.style.color = "red";
+      extraMsg.textContent = "Unable to open payment window.";
+    }
   });
+}
 
-  const result = await res.json();
-  const statusEl = document.getElementById("extra-otp-status");
 
-  if (result.success) {
-    statusEl.textContent = "✅ Extra OTP Verified!";
-    statusEl.style.color = "green";
+// Confirm button: create order -> open Razorpay -> on payment success call start_extra_timer
+extraConfirmBtn?.addEventListener("click", async () => {
+  const mins = Number(extraMinutesInput.value || 0);
+  if (!mins || mins <= 0) {
+    extraMsg.style.color = "red";
+    extraMsg.textContent = "Please enter a valid number of minutes.";
+    extraMinutesInput.focus();
+    return;
+  }
 
-    // Start the extra timer
-    await fetch("/start_extra_timer", {
+  extraMsg.style.color = "#666";
+  extraMsg.textContent = "Creating payment order…";
+
+  const bookingId = _getBookingIdForExtra();
+  if (!bookingId) {
+    extraMsg.style.color = "red";
+    extraMsg.textContent = "Booking id not found. Refresh the page and try again.";
+    return;
+  }
+
+  try {
+    // 1) Create Razorpay order server-side (server returns order data)
+    const res = await fetch(`/razorpay/create_order_for_extra/${encodeURIComponent(bookingId)}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ booking_id: currentBookingId })
+      body: JSON.stringify({ extra_minutes: mins })
     });
 
-
-    // Refresh chat panel
-    checkBookingStatusAndShowChat();
-  } else {
-    statusEl.textContent = result.message || "❌ Invalid OTP.";
-    statusEl.style.color = "red";
-  }
-});
-
-
-document.getElementById("confirm-stop-btn")?.addEventListener("click", async () => {
-  const confirmed = confirm("Confirm stop of extra chat?");
-  if (!confirmed) return;
-
-  const res = await fetch("/confirm_stop_extra_timer", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ booking_id: currentBookingId })
-  });
-
-  const data = await res.json();
-
-  if (data.success) {
-    alert("Extra timer ended. Payment page will open.");
-    if (data.redirect_url) {
-      window.location.href = data.redirect_url;
-    } else {
-      checkBookingStatusAndShowChat(); // fallback refresh
+    if (!res.ok) {
+      const err = await res.json().catch(()=>({detail:"Failed to create order"}));
+      extraMsg.style.color = "red";
+      extraMsg.textContent = err.detail || "Failed to create order.";
+      return;
     }
-  } else {
-    alert("❌ Failed to confirm stop.");
+    const orderData = await res.json();
+    extraMsg.textContent = "Opening payment window…";
+
+    // 2) Load Razorpay script if necessary
+    if (!window.Razorpay) {
+      await new Promise((resolve, reject) => {
+        const s = document.createElement("script");
+        s.src = "https://checkout.razorpay.com/v1/checkout.js";
+        s.onload = resolve;
+        s.onerror = reject;
+        document.head.appendChild(s);
+      });
+    }
+
+    // 3) Configure Razorpay checkout. On successful payment -> call server to start extra timer
+    const options = {
+      key: orderData.key_id,
+      order_id: orderData.order_id,
+      amount: orderData.amount,
+      currency: orderData.currency || "INR",
+      name: "Sahayi - Extra Time",
+      description: `${mins} extra minutes`,
+      handler: async function (response) {
+        // Payment success → inform server to start the extra timer with the minutes entered by the giver.
+        extraMsg.style.color = "#28a745";
+        extraMsg.textContent = "Payment success — starting extra time…";
+
+        try {
+          const startRes = await fetch("/start_extra_timer", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ booking_id: bookingId, extra_minutes: mins })
+          });
+
+          const startJson = await startRes.json().catch(()=>({success:!!startRes.ok}));
+
+          if (!startRes.ok || !startJson.success) {
+            // Server didn't start the timer for some reason — still show message and attempt to refresh.
+            extraMsg.style.color = "red";
+            extraMsg.textContent = (startJson && startJson.message) ? startJson.message : "Payment received but failed to start extra time on server.";
+            // Still attempt to run local timer for UX if you want:
+            startLocalExtraTimer(mins, bookingId);
+            setTimeout(() => { if (extraModal) extraModal.style.display = 'none'; }, 1500);
+            return;
+          }
+
+          // Success — hide modal, start local timer UI for immediate feedback
+          if (extraModal) extraModal.style.display = "none";
+          startLocalExtraTimer(mins, bookingId);
+
+          // Optional: refresh booking status a few times to pick up server-side changes
+          const start = Date.now();
+          const poll = setInterval(async () => {
+            try { await checkBookingStatusAndShowChat(); } catch (e) {}
+            if (Date.now() - start > 20000) clearInterval(poll);
+          }, 1500);
+
+        } catch (err) {
+          console.error("Failed to confirm/start extra timer after payment", err);
+          extraMsg.style.color = "red";
+          extraMsg.textContent = "Payment received but failed to start extra time. Please contact support.";
+        }
+      },
+      modal: {
+        ondismiss: function() {
+          extraMsg.style.color = "#666";
+          extraMsg.textContent = "Payment cancelled or closed. No change made.";
+        }
+      },
+      notes: {
+        booking_id: String(bookingId),
+        extra_minutes: String(mins)
+      }
+    };
+
+    const rzp = new window.Razorpay(options);
+    rzp.open();
+
+  } catch (err) {
+    console.error("Payment flow failed", err);
+    extraMsg.style.color = "red";
+    extraMsg.textContent = "Unable to open payment window.";
   }
 });
+
+
+function maybeShowExtraConfirmForProvider(payload) {
+  if (!payload) {
+    const modal = document.getElementById('extra-confirm-modal');
+    const inline = document.getElementById('extra-time-inline');
+    if (modal) modal.style.display = 'none';
+    if (inline) inline.style.display = 'none';
+    return;
+  }
+
+  const isProvider =
+    CURRENT_USER_ROLE === 'giver' ||
+    CURRENT_USER_ROLE === 'provider' ||
+    document.body.dataset.role === 'giver';
+
+  // ✅ Correct logic: show only when worker just requested
+  if (
+    isProvider &&
+    (payload.show_extra_time_input_to_giver || payload.extra_time_proposal)
+  ) {
+    const modal = document.getElementById('extra-confirm-modal');
+    const inline = document.getElementById('extra-time-inline');
+    if (modal) modal.style.display = 'none';
+    if (inline) inline.style.display = 'block';
+    const input = document.getElementById('extra-inline-minutes');
+    if (input) { input.value = ''; input.focus(); }
+    return;
+  }
+
+  // default: hide both
+  const modal = document.getElementById('extra-confirm-modal');
+  const inline = document.getElementById('extra-time-inline');
+  if (modal) modal.style.display = 'none';
+  if (inline) inline.style.display = 'none';
+}
+
 
 function getDistanceFromLatLon(lat1, lon1, lat2, lon2) {
   function deg2rad(deg) { return deg * (Math.PI / 180); }
@@ -2426,10 +3041,18 @@ function getDistanceFromLatLon(lat1, lon1, lat2, lon2) {
 
 let currentBookingId = null; // global booking id
 
+// --- idempotency nonce generator ---
+function makeNonce() {
+  if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+  return 'cnonce-' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+
+
 window.addEventListener("DOMContentLoaded", () => {
     const sendBtn = document.getElementById("send-chat-btn");
     const chatInput = document.getElementById("chat-input");
     const chatBox = document.getElementById("chat-box");
+    initExtraModalHandlers();
 
     // Restore booking ID and messages from localStorage instantly
     const savedBookingId = localStorage.getItem("currentBookingId");
@@ -2439,7 +3062,8 @@ window.addEventListener("DOMContentLoaded", () => {
 
         // Load messages from localStorage instantly
         const savedMessages = JSON.parse(localStorage.getItem(`chatMessages_${currentBookingId}`) || "[]");
-        savedMessages.forEach(m => appendMessage(m.sender, m.text));
+        savedMessages.forEach(m => appendMessage(m.sender, m.text, { id: m.id, client_nonce: m.client_nonce, booking_id: currentBookingId, ts: m.ts }));
+
 
         sendBtn.disabled = false;
         chatInput.disabled = false;
@@ -2481,7 +3105,15 @@ window.addEventListener("DOMContentLoaded", () => {
           console.log("Booking details received:", data);
           setRoleFromBookingData(data);
           applyRoleUI(data)
-          setTimeout(() => restoreWarnTimerForBooking(data.booking_id || currentBookingId), 0);
+          try {
+            maybeShowExtraConfirmForProvider(data);
+          } catch (e) {
+            console.warn('maybeShowExtraConfirmForProvider failed', e);
+          }
+          // pass the server payload so restoreWarnTimerForBooking can honor server flags immediately
+          setTimeout(() => restoreWarnTimerForBooking(data.booking_id || currentBookingId, !!data.can_issue_warning), 0);
+
+
 
           if (data.show && data.booking_id) {
             if (currentBookingId !== data.booking_id) {
@@ -2513,7 +3145,6 @@ window.addEventListener("DOMContentLoaded", () => {
 
 
 
-    // Replace existing loadMessages()
     function loadMessages() {
         const bid = getCurrentBookingId();
         if (!bid) return;
@@ -2521,69 +3152,122 @@ window.addEventListener("DOMContentLoaded", () => {
         const bookingId = Number(bid);
         if (!bookingId) return;
 
-        // Optional: cancel any in-flight fetch (advanced) — simple guard:
         fetch(`/get_messages/${bookingId}`)
             .then(res => res.json())
             .then(messages => {
+                // Map backend messages to a canonical shape (include id/client_nonce/ts)
                 const backendMessages = messages.map(msg => ({
+                    id: msg.id || null,
+                    client_nonce: msg.client_nonce || null,
                     sender: msg.sender_id === CURRENT_USER_ID ? "Me" : "Partner",
-                    text: msg.text
+                    text: msg.text,
+                    ts: msg.ts || (msg.timestamp ? new Date(msg.timestamp).getTime() : null)
                 }));
 
-                // Merge into localStorage for this booking only
+                // Merge with stored local messages (per booking)
                 let stored = JSON.parse(localStorage.getItem(`chatMessages_${bookingId}`) || "[]");
                 const merged = mergeMessages(stored, backendMessages);
+
+                // Persist merged for this booking
                 localStorage.setItem(`chatMessages_${bookingId}`, JSON.stringify(merged));
 
-                // Only render messages if still on the same booking
-                if (getCurrentBookingId() === bookingId) {
-                    renderMessages(merged);
+                // Only render if user is still viewing the same booking
+                if (Number(getCurrentBookingId()) === bookingId) {
+                    renderMessages(merged, bookingId);
                 } else {
-                    // don't overwrite UI for another booking
-                    console.debug("Skipped render: booking switched during load");
+                    console.debug("booking changed while loading messages; skipping render");
                 }
             })
             .catch(err => console.error("Error loading messages:", err));
     }
 
 
-    // Merge arrays without duplicates
+
     function mergeMessages(localMsgs, backendMsgs) {
-        const seen = new Set(localMsgs.map(m => m.sender + m.text));
+        localMsgs = localMsgs || [];
+        backendMsgs = backendMsgs || [];
+
+        // Index local messages by id and client_nonce for robust merging
+        const byId = new Map();
+        const byNonce = new Map();
+
+        function indexItem(it) {
+            if (!it) return;
+            if (it.id) byId.set(String(it.id), it);
+            if (it.client_nonce) byNonce.set(String(it.client_nonce), it);
+        }
+
+        localMsgs.forEach(m => indexItem(m));
+
+        // Merge server messages (server is canonical)
         backendMsgs.forEach(m => {
-            const key = m.sender + m.text;
-            if (!seen.has(key)) {
+            if (m.id && byId.has(String(m.id))) {
+                // update existing
+                const existing = byId.get(String(m.id));
+                Object.assign(existing, m);
+            } else if (m.client_nonce && byNonce.has(String(m.client_nonce))) {
+                // match optimistic message by nonce, update it
+                const existing = byNonce.get(String(m.client_nonce));
+                Object.assign(existing, m);
+                if (m.id) byId.set(String(m.id), existing);
+            } else {
+                // brand new message from server
                 localMsgs.push(m);
-                seen.add(key);
+                indexItem(m);
             }
         });
+
+        // Optional: stable sort by timestamp if ts present
+        localMsgs.sort((a, b) => {
+            if (a.ts && b.ts) return a.ts - b.ts;
+            return 0;
+        });
+
         return localMsgs;
     }
 
-    // Render all messages
-    function renderMessages(messages) {
-        chatBox.innerHTML = "";
-        messages.forEach(m => appendMessage(m.sender, m.text));
+
+   function renderMessages(messages, bookingId) {
+       chatBox.innerHTML = "";
+       messages.forEach(m => {
+           appendMessage(m.sender, m.text, { id: m.id, client_nonce: m.client_nonce, booking_id: bookingId, ts: m.ts });
+       });
+   }
+
+
+    function appendMessage(sender, text, opts = {}) {
+        // opts may include { id, client_nonce, booking_id, ts }
+        const { id, client_nonce, booking_id } = opts || {};
+        const bookingAttr = booking_id ? String(booking_id) : String(currentBookingId || "");
+
+        // Prevent duplicates: check for same id or same nonce + booking
+        if (id && document.querySelector(`.chat-message[data-id="${id}"][data-booking="${bookingAttr}"]`)) return;
+        if (!id && client_nonce && document.querySelector(`.chat-message[data-nonce="${client_nonce}"][data-booking="${bookingAttr}"]`)) return;
+
+        const msgElem = document.createElement("div");
+        msgElem.classList.add("chat-message");
+        if (id) msgElem.setAttribute("data-id", id);
+        if (client_nonce) msgElem.setAttribute("data-nonce", client_nonce);
+        msgElem.setAttribute("data-booking", bookingAttr);
+
+        if (sender === "Me") {
+            msgElem.classList.add("me");
+        } else {
+            msgElem.classList.add("partner");
+        }
+
+        msgElem.innerHTML = `<span class="sender">${escapeHtml(sender)}:</span> ${escapeHtml(text)}`;
+        chatBox.appendChild(msgElem);
+        chatBox.scrollTop = chatBox.scrollHeight;
     }
 
-    // Append a single message
-    function appendMessage(sender, text) {
-    const msgElem = document.createElement("div");
-    msgElem.classList.add("chat-message");
-
-    if (sender === "Me") {
-        msgElem.classList.add("me");
-    } else {
-        msgElem.classList.add("partner");
+    // helper to escape HTML
+    function escapeHtml(str) {
+        return String(str).replace(/[&<>"']/g, s => ({ '&': '&amp;','<': '&lt;','>': '&gt;','"': '&quot;', "'": '&#39;' })[s]);
     }
 
-    msgElem.innerHTML = `<span class="sender">${sender}:</span> ${text}`;
-    chatBox.appendChild(msgElem);
-    chatBox.scrollTop = chatBox.scrollHeight;
-}
 
 
-    // Replace existing sendMessage() with this safe version
     function sendMessage() {
         const text = (chatInput.value || "").trim();
         if (!text) return;
@@ -2594,56 +3278,73 @@ window.addEventListener("DOMContentLoaded", () => {
             return;
         }
 
-        // Use a snapshot of booking id & current user id
         const bookingIdAtSend = Number(bid);
-        const senderId = typeof CURRENT_USER_ID !== 'undefined' ? CURRENT_USER_ID : null;
+        const senderId = (typeof CURRENT_USER_ID !== 'undefined') ? CURRENT_USER_ID : null;
 
-        // Show immediately in UI (for the current booking only)
-        appendMessage("Me", text);
+        // create client nonce and optimistic message
+        const cnonce = makeNonce();
+        const optimistic = {
+            client_nonce: cnonce,
+            sender: "Me",
+            text: text,
+            ts: Date.now()
+        };
 
-        // Save to localStorage under the specific booking snapshot
+        // show optimistic message in UI for current booking
+        appendMessage("Me", text, { client_nonce: cnonce, booking_id: bookingIdAtSend, ts: optimistic.ts });
+
+        // save optimistically to localStorage for the specific booking
         try {
-          let stored = JSON.parse(localStorage.getItem(`chatMessages_${bookingIdAtSend}`) || "[]");
-          stored.push({ sender: "Me", text: text });
-          localStorage.setItem(`chatMessages_${bookingIdAtSend}`, JSON.stringify(stored));
-        } catch (e) { console.warn("localStorage save failed", e); }
+            let stored = JSON.parse(localStorage.getItem(`chatMessages_${bookingIdAtSend}`) || "[]");
+            stored.push(optimistic);
+            localStorage.setItem(`chatMessages_${bookingIdAtSend}`, JSON.stringify(stored));
+        } catch (e) {
+            console.warn("localStorage save failed", e);
+        }
 
-        // Clear input immediately
         chatInput.value = "";
 
-        // Send to backend, include the booking_id snapshot and sender_id
+        // send to backend including client_nonce (server should persist client_nonce)
         fetch("/send_message", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
                 message: text,
                 booking_id: bookingIdAtSend,
-                sender_id: senderId
+                client_nonce: cnonce  // important for server to store so merge can match
             })
         })
         .then(res => res.json())
         .then(() => {
-            // wait a short time, then reload messages for this booking only
+            // reload messages for booking (short delay to allow DB commit)
             setTimeout(() => {
-                // only reload messages for the same booking we sent to
-                if (getCurrentBookingId() === bookingIdAtSend) {
+                if (Number(getCurrentBookingId()) === bookingIdAtSend) {
                     loadMessages();
                 } else {
-                    // still attempt to refresh that booking's messages (background)
+                    // still merge in background for that booking
                     fetch(`/get_messages/${bookingIdAtSend}`)
                       .then(r => r.json())
                       .then(msgs => {
-                        // merge into localStorage for that booking id
-                        let stored = JSON.parse(localStorage.getItem(`chatMessages_${bookingIdAtSend}`) || "[]");
-                        const backendMessages = msgs.map(m => ({ sender: m.sender_id === senderId ? "Me" : "Partner", text: m.text }));
-                        const merged = mergeMessages(stored, backendMessages);
-                        localStorage.setItem(`chatMessages_${bookingIdAtSend}`, JSON.stringify(merged));
+                          const backendMessages = msgs.map(m => ({
+                              id: m.id || null,
+                              client_nonce: m.client_nonce || null,
+                              sender: m.sender_id === senderId ? "Me" : "Partner",
+                              text: m.text,
+                              ts: m.ts || (m.timestamp ? new Date(m.timestamp).getTime() : null)
+                          }));
+                          let stored = JSON.parse(localStorage.getItem(`chatMessages_${bookingIdAtSend}`) || "[]");
+                          const merged = mergeMessages(stored, backendMessages);
+                          localStorage.setItem(`chatMessages_${bookingIdAtSend}`, JSON.stringify(merged));
                       }).catch(()=>{});
                 }
-            }, 800);
+            }, 300);
         })
-        .catch(err => console.error("Error sending message:", err));
+        .catch(err => {
+            console.error("Error sending message:", err);
+            // optionally show a failed state for this optimistic message
+        });
     }
+
 
 
     // Event listeners
@@ -2673,6 +3374,10 @@ window.addEventListener("DOMContentLoaded", () => {
     setInterval(checkBookingStatusAndShowChat, 5000);
 
 });
+
+
+
+// (rest of your existing code such as helper functions getCurrentBookingId, showOrHideChatPanel, etc. should remain present in the page)
 
 const workerToggle = document.getElementById("worker-status-toggle");
 const workerStatusLabel = document.getElementById("worker-status-label");
@@ -2840,19 +3545,15 @@ document.addEventListener('DOMContentLoaded', () => {
   checkBookingStatus();
   setInterval(checkBookingStatus, 10000);
   // safe restore: use the persisted currentBookingId (if any)
-  restoreWarnTimerForBooking(getCurrentBookingId());
+  restoreWarnTimerForBooking(getCurrentBookingId(), false);
 });
 
 
 
 function updateMapButtonVisibility() {
-    const mapBtn = document.getElementById('map-btn');
-
-    if (CURRENT_USER_ROLE === 'worker') {
-        mapBtn.style.display = 'inline-block';
-    } else {
-        mapBtn.style.display = 'none';
-    }
+  const mapBtn = document.getElementById('map-btn');
+  if (!mapBtn) return;
+  mapBtn.style.display = (CURRENT_USER_ROLE === 'worker') ? 'inline-block' : 'none';
 }
 
 
@@ -2999,20 +3700,29 @@ async function startDriveTimer(driveSeconds, bookingId) {
 
 
 
-/**
- * restoreWarnTimerForBooking: call on DOMContentLoaded and whenever booking changes.
- * Keeps the warn button visible across reloads if it was already shown.
- */
-function restoreWarnTimerForBooking(bookingId) {
+// New signature: accept serverAllowsWarn (boolean) — only restore if server allows.
+function restoreWarnTimerForBooking(bookingId, serverAllowsWarn = false) {
   const warnBtn = document.getElementById('warn-sahayi-btn');
 
-  // Only the giver can see/manage this button
+  // Only the giver should see/manage this button
   if (!bookingId || CURRENT_USER_ROLE !== 'giver') {
     if (warnBtn) warnBtn.style.display = 'none';
     return;
   }
 
-  // If arrival confirmed, hide and clean up keys
+  // NEW: if server explicitly forbids warnings, do not restore persisted show state.
+  // This prevents localStorage alone from making the button visible.
+  if (!serverAllowsWarn) {
+    if (warnBtn) warnBtn.style.display = 'none';
+    // Also clear persisted shown flag so it doesn't reappear unexpectedly
+    try {
+      localStorage.removeItem(`warn_shown_${bookingId}`);
+      localStorage.removeItem(`warn_expiry_${bookingId}`);
+    } catch (e) { /* ignore */ }
+    return;
+  }
+
+  // existing logic below (unchanged)...
   const arrived = localStorage.getItem(`arrival_confirmed_${bookingId}`) === '1';
   if (arrived) {
     if (warnBtn) warnBtn.style.display = 'none';
@@ -3022,18 +3732,16 @@ function restoreWarnTimerForBooking(bookingId) {
     return;
   }
 
-  // ✅ Respect cooldown first (this is what fixes the "showing after refresh" bug)
   const hiddenUntil = parseInt(localStorage.getItem(`warn_hidden_until_${bookingId}`) || '0', 10);
   if (hiddenUntil && Date.now() < hiddenUntil) {
     if (warnBtn) warnBtn.style.display = 'none';
-    scheduleWarnReveal(bookingId, hiddenUntil); // will re-show later
+    scheduleWarnReveal(bookingId, hiddenUntil); // will re-show later (but server still controls)
     window._warnTimerStartedFor = bookingId;
     return;
   } else {
     localStorage.removeItem(`warn_hidden_until_${bookingId}`);
   }
 
-  // If we already persisted that the button was shown, keep it visible
   const shownFlag = localStorage.getItem(`warn_shown_${bookingId}`);
   if (shownFlag === '1') {
     if (warnBtn) warnBtn.style.display = 'inline-block';
@@ -3041,7 +3749,6 @@ function restoreWarnTimerForBooking(bookingId) {
     return;
   }
 
-  // No cooldown and not shown yet — use stored ETA expiry if present
   const expiryRaw = localStorage.getItem(`warn_expiry_${bookingId}`);
   if (!expiryRaw) {
     if (warnBtn) warnBtn.style.display = 'none';
@@ -3058,14 +3765,12 @@ function restoreWarnTimerForBooking(bookingId) {
   const remaining = expiryTs - Date.now();
 
   if (remaining <= 0) {
-    // ETA already passed — show now
     if (warnBtn) warnBtn.style.display = 'inline-block';
     localStorage.setItem(`warn_shown_${bookingId}`, '1');
     window._warnTimerStartedFor = bookingId;
     return;
   }
 
-  // Schedule reveal after remaining ETA — still respecting cooldown at fire time
   if (warnTimerHandle) clearTimeout(warnTimerHandle);
   warnTimerHandle = setTimeout(() => {
     const arrivedNow = localStorage.getItem(`arrival_confirmed_${bookingId}`) === '1';
@@ -3079,6 +3784,7 @@ function restoreWarnTimerForBooking(bookingId) {
 
   window._warnTimerStartedFor = bookingId;
 }
+
 
 
 /**
@@ -3337,41 +4043,72 @@ function showWorkerWarningPopup(warning) {
     stopWarnLoop();
   };
 
-  // Response buttons
+  // inside showWorkerWarningPopup(w) where you set up warn-response handlers
   document.querySelectorAll('.warn-response').forEach(btn => {
     btn.onclick = async () => {
-      const responseText = btn.dataset.response;
+      const responseText = (btn.dataset.response || '').trim();
+      if (!responseText) {
+        alert('No response text configured.');
+        return;
+      }
       const bookingId = getBookingId();
 
+      // 1) Immediately show in UI so user sees it even if server is slow / dedupes
+      const clientNonce = `c_${Date.now()}_${Math.floor(Math.random()*1000000)}`;
+      const localMsg = { sender: "Me", text: responseText, ts: Date.now(), nonce: clientNonce };
+
       try {
-        // Acknowledge warning
+        // append locally and persist under this booking
+        appendMessage(localMsg.sender, localMsg.text);
+        try {
+          let stored = JSON.parse(localStorage.getItem(`chatMessages_${bookingId}`) || "[]");
+          stored.push(localMsg);
+          localStorage.setItem(`chatMessages_${bookingId}`, JSON.stringify(stored));
+        } catch (e) { console.warn("localStorage save failed for warn-response", e); }
+      } catch (e) { console.warn("failed to append local message", e); }
+
+      // 2) Acknowledge warning server-side
+      try {
         const resp = await fetch('/ack_warning', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ booking_id: bookingId, warning_id: warning.id })
+          body: JSON.stringify({ booking_id: bookingId, warning_id: warning.id }) // 'warning' comes from outer scope
         });
         const j = await resp.json();
-
-        // Optionally notify giver via chat or backend log
-        if (j.success) {
-          // You could send this as chat message (optional)
-          await fetch('/send_message', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ booking_id: bookingId, message: responseText })
-          }).catch(()=>{});
-
-          workerModal.style.display = 'none';
-          document.body.style.overflow = '';
-          stopWarnLoop();
-        } else {
+        if (!j.success) {
           alert(j.message || 'Failed to acknowledge warning.');
+          return;
         }
       } catch (err) {
-        alert('Network error.');
+        alert('Network error acknowledging warning.');
+        console.error(err);
+        return;
       }
+
+      // 3) Send the chat message (include client_nonce). Do not wait to update the UI.
+      try {
+        await fetch('/send_message', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            booking_id: bookingId,
+            message: responseText,
+            sender_id: typeof CURRENT_USER_ID !== 'undefined' ? CURRENT_USER_ID : null,
+            client_nonce: clientNonce
+          })
+        });
+      } catch (err) {
+        console.warn('send_message failed for warn-response', err);
+        // we already showed it locally; optionally mark as unsent for retry later
+      }
+
+      // close popup & stop sounds
+      workerModal.style.display = 'none';
+      document.body.style.overflow = '';
+      stopWarnLoop();
     };
   });
+
 }
 
 /* ---------- Cleanup on booking change ---------- */

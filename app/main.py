@@ -11,6 +11,9 @@ from app.routers import otp,warnings,payment_history,warnings_check,auth_pages,b
 from app.routers import wallet,wallet_pages,location,notifications,welcome,jobs,calls,worker_and_negotiation,payments_calls,booking_actions
 from pathlib import Path
 from dotenv import load_dotenv
+from app import actions
+from app import dev_auth
+
 
 ENV_PATH = Path(__file__).resolve().parents[1] / ".env"
 load_dotenv(dotenv_path=ENV_PATH, override=True)
@@ -57,3 +60,10 @@ app.include_router(payments_calls.router)
 app.include_router(booking_details.router)
 app.include_router(realtime_jobs.router)
 app.include_router(worker_profile.router)
+
+# include the actions router so /action endpoints are active
+app.include_router(actions.router)
+
+# include dev token router only in dev (remove in production)
+if settings.ALLOW_DEV_TOKENS:
+    app.include_router(dev_auth.router)

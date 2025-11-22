@@ -1,12 +1,13 @@
 # app/routers/realtime_jobs.py
 from __future__ import annotations
-
+from fastapi import Query
 import math
 import random
+import time
 from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Optional
-
+from fastapi import Body
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
@@ -73,11 +74,83 @@ class ExtraConfirmOut(BaseModel):
 class SendMessageIn(BaseModel):
     message: str
     booking_id: int
+    client_nonce: Optional[str] = None
+
 
 class UpdateQuantityIn(BaseModel):
     completed_quantity: int = Field(ge=0)
 
 # ---------- routes ----------
+@router.post("/razorpay/webhook")
+def razorpay_webhook(payload: dict = Body(...), db: Session = Depends(get_db)):
+    """
+    Basic webhook handler to mark extra payment completed.
+    In production: verify X-Razorpay-Signature header.
+    Expected: payload with payment.captured event and notes containing booking_id and extra_minutes.
+    """
+    event = payload.get("event")
+    data = payload.get("payload", {})
+    if event == "payment.captured":
+        entity = data.get("payment", {}).get("entity", {}) or {}
+        notes = entity.get("notes", {}) or {}
+        booking_id = notes.get("booking_id")
+        extra_minutes = notes.get("extra_minutes")
+        # Also store payment id & amount if present (defensive)
+        payment_id = entity.get("id")
+        amount = entity.get("amount")  # amount in paise (if using Razorpay)
+        try:
+            if booking_id:
+                b = db.get(Booking, int(booking_id))
+                if b:
+                    # Mark payment completed
+                    b.extra_payment_completed = True
+                    # persist proposed minutes if provided
+                    if extra_minutes:
+                        try:
+                            b.proposed_extra_minutes = int(extra_minutes)
+                        except Exception:
+                            pass
+                    # persist payment/order ids if present
+                    if payment_id:
+                        # store in extra_razor_payment_id for traceability
+                        try:
+                            b.extra_razor_payment_id = str(payment_id)
+                        except Exception:
+                            pass
+                    if amount is not None:
+                        try:
+                            # convert paise -> rupees
+                            b.extra_razor_amount = float(amount) / 100.0
+                        except Exception:
+                            pass
+
+                    # If main session already ended, automatically start extra timer now
+                    # Compute main_time_left similar to /start_extra_timer logic
+                    main_time_left = 0
+                    if getattr(b, "otp_verified", False) and getattr(b, "otp_verified_time", None) and (b.rate_type or "").strip().lower() == "per hour":
+                        duration_secs = (b.quantity or 0) * 3600
+                        expiry_time = b.otp_verified_time + timedelta(seconds=duration_secs)
+                        now = datetime.utcnow()
+                        main_time_left = (expiry_time - now).total_seconds()
+
+                    # Only auto-start if not already started and main session ended
+                    if (not getattr(b, "extra_timer_started_at", None)) and main_time_left <= 0:
+                        b.extra_timer_started_at = datetime.utcnow()
+                        try:
+                            mins = int(getattr(b, "proposed_extra_minutes", 0) or 0)
+                        except Exception:
+                            mins = 0
+                        if mins > 0:
+                            b.extra_timer_ends_at = b.extra_timer_started_at + timedelta(minutes=mins)
+                        else:
+                            b.extra_timer_ends_at = None
+
+                    db.commit()
+        except Exception:
+            db.rollback()
+    return {"status": "ok"}
+
+
 @router.post("/verify_worker_location/{booking_id}")
 def verify_worker_location(
     booking_id: int,
@@ -104,6 +177,10 @@ def request_extra_time(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    """
+    Called by the worker. Instead of OTP flow, mark a proposal so the giver UI
+    will show an input for entering extra minutes and Confirm/Cancel.
+    """
     booking = (
         db.query(Booking)
         .filter(Booking.status == "Token Paid", Booking.worker_id == current_user.id)
@@ -115,11 +192,133 @@ def request_extra_time(
     if booking.extra_timer_requested:
         return {"success": False, "message": "Already requested."}
 
+    # Mark a proposal — UI will present minutes input to the provider (giver).
     booking.extra_timer_requested = True
     booking.extra_timer_requested_at = datetime.utcnow()
     booking.main_timer_paused = True
+
+    # Make sure any previous extra-payment flags are cleared
+    booking.extra_payment_completed = False
+    booking.extra_razor_order_id = None
+    booking.proposed_extra_minutes = None
+    booking.extra_razor_amount = None
+
     db.commit()
-    return {"success": True}
+
+    # Optionally: create a Notification for provider (if you have that table/flow)
+    try:
+        if booking.provider:
+            db.add(Notification(
+                recipient_id=booking.provider.id,
+                sender_id=current_user.id,
+                booking_id=booking.id,
+                message=f"🔔 Worker requested extra time. Enter minutes and confirm to pay.",
+                action_type="extra_time_requested",
+                is_read=False,
+            ))
+            db.commit()
+    except Exception:
+        db.rollback()
+
+    return {"success": True, "message": "Extra time requested — waiting for provider input."}
+
+
+@router.get("/get_estimated_drive_time_by_booking")
+def get_estimated_drive_time_by_booking(
+    booking_id: int = Query(..., alias="booking_id"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Return a rough ETA (seconds) for the booking's worker -> provider.
+    Returns {"seconds": <int>} when calculable, or {"seconds": None} when unknown.
+    """
+    booking = db.get(Booking, booking_id)
+    if not booking:
+        # keep behaviour consistent with a REST 404 for missing booking
+        raise HTTPException(status_code=404, detail="Booking not found")
+
+    # Find coords for worker -> provider (both must exist)
+    w = booking.worker
+    p = booking.provider
+    if not (w and p and getattr(w, "latitude", None) and getattr(w, "longitude", None)
+            and getattr(p, "latitude", None) and getattr(p, "longitude", None)):
+        # front-end should fallback when this is None
+        return {"seconds": None}
+
+    try:
+        lat1 = float(w.latitude)
+        lon1 = float(w.longitude)
+        lat2 = float(p.latitude)
+        lon2 = float(p.longitude)
+    except Exception:
+        return {"seconds": None}
+
+    meters = haversine(lat1, lon1, lat2, lon2)  # your helper returns meters
+    # Conservative average speed (m/s). Adjust to your needs.
+    avg_speed_m_s = 12.0  # ~43 km/h
+    if avg_speed_m_s <= 0:
+        return {"seconds": None}
+    seconds = int(meters / avg_speed_m_s)
+
+    # safety clamp
+    if seconds > 24 * 3600:
+        seconds = 24 * 3600
+
+    return {"seconds": seconds}
+
+@router.post("/razorpay/create_order_for_extra/{booking_id}")
+def create_order_for_extra(
+    booking_id: int,
+    payload: dict = Body(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Create and persist a Razorpay order for extra minutes.
+    Expects body: { "extra_minutes": <int> }
+    """
+    minutes = int(payload.get("extra_minutes") or 0)
+    booking = db.get(Booking, booking_id)
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+
+    # Only provider (giver) should create the order
+    if current_user.id != booking.provider_id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    if minutes <= 0:
+        return {"success": False, "message": "Invalid minutes"}
+
+    # TODO: Replace with real Razorpay order creation.
+    # Example placeholder order id & amount calculation:
+    # amount in paise (e.g. INR * 100). Adjust pricing logic as needed.
+    price_per_minute_inr = getattr(booking, "rate_per_minute", None) or 1  # fallback: 1 INR/min
+    amount_in_inr = minutes * price_per_minute_inr
+    amount_paise = int(amount_in_inr * 100)
+
+    # Example pseudo-order id (replace by razorpay client call)
+    razor_order_id = f"rzp_extra_{int(time.time())}_{booking_id}"
+
+    # Persist proposed minutes and order id BEFORE returning to client
+    try:
+        booking.proposed_extra_minutes = minutes
+        booking.extra_razor_order_id = razor_order_id
+        booking.extra_razor_amount = float(amount_in_inr)
+        booking.extra_payment_completed = False
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Failed to persist order data")
+
+    # Return payload expected by frontend (match your current modal's expectation)
+    return {
+        "order_id": razor_order_id,
+        "amount": amount_paise,
+        "currency": "INR",
+        "key_id": "RAZORPAY_KEY_ID_PLACEHOLDER",
+        "message": "Order created. Open Razorpay checkout on client.",
+    }
 
 @router.post("/verify_extra_timer_otp")
 def verify_extra_timer_otp(
@@ -127,73 +326,133 @@ def verify_extra_timer_otp(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    booking = (
-        db.query(Booking)
-        .filter(Booking.status == "Token Paid", Booking.worker_id == current_user.id)
-        .order_by(Booking.id.desc())
-        .first()
-    )
-    if not booking or not payload.otp:
-        return {"success": False, "message": "Invalid request."}
+    """
+    Deprecated: OTP-based extra timer verification has been removed from the
+    active flow. The new flow uses provider input + payment and then calls
+    /start_extra_timer. This endpoint remains for backwards compatibility but
+    will return a deprecation response.
+    """
+    return {"success": False, "message": "Deprecated. OTP flow removed. Use provider-confirmation and payment flow."}
 
-    if booking.extra_otp_code == payload.otp:
-        booking.extra_otp_verified = True
-        booking.extra_timer_started_at = datetime.utcnow()
-        booking.main_timer_paused = False
-        db.commit()
-        return {"success": True}
 
-    return {"success": False, "message": "Incorrect OTP."}
+
 
 @router.post("/start_extra_timer")
 def start_extra_timer(
+    payload: dict = Body(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    booking = get_active_booking(db, current_user.id)
+    """
+    Start the extra timer.
+
+    Expected payload: { "booking_id": <int>, "extra_minutes": <int> }
+
+    Behaviour:
+    - Persist proposed minutes and mark extra_payment_completed.
+    - If main session has ended (or not hourly), start extra timer now.
+    - Otherwise return will_start_after_main=True and do NOT start timer.
+    """
+    booking_id = int(payload.get("booking_id") or 0)
+    extra_minutes = int(payload.get("extra_minutes") or 0)
+
+    booking = db.get(Booking, booking_id)
     if not booking:
-        return {"success": False, "message": "No booking found."}
-    if not booking.extra_otp_verified:
-        return {"success": False, "message": "OTP not verified yet."}
-    if booking.extra_timer_started_at:
-        return {"success": True, "message": "Already started."}
+        return {"success": False, "message": "Booking not found."}
 
-    booking.extra_timer_started_at = datetime.utcnow()
+    # Only provider or worker participants allowed to call
+    if current_user.id not in (booking.provider_id, booking.worker_id):
+        raise HTTPException(status_code=403, detail="Not part of booking")
+
+    # Persist minutes (if provided)
+    if extra_minutes and extra_minutes > 0:
+        booking.proposed_extra_minutes = extra_minutes
+
+    # Mark payment completed (webhook is preferred; this keeps parity with client flow)
+    booking.extra_payment_completed = True
+    # Clear the "requested" flag — we are either starting or scheduling it
+    booking.extra_timer_requested = False
+    booking.main_timer_paused = False
     db.commit()
-    return {"success": True}
 
-@router.post("/stop_extra_timer")
-def stop_extra_timer(
+    # If already started, return ok
+    if getattr(booking, "extra_timer_started_at", None):
+        return {"success": True, "message": "Already started.", "proposed_minutes": booking.proposed_extra_minutes}
+
+    # Compute remaining main session time for hourly jobs
+    main_time_left = 0
+    if getattr(booking, "otp_verified", False) and getattr(booking, "otp_verified_time", None) and (booking.rate_type or "").strip().lower() == "per hour":
+        duration_secs = (booking.quantity or 0) * 3600
+        expiry_time = booking.otp_verified_time + timedelta(seconds=duration_secs)
+        now = datetime.utcnow()
+        main_time_left = (expiry_time - now).total_seconds()
+
+    # If main session already ended (or this isn't hourly / otp flow), start extra timer now.
+    if main_time_left <= 0:
+        booking.extra_timer_started_at = datetime.utcnow()
+
+        # NEW — set authoritative end time
+        try:
+            mins = int(getattr(booking, "proposed_extra_minutes", 0) or 0)
+        except Exception:
+            mins = 0
+
+        if mins > 0:
+            booking.extra_timer_ends_at = booking.extra_timer_started_at + timedelta(minutes=mins)
+        else:
+            booking.extra_timer_ends_at = None
+
+        db.commit()
+        return {
+            "success": True,
+            "message": "Extra timer started.",
+            "proposed_minutes": booking.proposed_extra_minutes,
+            "extra_timer_ends_at": booking.extra_timer_ends_at.isoformat() if booking.extra_timer_ends_at else None
+        }
+
+    # Otherwise, signal frontend that payment is recorded and extra will start later
+    return {
+        "success": True,
+        "message": "Payment recorded; extra will start after the current session ends.",
+        "will_start_after_main": True,
+        "main_time_left_seconds": int(main_time_left),
+        "proposed_minutes": booking.proposed_extra_minutes,
+    }
+
+
+@router.post("/cancel_extra_time")
+def cancel_extra_time(
+    payload: dict = Body(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    booking = get_active_booking(db, current_user.id)
-    if not booking or not booking.extra_timer_started_at or booking.extra_timer_stopped:
-        return {"success": False}
+    """
+    Called by provider to cancel an extra-time proposal.
+    Expects: { "booking_id": <int> }
+    """
+    booking_id = int(payload.get("booking_id") or 0)
+    booking = db.get(Booking, booking_id)
+    if not booking:
+        return {"success": False, "message": "Booking not found."}
 
-    booking.extra_timer_stopped_by = "worker" if current_user.id == booking.worker_id else "provider"
-    booking.extra_timer_stopped = True
+    # only provider can cancel
+    if current_user.id != booking.provider_id:
+        return {"success": False, "message": "Not authorized."}
+
+    # Clear extra time negotiation fields
+    booking.extra_timer_requested = False
+    booking.extra_timer_requested_at = None
+    booking.proposed_extra_minutes = None
+    booking.extra_razor_order_id = None
+    booking.extra_razor_payment_id = None
+    booking.extra_razor_amount = None
+    booking.extra_payment_completed = False
+    booking.main_timer_paused = False
     db.commit()
-    return {"success": True}
+    return {"success": True, "message": "Extra time cancelled."}
 
-@router.post("/confirm_stop_extra_timer", response_model=ExtraConfirmOut)
-def confirm_stop_extra_timer(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    booking = get_active_booking(db, current_user.id)
-    if not booking or not booking.extra_timer_stopped:
-        return ExtraConfirmOut(success=False)
 
-    extra_duration_seconds = (datetime.utcnow() - booking.extra_timer_started_at).total_seconds()
-    extra_hours = extra_duration_seconds / 3600.0
-    rate = booking.rate or 0.0
-    amount_due = round(float(rate) * extra_hours, 2)
 
-    booking.extra_timer_confirmed_stop = True
-    db.commit()
-
-    return ExtraConfirmOut(success=True, redirect_url=f"/pay_extra_amount/{booking.id}/{amount_due}")
 
 @router.get("/pay_extra_amount/{booking_id}/{amount}", response_class=HTMLResponse)
 def pay_extra_amount_get(
@@ -271,14 +530,119 @@ def send_message(
     if not payload.booking_id:
         return {"status": "error", "message": "No booking_id"}
 
+    # ensure booking exists and user is a participant
+    booking = db.get(Booking, payload.booking_id)
+    if not booking:
+        return {"status": "error", "message": "Booking not found"}
+    if current_user.id not in (booking.provider_id, booking.worker_id):
+        raise HTTPException(status_code=403, detail="Not part of booking")
+
+    client_nonce = (payload.client_nonce or "").strip() or None
+
     try:
-        msg = Message(booking_id=payload.booking_id, sender_id=current_user.id, text=payload.message)
-        db.add(msg)
+        # 1) If client_nonce supplied and DB has client_nonce column, try to find existing message
+        if client_nonce and hasattr(Message, "client_nonce"):
+            existing = (
+                db.query(Message)
+                .filter(
+                    Message.booking_id == payload.booking_id,
+                    Message.sender_id == current_user.id,
+                    getattr(Message, "client_nonce") == client_nonce
+                )
+                .first()
+            )
+            if existing:
+                ts_field = getattr(existing, "timestamp", None) or getattr(existing, "created_at", None)
+                ts_ms = int(ts_field.timestamp() * 1000) if ts_field else int(datetime.utcnow().timestamp() * 1000)
+                return {
+                    "status": "ok",
+                    "message": {
+                        "id": existing.id,
+                        "booking_id": existing.booking_id,
+                        "sender_id": existing.sender_id,
+                        "text": existing.text,
+                        "client_nonce": getattr(existing, "client_nonce", None),
+                        "ts": ts_ms
+                    }
+                }
+
+        # 2) Fallback duplicate guard: identical text from same sender within last 5 seconds
+        # IMPORTANT: only apply this fallback when client_nonce was NOT provided.
+        recent_dup = None
+        if not client_nonce:
+            fallback_window_seconds = 5
+            if hasattr(Message, "timestamp"):
+                recent_cutoff = datetime.utcnow() - timedelta(seconds=fallback_window_seconds)
+                recent_dup = (
+                    db.query(Message)
+                    .filter(
+                        Message.booking_id == payload.booking_id,
+                        Message.sender_id == current_user.id,
+                        Message.text == payload.message,
+                        getattr(Message, "timestamp") >= recent_cutoff
+                    )
+                    .order_by(getattr(Message, "timestamp").desc())
+                    .first()
+                )
+            else:
+                recent_dup = (
+                    db.query(Message)
+                    .filter(
+                        Message.booking_id == payload.booking_id,
+                        Message.sender_id == current_user.id,
+                        Message.text == payload.message
+                    )
+                    .order_by(Message.id.desc())
+                    .first()
+                )
+
+        if recent_dup:
+            ts_field = getattr(recent_dup, "timestamp", None) or getattr(recent_dup, "created_at", None)
+            ts_ms = int(ts_field.timestamp() * 1000) if ts_field else None
+            return {
+                "status": "ok",
+                "message": {
+                    "id": recent_dup.id,
+                    "booking_id": recent_dup.booking_id,
+                    "sender_id": recent_dup.sender_id,
+                    "text": recent_dup.text,
+                    "client_nonce": getattr(recent_dup, "client_nonce", None),
+                    "ts": ts_ms
+                }
+            }
+
+        # 3) Create new message row (use client_nonce if provided)
+        kwargs = {
+            "booking_id": payload.booking_id,
+            "sender_id": current_user.id,
+            "text": payload.message,
+        }
+        if client_nonce and hasattr(Message, "client_nonce"):
+            kwargs["client_nonce"] = client_nonce
+
+        m = Message(**kwargs)
+        db.add(m)
         db.commit()
-        return {"status": "ok"}
+        db.refresh(m)
+
+        ts_field = getattr(m, "timestamp", None) or getattr(m, "created_at", None)
+        ts_ms = int(ts_field.timestamp() * 1000) if ts_field else int(datetime.utcnow().timestamp() * 1000)
+
+        return {
+            "status": "ok",
+            "message": {
+                "id": m.id,
+                "booking_id": m.booking_id,
+                "sender_id": m.sender_id,
+                "text": m.text,
+                "client_nonce": getattr(m, "client_nonce", None),
+                "ts": ts_ms
+            }
+        }
     except Exception:
         db.rollback()
         return {"status": "error", "message": "Internal server error"}
+
 
 @router.get("/get_messages/{booking_id}")
 def get_messages(
@@ -286,20 +650,34 @@ def get_messages(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    booking = db.get(Booking, booking_id)
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    if current_user.id not in (booking.provider_id, booking.worker_id):
+        raise HTTPException(status_code=403, detail="Not allowed")
+
+    order_col = Message.timestamp if hasattr(Message, "timestamp") else Message.id
     msgs = (
         db.query(Message)
         .filter_by(booking_id=booking_id)
-        .order_by(Message.timestamp.asc())
+        .order_by(order_col.asc())
         .all()
     )
-    return [
-        {
+
+    out = []
+    for m in msgs:
+        ts_field = getattr(m, "timestamp", None) or getattr(m, "created_at", None)
+        ts_ms = int(ts_field.timestamp() * 1000) if ts_field else None
+        out.append({
+            "id": m.id,
             "sender_id": m.sender_id,
             "text": m.text,
-            "timestamp": m.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
-        }
-        for m in msgs
-    ]
+            "client_nonce": getattr(m, "client_nonce", None),
+            "ts": ts_ms
+        })
+    return out
+
+
 
 @router.post("/update_completed_quantity")
 def update_completed_quantity(

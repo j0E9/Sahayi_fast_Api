@@ -9,7 +9,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-
+import math
 from app.database import get_db
 from app.models import Booking, Notification, User, WalletTransaction
 from app.razor_client import client as razor  # single shared Razorpay client
@@ -22,6 +22,7 @@ RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID", "")
 RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET", "")
 RAZORPAY_WEBHOOK_SECRET = os.getenv("RAZORPAY_WEBHOOK_SECRET", "")
 RZP_TIMEOUT = 20  # seconds for SDK calls
+
 
 
 
@@ -220,6 +221,11 @@ def pay_token_post(
             action_type="payment_completed",
             is_read=False,
         ))
+        # --- NEW: surface other pending payments for this provider so provider sees next pay page ---
+        try:
+            _notify_next_pending_for_provider(db, provider_id=provider.id, exclude_booking_id=booking.id)
+        except Exception:
+            pass
 
     return HTMLResponse('<script>alert("✅ Payment Successful.");window.location.replace("/welcome");</script>')
 
@@ -457,6 +463,12 @@ def verify_razorpay_payment(
             is_read=False,
         ))
 
+        # --- NEW: surface next pending payment for this provider so that provider sees next pay page ---
+        try:
+            _notify_next_pending_for_provider(db, provider_id=provider.id, exclude_booking_id=booking.id)
+        except Exception:
+            pass
+
         db.commit()
     except Exception:
         db.rollback()
@@ -529,6 +541,12 @@ async def razorpay_webhook(
                                 action_type="payment_completed",
                                 is_read=False,
                             ))
+
+                            # --- NEW: surface next pending payment for this provider ---
+                            try:
+                                _notify_next_pending_for_provider(db, provider_id=provider.id, exclude_booking_id=booking.id)
+                            except Exception:
+                                pass
 
     return {"ok": True}
 
@@ -617,3 +635,49 @@ def _mark_booking_paid(
     booking.razor_payment_id = payment_id
     if order_id:
         booking.razor_order_id = order_id
+
+
+# --- NEW helper: surface next pending payment for provider ------------------
+def _notify_next_pending_for_provider(db: Session, *, provider_id: int, exclude_booking_id: int | None = None) -> bool:
+    """
+    If the provider has another booking which is payment_required==True and payment_completed==False,
+    create a Notification so the frontend can auto-open the pay page for that booking.
+    Returns True if a notification was created.
+    """
+    try:
+        q = (
+            db.query(Booking)
+            .filter(
+                Booking.provider_id == provider_id,
+                Booking.payment_required == True,
+                Booking.payment_completed == False,
+            )
+        )
+        if exclude_booking_id:
+            q = q.filter(Booking.id != exclude_booking_id)
+
+        # sensible ordering: earliest expiring first, fallback to id asc
+        try:
+            next_pending = q.order_by(Booking.expires_at.asc().nulls_last(), Booking.id.asc()).first()
+        except Exception:
+            # fallback for SQLAlchemy versions without nulls_last()
+            next_pending = q.order_by(func.coalesce(Booking.expires_at, datetime.max).asc(), Booking.id.asc()).first()
+
+        if not next_pending:
+            return False
+
+        db.add(Notification(
+            recipient_id=provider_id,
+            sender_id=provider_id,
+            booking_id=next_pending.id,
+            message=f"🔔 Pending token payment for booking #{next_pending.id}. Click to pay.",
+            action_type="payment_required",
+            is_read=False,
+        ))
+        return True
+    except Exception:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        return False

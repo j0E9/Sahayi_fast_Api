@@ -67,6 +67,28 @@ def has_giver_rated(db: Session, booking: Booking) -> bool:
         Rating.job_giver_id == booking.provider_id,
     ).first() is not None
 
+def _find_pending_rating_booking_for_giver(db: Session, provider_id: int) -> Booking | None:
+    """
+    Return one Completed booking for which the provider (giver) has not yet
+    submitted a rating and has not already been prompted for rating.
+    Prefer the earliest completed booking first (FIFO).
+    """
+    q = (
+        db.query(Booking)
+        .filter(
+            Booking.provider_id == provider_id,
+            Booking.status == "Completed",
+            Booking.rating_prompted_at == None  # only those not already prompted
+        )
+        .order_by(Booking.id.asc())
+    )
+    for b in q.all():
+        if not has_giver_rated(db, b):
+            return b
+    return None
+
+
+
 def _payload_for_booking(booking: Booking, viewer: User, db: Session) -> dict:
     """
     Returns the same payload shape your frontend already expects,
@@ -81,14 +103,14 @@ def _payload_for_booking(booking: Booking, viewer: User, db: Session) -> dict:
     # Close chat for terminal states (Rejected/Cancelled = hard close)
     if booking.status in ["Rejected", "Cancelled"]:
         if booking.worker:
-            booking.worker.busy = False  # don't flip provider busy anymore
+            booking.worker.busy = False
         db.commit()
         return {"show": False, "message": "No active chat. Job ended or rejected."}
 
-    # ✅ Completed: allow rating popup for the giver
+    # Completed — allow rating popup for the giver
     if booking.status == "Completed":
         if booking.worker:
-            booking.worker.busy = False  # don't flip provider busy anymore
+            booking.worker.busy = False
         db.commit()
 
         is_giver = (booking.provider_id == user_id)
@@ -100,11 +122,17 @@ def _payload_for_booking(booking: Booking, viewer: User, db: Session) -> dict:
         map_url = f"https://www.google.com/maps/search/?api=1&query={lat},{lon}" if lat and lon else ""
 
         if is_giver and not has_giver_rated(db, booking):
+            try:
+                booking.rating_prompted_at = datetime.utcnow()
+                db.add(booking)
+                db.commit()
+            except Exception:
+                db.rollback()
             return _rating_payload(booking, is_giver, name, map_url)
 
         return {"show": False, "message": "✅ Job completed."}
 
-    # Pending → restrict giver; chat not visible yet (do not mark giver busy)
+    # Pending → restrict giver; chat not visible yet
     if booking.status == "Pending":
         db.commit()
         return {"show": False, "message": "⏳ Waiting for worker response."}
@@ -118,7 +146,25 @@ def _payload_for_booking(booking: Booking, viewer: User, db: Session) -> dict:
 
     # Warnings throttle
     allowed, remaining = _next_warning_allowed(db, booking)
-    can_warn_now = bool(is_giver and allowed and not getattr(booking, "worker_arrived", False))
+
+    # stricter can_warn_now: only before arrival OTP verification, worker not arrived,
+    # no extra-time negotiation ongoing, and booking is in normal active state.
+    worker_arrived = bool(getattr(booking, "worker_arrived", False))
+    extra_requested = bool(getattr(booking, "extra_timer_requested", False))
+    otp_verified = bool(getattr(booking, "otp_verified", False))
+
+    # Only allow warnings when booking is in the main session (not 'Extra Time'),
+    # and OTP hasn't been verified yet, worker hasn't marked arrived, and no extra negotiation.
+    is_active_main_session = booking.status in ["Token Paid", "In Progress"]
+    can_warn_now = (
+            is_giver
+            and allowed
+            and is_active_main_session
+            and (not worker_arrived)
+            and (not extra_requested)
+            and (not otp_verified)
+    )
+
     if is_worker:
         can_warn_now = False
 
@@ -129,16 +175,77 @@ def _payload_for_booking(booking: Booking, viewer: User, db: Session) -> dict:
     map_url = f"https://www.google.com/maps/search/?api=1&query={lat},{lon}" if lat and lon else ""
 
     now = datetime.utcnow()
+    extra_timer_started_at = getattr(booking, "extra_timer_started_at", None)
+    extra_timer_stopped = bool(getattr(booking, "extra_timer_stopped", False))
+    extra_timer_confirmed_stop = bool(getattr(booking, "extra_timer_confirmed_stop", False))
+    extra_timer_stopped_by = getattr(booking, "extra_timer_stopped_by", None)
+    extra_otp_code = getattr(booking, "extra_otp_code", None)
+    extra_timer_requested = bool(getattr(booking, "extra_timer_requested", False))
+    extra_otp_verified = bool(getattr(booking, "extra_otp_verified", False))
+
+    # payment/order fields and proposed minutes
+    extra_payment_completed = bool(getattr(booking, "extra_payment_completed", False))
+    extra_razor_order_id = getattr(booking, "extra_razor_order_id", None)
+    proposed_extra_minutes = getattr(booking, "proposed_extra_minutes", None)
+
+    extra_timer_running = bool(extra_timer_started_at and (not extra_timer_stopped) and (not extra_timer_confirmed_stop))
+    extra_duration_seconds = int((now - extra_timer_started_at).total_seconds()) if extra_timer_started_at else 0
+
+    try:
+        proposed_min = getattr(booking, "proposed_extra_minutes", None)
+        proposed_min_int = int(proposed_min) if proposed_min is not None else None
+    except Exception:
+        proposed_min_int = None
+
+    # explicit end time if exists
+    ends_at = getattr(booking, "extra_timer_ends_at", None)
+
+    # Auto-stop based on explicit ends_at
+    if ends_at and not booking.extra_timer_stopped:
+        if now >= ends_at:
+            booking.extra_timer_confirmed_stop = True
+            booking.extra_timer_stopped = True
+            booking.status = "Completed"
+            if booking.worker:
+                booking.worker.busy = False
+            db.commit()
+
+            if is_giver and not has_giver_rated(db, booking):
+                return _rating_payload(booking, is_giver, name, map_url)
+
+            return {"show": False, "message": "✅ Extra time ended — job completed."}
+
+    extra_timer_pending = extra_timer_requested and (not extra_payment_completed)
+
+    extra = {
+        "extra_timer_started_at": extra_timer_started_at,
+        "extra_timer_running": extra_timer_running,
+        "extra_duration_seconds": extra_duration_seconds,
+        "extra_timer_stopped": extra_timer_stopped,
+        "extra_timer_stopped_by": extra_timer_stopped_by,
+        "extra_timer_confirmed_stop": extra_timer_confirmed_stop,
+        "extra_timer_requested": extra_timer_requested,
+        "extra_timer_pending": extra_timer_pending,
+        "extra_otp_code": extra_otp_code,
+        "extra_otp_verified": extra_otp_verified,
+        "extra_payment_completed": extra_payment_completed,
+        "extra_razor_order_id": extra_razor_order_id,
+        "proposed_extra_minutes": proposed_extra_minutes,
+    }
+
+    # role helper
+    role_for_payload = {"self": "giver" if is_giver else "worker"} if 'is_giver' in locals() else None
+
     rate_type = (booking.rate_type or "").strip().lower()
     is_quantity_based = rate_type in ["per job", "per kilogram", "custom"]
     is_hourly = rate_type == "per hour"
 
-    # ✅ Generate initial OTP to start the job (giver only)
+    # Generate initial OTP to start the job (giver only)
     if is_giver and not getattr(booking, "otp_code", None):
         booking.otp_code = generate_otp()
         db.commit()
 
-    # ✅ Quantity-based flow
+    # Quantity-based flow
     if is_quantity_based and (booking.completed_quantity or 0) >= (booking.quantity or 0):
         if not getattr(booking, "final_otp_code", None):
             booking.final_otp_code = generate_otp()
@@ -153,7 +260,6 @@ def _payload_for_booking(booking: Booking, viewer: User, db: Session) -> dict:
                 return _rating_payload(booking, is_giver, name, map_url)
             return {"show": False, "message": "✅ Job completed and verified."}
 
-        # Still waiting for final OTP — keep chat active
         return {
             "show": True,
             **_payment_flags(booking),
@@ -173,7 +279,7 @@ def _payload_for_booking(booking: Booking, viewer: User, db: Session) -> dict:
             "warnings_remaining": remaining if can_warn_now else None,
         }
 
-    # ✅ Hourly flow
+    # Hourly flow
     time_left = None
     if is_hourly and getattr(booking, "otp_verified", False) and getattr(booking, "otp_verified_time", None):
         duration_secs = (booking.quantity or 0) * 3600
@@ -181,23 +287,60 @@ def _payload_for_booking(booking: Booking, viewer: User, db: Session) -> dict:
         time_left = (expiry_time - now).total_seconds()
 
         if time_left <= 0:
-            # Grace check (extra time)
+            # Grace check (recent request)
             grace_seconds = 15
-            extra_requested = getattr(booking, "extra_timer_requested", False)
+            extra_requested_now = getattr(booking, "extra_timer_requested", False)
             extra_requested_at = getattr(booking, "extra_timer_requested_at", None)
             recent_request = bool(
-                extra_requested
+                extra_requested_now
                 and extra_requested_at
                 and (now - extra_requested_at).total_seconds() <= grace_seconds
             )
 
-            if extra_requested or recent_request:
-                # ensure extra OTP
-                if not getattr(booking, "extra_otp_code", None):
-                    booking.extra_otp_code = generate_otp()
+            # -----------------------------
+            # IMPORTANT FIX: If payment done -> DO NOT end booking.
+            # Start or show the extra timer instead.
+            # -----------------------------
+            if extra_payment_completed:
+                # If extra timer isn't started yet, start it now and set an end time if proposed minutes exist
+                if not getattr(booking, "extra_timer_started_at", None):
+                    booking.extra_timer_started_at = datetime.utcnow()
+                    try:
+                        mins = int(getattr(booking, "proposed_extra_minutes", 0) or 0)
+                    except Exception:
+                        mins = 0
+                    if mins > 0:
+                        booking.extra_timer_ends_at = booking.extra_timer_started_at + timedelta(minutes=mins)
+                    else:
+                        booking.extra_timer_ends_at = None
+                    # mark status to an "Extra Time" state so the chat remains active
+                    booking.status = "Extra Time"
                     db.commit()
 
-                if not getattr(booking, "extra_otp_verified", False):
+                # show running extra timer to frontend
+                extra_elapsed = (datetime.utcnow() - booking.extra_timer_started_at).total_seconds() if booking.extra_timer_started_at else 0
+                return {
+                    "show": True,
+                    **_payment_flags(booking),
+                    "chat_active": True,
+                    "booking_id": booking.id,
+                    "extra_timer_running": True,
+                    "extra_duration_seconds": int(extra_elapsed),
+                    "giver_name": name,
+                    "chat_url": chat_url_for(booking.id),
+                    "map_url": map_url,
+                    "stop_confirmed": getattr(booking, "extra_timer_confirmed_stop", False),
+                    "show_stop_button": is_worker,
+                    "can_issue_warning": can_warn_now,
+                    "warnings_remaining": remaining if can_warn_now else None,
+                }
+
+            # If worker recently requested or request still flagged -> show provider input/payment flow
+            if extra_requested_now or recent_request:
+                proposed_minutes = getattr(booking, "proposed_extra_minutes", None)
+
+                # Provider hasn't created order & payment not done -> show input UI
+                if not getattr(booking, "extra_razor_order_id", None) and not extra_payment_completed:
                     return {
                         "show": True,
                         **_payment_flags(booking),
@@ -205,22 +348,37 @@ def _payload_for_booking(booking: Booking, viewer: User, db: Session) -> dict:
                         "giver_name": name,
                         "chat_url": chat_url_for(booking.id),
                         "map_url": map_url,
-                        "extra_otp_code": booking.extra_otp_code if is_giver else None,
-                        "show_extra_otp_input": is_worker,
+                        "extra_time_proposal": True,
+                        "show_extra_time_input_to_giver": is_giver,
+                        "proposed_minutes": proposed_minutes,
                         "extra_timer_pending": True,
                         "chat_active": True,
                         "time_left": 0,
-                        "message": "⏳ Waiting for Extra OTP verification.",
+                        "message": "Worker requested extra time — enter minutes and confirm to pay.",
+                        **extra,
+                        "role": {"self": "giver" if is_giver else "worker"},
                         "can_issue_warning": can_warn_now,
                         "warnings_remaining": remaining if can_warn_now else None,
                     }
 
-                # Start extra timer if not started
-                if booking.extra_otp_verified and not getattr(booking, "extra_timer_started_at", None):
-                    booking.extra_timer_started_at = datetime.utcnow()
-                    db.commit()
+                # If order created but payment not done -> show waiting-for-payment UI
+                if getattr(booking, "extra_razor_order_id", None) and not extra_payment_completed:
+                    return {
+                        "show": True,
+                        **_payment_flags(booking),
+                        "booking_id": booking.id,
+                        "extra_payment_required": True,
+                        "extra_razor_order_id": getattr(booking, "extra_razor_order_id", None),
+                        "proposed_minutes": getattr(booking, "proposed_extra_minutes", None),
+                        "chat_active": True,
+                        "message": "Waiting for extra-time payment to be completed by provider.",
+                        "can_issue_warning": can_warn_now,
+                        "warnings_remaining": remaining if can_warn_now else None,
+                    }
 
-                # Extra timer running → keep going until stopped
+                # Payment done case handled earlier; proceed to other extra checks...
+
+                # If extra timer already started and not stopped -> return running view
                 if booking.extra_timer_started_at and not getattr(booking, "extra_timer_stopped", False):
                     extra_elapsed = (datetime.utcnow() - booking.extra_timer_started_at).total_seconds()
                     return {
@@ -229,7 +387,7 @@ def _payload_for_booking(booking: Booking, viewer: User, db: Session) -> dict:
                         "chat_active": True,
                         "booking_id": booking.id,
                         "extra_timer_running": True,
-                        "extra_duration_seconds": extra_elapsed,
+                        "extra_duration_seconds": int(extra_elapsed),
                         "giver_name": name,
                         "chat_url": chat_url_for(booking.id),
                         "map_url": map_url,
@@ -239,7 +397,7 @@ def _payload_for_booking(booking: Booking, viewer: User, db: Session) -> dict:
                         "warnings_remaining": remaining if can_warn_now else None,
                     }
 
-                # Extra timer stopped (await/after confirm)
+                # If extra timer stopped & confirmed -> complete booking
                 if getattr(booking, "extra_timer_confirmed_stop", False):
                     booking.status = "Completed"
                     if booking.worker:
@@ -249,7 +407,7 @@ def _payload_for_booking(booking: Booking, viewer: User, db: Session) -> dict:
                         return _rating_payload(booking, is_giver, name, map_url)
                     return {"show": False, "message": "✅ Extra time completed. Job finished."}
 
-                # Stop requested but not yet confirmed
+                # Stop requested but not yet confirmed -> show confirm stop button to relevant party
                 return {
                     "show": True,
                     "chat_active": False,
@@ -262,7 +420,7 @@ def _payload_for_booking(booking: Booking, viewer: User, db: Session) -> dict:
                     "giver_name": name,
                 }
 
-            # No extra timer requested → expire chat
+            # No extra timer requested and no payment -> expire chat and complete booking
             booking.status = "Completed"
             if booking.worker:
                 booking.worker.busy = False
@@ -307,7 +465,7 @@ def _payload_for_booking(booking: Booking, viewer: User, db: Session) -> dict:
         "show_reached_slider": is_worker and not getattr(booking, "worker_arrived", False),
         "otp_verified": getattr(booking, "otp_verified", False),
         "chat_active": True,
-        "time_left": time_left if is_hourly else None,  # ✅ parity fix vs route
+        "time_left": time_left if is_hourly else None,
         "rate_type": booking.rate_type,
         "quantity": booking.quantity or 0,
         "completed_quantity": booking.completed_quantity or 0,
@@ -317,7 +475,12 @@ def _payload_for_booking(booking: Booking, viewer: User, db: Session) -> dict:
         "completed": booking.status == "Completed",
         "rating_pending": (booking.status == "Completed") and (is_giver and not has_giver_rated(db, booking)),
         "role": {"self": "giver" if is_giver else "worker"},
+        **extra,
+        "extra_payment_completed": extra.get("extra_payment_completed", False),
+        "extra_razor_order_id": extra.get("extra_razor_order_id", None),
+        "proposed_extra_minutes": extra.get("proposed_extra_minutes", None),
     }
+
 
 
 def _rating_payload(booking: Booking, is_giver: bool, name: str, map_url: str) -> dict:
@@ -389,6 +552,23 @@ def get_booking_details(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+
+    if getattr(current_user, "id", None):
+        try:
+            pending = _find_pending_rating_booking_for_giver(db, provider_id=current_user.id)
+            if pending:
+
+                pending = (
+                    db.query(Booking)
+                    .options(joinedload(Booking.provider), joinedload(Booking.worker))
+                    .filter(Booking.id == pending.id)
+                    .first()
+                )
+                if pending:
+                    return _payload_for_booking(pending, current_user, db)
+        except Exception:
+            db.rollback()
+
     booking = (
         db.query(Booking)
         .options(joinedload(Booking.provider), joinedload(Booking.worker))
