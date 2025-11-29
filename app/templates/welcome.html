@@ -861,26 +861,53 @@
 
             const j = await res.json();
             if (!res.ok) {
-                alert(j.detail || "Failed");
+                alert(j.detail || "Failed to create extra-time order");
                 return;
             }
 
             const options = {
                 key: j.key_id,
-                amount: j.amount,
-                currency: j.currency,
+                amount: j.amount,               // paise
+                currency: j.currency || "INR",
                 name: "Sahayi - Extra Time",
+                description: `Extra time (${minutes} min)`,
                 order_id: j.order_id,
-                handler: async function () {
-                    alert("Payment Successful! Extra time started.");
-                    document.getElementById("extra-confirm-modal").style.display = "none";
-                    startExtraTimer(minutes);
+                handler: async function (resp) {
+                    try {
+                        // CALL BACKEND TO CREDIT WORKER WALLET
+                        const vr = await fetch("/razorpay/verify_extra_payment", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            credentials: "same-origin",
+                            body: JSON.stringify({
+                                booking_id: bookingId,
+                                extra_minutes: minutes,
+                                razorpay_payment_id: resp.razorpay_payment_id,
+                                razorpay_order_id: resp.razorpay_order_id,
+                                razorpay_signature: resp.razorpay_signature
+                            })
+                        });
+
+                        const vv = await vr.json();
+
+                        if (vr.ok && vv.success) {
+                            alert("✅ Extra time paid and wallet credited");
+                            document.getElementById("extra-confirm-modal").style.display = "none";
+                            startExtraTimer(minutes);  // UI timer
+                        } else {
+                            alert(vv.detail || vv.message || "Verification failed; will be processed by webhook if delivered.");
+                        }
+                    } catch (e) {
+                        console.error(e);
+                        alert("Network error while verifying extra payment");
+                    }
                 }
             };
 
             const razor = new Razorpay(options);
             razor.open();
         });
+
       </script>
            <!-- 🚨 Warn Sahayi Button -->
       <button id="warn-sahayi-btn" class="btn btn-danger mt-3" style="display:none;">⚠ Warn Sahayi</button>
@@ -1719,12 +1746,31 @@ function setRoleFromBookingData(data) {
     }
   }
 
-  // Conservative default: hide privileged UI
-  console.warn('Booking payload missing role; hiding privileged UI. Payload:', data);
-  CURRENT_USER_ROLE = null;
-  document.body.dataset.role = '';
+  // No role info → keep existing role instead of clearing it
+  console.warn(
+    'Booking payload missing role; keeping existing CURRENT_USER_ROLE =',
+    CURRENT_USER_ROLE,
+    'Payload:',
+    data
+  );
+  return;
 }
 
+
+// Global: remember for which bookings warn is permanently disabled (PERSISTED)
+try {
+  window.__WARN_LOCK = JSON.parse(localStorage.getItem('WARN_LOCK') || '{}') || {};
+} catch (e) {
+  window.__WARN_LOCK = {};
+}
+
+function lockWarnForBooking(bookingId) {
+  if (!bookingId) return;
+  window.__WARN_LOCK[bookingId] = true;
+  try {
+    localStorage.setItem('WARN_LOCK', JSON.stringify(window.__WARN_LOCK));
+  } catch (e) {}
+}
 
 
 function applyRoleUI(data){
@@ -1733,11 +1779,8 @@ function applyRoleUI(data){
   const reached = document.getElementById('reached-location-section');
   const otpIn   = document.getElementById('otp-input-section');
 
-  // ensure role is applied first
-  // (setRoleFromBookingData should have run already; fallback to body dataset)
   const role = (typeof CURRENT_USER_ROLE === 'string') ? CURRENT_USER_ROLE : document.body.dataset.role;
 
-  // defensive booleans (coerce to strict booleans)
   const canIssue = !!(data && (data.can_issue_warning || data.allow_warn));
   const isExtraFlow = !!(
     data &&
@@ -1745,33 +1788,58 @@ function applyRoleUI(data){
       data.extra_time_proposal ||
       data.extra_timer_running ||
       data.extra_timer_pending ||
-      data.status === "Extra Time"   // 🔥 Add this line
+      data.status === "Extra Time"
     )
   );
 
-  const otpVerified = !!(data && data.otp_verified);
+  const otpVerified   = !!(data && data.otp_verified);
   const workerArrived = !!(data && data.worker_arrived);
-  const showReached = !!(data && data.show_reached_slider);
-  const showOtpInput = !!(data && data.show_otp_input);
+  const showReached   = !!(data && data.show_reached_slider);
+  const showOtpInput  = !!(data && data.show_otp_input);
 
-  // map button only for worker
+  // Current booking id from payload (adjust if your field name differs)
+  const bookingId = data && (data.booking_id || data.id);
+
+  // If we ever see "arrived" for this booking → lock it permanently
+  if (workerArrived && bookingId) {
+    lockWarnForBooking(bookingId);
+  }
+
+  const isLocked =
+    bookingId &&
+    window.__WARN_LOCK &&
+    window.__WARN_LOCK[bookingId] === true;
+
+  // Map button only for worker
   if (mapBtn) mapBtn.style.display = (role === 'worker') ? 'inline-block' : 'none';
 
-  // WARN: only show for giver AND explicitly allowed AND not in extra/otp/arrived states
+  // Warn button – never show if locked OR after otp/arrival/extra-time
   if (warnBtn) {
-    const shouldShowWarn = (role === 'giver') && canIssue && !isExtraFlow && !otpVerified && !workerArrived;
+    const shouldShowWarn =
+      !isLocked &&
+      role === 'giver' &&
+      canIssue &&
+      !isExtraFlow &&
+      !otpVerified &&
+      !workerArrived;
+
     warnBtn.style.display = shouldShowWarn ? 'inline-block' : 'none';
   }
 
-  // reached slider & otp input for worker
+  // Worker UI bits
   if (reached) reached.style.display = (role === 'worker' && showReached) ? 'block' : 'none';
   if (otpIn)   otpIn.style.display   = (role === 'worker' && showOtpInput) ? 'block' : 'none';
 
-  console.debug('applyRoleUI: role=', role,
-                'canIssue=', canIssue, 'isExtraFlow=', isExtraFlow,
-                'otpVerified=', otpVerified, 'workerArrived=', workerArrived,
-                'warnBtnShown=', (warnBtn && warnBtn.style.display));
+  console.debug(
+    'applyRoleUI: role=', role,
+    'bookingId=', bookingId,
+    'locked=', isLocked,
+    'canIssue=', canIssue,
+    'workerArrived=', workerArrived,
+    'warnDisplay=', warnBtn && warnBtn.style.display
+  );
 }
+
 
 // --- simple in-memory cache (≈100m cell via 3-decimal rounding) ---
 const _geoCache = new Map();
@@ -2102,6 +2170,14 @@ async function checkBookingStatusAndShowChat() {
 
   data = data || {};
 
+  // track if extra timer was already running for this booking
+  if (!window.__extraTimerRunningByBooking) window.__extraTimerRunningByBooking = {};
+  const prevExtraRunning =
+    data.booking_id && window.__extraTimerRunningByBooking
+      ? !!window.__extraTimerRunningByBooking[data.booking_id]
+      : false;
+
+
   // DEBUG: inspect booking payload to verify flags for extra-time
   try {
     console.debug("DEBUG booking payload:", {
@@ -2290,9 +2366,24 @@ async function checkBookingStatusAndShowChat() {
 
     // extra timer handling
     if (data.extra_timer_pending) {
-      if (chatInput) chatInput.disabled = true;
-      if (chatTimer) chatTimer.textContent = data.message || "⏳ Extra timer will start shortly.";
+      const proposedMin = Number(data.proposed_extra_minutes || data.proposed_minutes || 0);
+
+      if (CURRENT_USER_ROLE === "worker") {
+        // Worker: cannot type while waiting for giver to pay
+        if (chatInput) chatInput.disabled = true;
+        if (chatTimer) {
+          chatTimer.textContent = proposedMin
+            ? `⏳ Waiting for extra-time confirmation for ${proposedMin} minutes.`
+            : "⏳ Waiting for extra-time confirmation.";
+        }
+      } else if (CURRENT_USER_ROLE === "giver") {
+        // Giver: sees only the inline Confirm & Pay box, no extra message in timer
+        if (chatTimer) chatTimer.textContent = "";
+        if (chatInput) chatInput.disabled = false;
+      }
     }
+
+
 
     if (data.extra_timer_running) {
       if (window.chatCountdown) { clearInterval(window.chatCountdown); window.chatCountdown = null; }
@@ -2316,6 +2407,17 @@ async function checkBookingStatusAndShowChat() {
           remaining = null; // unknown length -> treat defensively
         }
       }
+
+      // One-time message for worker when extra time is approved
+      const extraMinutes = Number(data.proposed_extra_minutes || data.proposed_minutes || 0);
+      if (!prevExtraRunning && CURRENT_USER_ROLE === "worker" && chatTimer) {
+        if (extraMinutes > 0) {
+          chatTimer.textContent = `✅ Extra time approved for ${extraMinutes} minutes.`;
+        } else {
+          chatTimer.textContent = "✅ Extra time approved.";
+        }
+      }
+
 
       if (window.extraChatCountdown) { clearInterval(window.extraChatCountdown); window.extraChatCountdown = null; }
       if (remaining === null) {
@@ -2367,6 +2469,7 @@ async function checkBookingStatusAndShowChat() {
       document.getElementById("otp-input-section").style.display = "block";
     }
 
+
     // chat timing logic
     if (!data.otp_verified) {
       if (chatInput) chatInput.disabled = false;
@@ -2387,11 +2490,48 @@ async function checkBookingStatusAndShowChat() {
           clearInterval(window.chatCountdown);
           window.chatCountdown = null;
 
-          if (data.extra_timer_pending) {
-            if (chatTimer) chatTimer.textContent = data.message || "⏳ Waiting for Extra OTP verification.";
+          // 🔴 Detect if extra-time negotiation is going on
+          const extraFlowActive = !!(
+            data.extra_timer_requested ||        // worker clicked "Request extra time"
+            data.extra_razor_order_id ||        // Razorpay order created
+            data.extra_payment_completed ||      // payment recorded, waiting for /start_extra_timer
+            data.extra_timer_pending             // any pending flag your backend sets
+          );
+
+          if (extraFlowActive) {
+
+            if (data.booking_id) {
+              if (!window.__mainTimerEndedByBooking) window.__mainTimerEndedByBooking = {};
+              window.__mainTimerEndedByBooking[data.booking_id] = true;
+            }
+
+            // DO NOT end booking. Keep chat + extra-time UI alive.
+            if (chatTimer) {
+              if (CURRENT_USER_ROLE === "worker") {
+                const proposedMin = Number(data.proposed_extra_minutes || data.proposed_minutes || 0);
+                chatTimer.textContent =
+                  data.message ||
+                  (proposedMin
+                    ? `⏳ Waiting for extra-time confirmation for ${proposedMin} minutes.`
+                    : "⏳ Waiting for extra-time confirmation.");
+              } else {
+                // giver: no timer message; they already see Confirm & Pay box
+                chatTimer.textContent = "";
+              }
+            }
+
+            // worker stays locked while payment pending; giver can type
+            if (CURRENT_USER_ROLE === "worker") {
+              if (chatInput) chatInput.disabled = true;
+            } else {
+              if (chatInput) chatInput.disabled = false;
+            }
+
             return;
           }
 
+
+          // No extra-time flow → old behaviour (end booking)
           if (chatInput) chatInput.disabled = true;
           if (chatTimer) chatTimer.textContent = "⛔ Chat time expired.";
           document.getElementById("chat-link").style.display = "none";
@@ -2401,7 +2541,7 @@ async function checkBookingStatusAndShowChat() {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ booking_id: getCurrentBookingId() })
-          }).catch(()=>{});
+          }).catch(() => {});
 
           return;
         }
@@ -2411,6 +2551,7 @@ async function checkBookingStatusAndShowChat() {
         if (chatTimer) chatTimer.textContent = `🕒 Chat will expire in ${mins}m ${secs}s`;
         timeLeft--;
       }, 1000);
+
     } else if (data.rate_type !== 'per hour' && data.chat_active) {
       // per-job: keep open until completion
       if (chatInput) chatInput.disabled = false;
@@ -2442,6 +2583,9 @@ async function checkBookingStatusAndShowChat() {
     }
   } catch (e) {
     console.warn("UI update failed in checkBookingStatusAndShowChat:", e);
+  }
+  if (data.booking_id) {
+    window.__extraTimerRunningByBooking[data.booking_id] = true;
   }
 }
 
@@ -2551,14 +2695,44 @@ function initExtraModalHandlers() {
     const inlineCancel  = document.getElementById('extra-inline-cancel');
     const inlineInput   = document.getElementById('extra-inline-minutes');
 
-    // cancel -> hide inline box
+    // cancel -> call backend + hide inline box
     if (inlineCancel) {
-      inlineCancel.addEventListener('click', (e) => {
+      inlineCancel.addEventListener('click', async (e) => {
         e.preventDefault();
+
+        function _getBookingIdForExtraInline() {
+          if (typeof getCurrentBookingId === 'function') try { return getCurrentBookingId(); } catch {}
+          if (typeof currentBookingId !== 'undefined' && currentBookingId) return currentBookingId;
+          const el = document.querySelector('[data-booking-id]');
+          if (el) return el.dataset.bookingId;
+          return null;
+        }
+
+        const bookingId = _getBookingIdForExtraInline();
+        if (bookingId) {
+          try {
+            await fetch('/cancel_extra_time', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ booking_id: bookingId })
+            });
+          } catch (err) {
+            console.warn('cancel_extra_time failed', err);
+          }
+
+          // user explicitly cancelled → stop sticky behaviour for this booking
+          if (window.__extraInlineSticky) {
+            delete window.__extraInlineSticky[bookingId];
+          }
+        }
+
         const inline = document.getElementById('extra-time-inline');
         if (inline) inline.style.display = 'none';
+
+
       });
     }
+
 
     // confirm -> reuse the same confirm logic as modal (create order + open razorpay)
     if (inlineConfirm) {
@@ -2585,6 +2759,11 @@ function initExtraModalHandlers() {
           alert('Booking id not found. Refresh the page and try again.');
           return;
         }
+
+        // mark this booking as having an active inline extra-time flow
+        if (!window.__extraInlineSticky) window.__extraInlineSticky = {};
+        window.__extraInlineSticky[bookingId] = true;
+
 
         // Create order server-side
         try {
@@ -2617,47 +2796,117 @@ function initExtraModalHandlers() {
             currency: j.currency || 'INR',
             name: 'Sahayi - Extra Time',
             description: `${minutes} extra minutes`,
+
             handler: async function (response) {
+              const inline = document.getElementById('extra-time-inline');
+
               try {
-                // inform your server to start the extra timer
+                // 1) Verify + credit wallet on server
+                const verifyRes = await fetch('/razorpay/verify_extra_payment', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    booking_id: bookingId,
+                    extra_minutes: minutes,
+                    razorpay_payment_id: response.razorpay_payment_id,
+                    razorpay_order_id: response.razorpay_order_id,
+                    razorpay_signature: response.razorpay_signature
+                  })
+                });
+
+                const verifyJson = await verifyRes.json().catch(() => ({}));
+                if (!verifyRes.ok || !verifyJson.success) {
+                  // Payment captured but our server failed → keep box visible
+                  alert(
+                    (verifyJson && (verifyJson.detail || verifyJson.message)) ||
+                    'Payment captured but failed to verify / credit wallet. Please contact support.'
+                  );
+                  if (inline) inline.style.display = 'block';
+                  return;
+                }
+
+                // 2) Start extra timer on server
                 const startRes = await fetch('/start_extra_timer', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ booking_id: bookingId, extra_minutes: minutes })
                 });
 
-                const startJson = await startRes.json().catch(()=>({success:!!startRes.ok}));
+                const startJson = await startRes.json().catch(() => ({ success: !!startRes.ok }));
                 if (!startRes.ok || !startJson.success) {
-                  alert((startJson && startJson.message) ? startJson.message : 'Payment received but failed to start extra time on server.');
-                  // still start local timer for UX
-                  if (typeof startLocalExtraTimer === 'function') startLocalExtraTimer(minutes, bookingId);
-                  document.getElementById('extra-time-inline').style.display = 'none';
+                  // Payment verified but timer not started → keep box visible
+                  alert(
+                    (startJson && startJson.message) ||
+                    'Payment verified but failed to start extra time on server.'
+                  );
+                  if (inline) inline.style.display = 'block';
                   return;
                 }
 
-                // success -> hide inline & start local timer UI
-                document.getElementById('extra-time-inline').style.display = 'none';
-                if (typeof startLocalExtraTimer === 'function') startLocalExtraTimer(minutes, bookingId);
+                // ✅ FULL SUCCESS: payment OK + extra timer started
+                if (inline) inline.style.display = 'none';
 
-                // refresh booking status a few times to pick up server changes
+                // clear sticky flag for this booking
+                if (window.__extraInlineSticky && bookingId) {
+                  delete window.__extraInlineSticky[bookingId];
+                }
+
+                if (typeof startLocalExtraTimer === 'function') {
+                  startLocalExtraTimer({
+                    minutes,
+                    bookingId,
+                    endsAtIso: startJson.extra_timer_ends_at || null
+                  });
+                }
+
+                // Refresh chat status for a short period
                 const start = Date.now();
                 const poll = setInterval(async () => {
                   try { await checkBookingStatusAndShowChat(); } catch (e) {}
                   if (Date.now() - start > 20000) clearInterval(poll);
                 }, 1500);
+
               } catch (err) {
-                console.error('Failed to confirm/start extra timer after payment', err);
-                alert('Payment received but failed to start extra time. Please contact support.');
+                console.error('Failed to verify/start extra timer after payment', err);
+                // Network error → keep box visible
+                alert('Payment received but failed to verify / start extra time. Please contact support.');
+                if (inline) inline.style.display = 'block';
               }
             },
+
             modal: {
-              ondismiss: function() { /* user cancelled checkout */ }
+              ondismiss: function () {
+                // Razorpay popup closed without completing payment
+                const inline = document.getElementById('extra-time-inline');
+                if (inline) inline.style.display = 'block';
+
+                const chatTimer = document.getElementById('chat-timer');
+                if (chatTimer) {
+                  chatTimer.textContent =
+                    'Payment cancelled. You can adjust minutes and try again or press Cancel.';
+                }
+
+                // restore minutes the user had entered, if needed
+                if (inlineInput && !inlineInput.value) {
+                  inlineInput.value = String(minutes);
+                }
+
+                if (!window.__extraInlineSticky) window.__extraInlineSticky = {};
+                window.__extraInlineSticky[bookingId] = true;
+
+              }
             },
-            notes: { booking_id: String(bookingId), extra_minutes: String(minutes) }
+
+
+            notes: {
+              booking_id: String(bookingId),
+              extra_minutes: String(minutes)
+            }
           };
 
           const rzp = new window.Razorpay(options);
           rzp.open();
+
 
         } catch (err) {
           console.error('Extra time confirm (inline) failed', err);
@@ -2756,7 +3005,7 @@ function initExtraModalHandlers() {
   }
 
 
-  // Attach confirm handler (this is your original confirm logic — keep behaviour)
+    // Attach confirm handler (Confirm & Pay in the modal)
   extraConfirmBtn?.addEventListener("click", async () => {
     const mins = Number(extraMinutesInput.value || 0);
     if (!mins || mins <= 0) {
@@ -2784,11 +3033,12 @@ function initExtraModalHandlers() {
       });
 
       if (!res.ok) {
-        const err = await res.json().catch(()=>({detail:"Failed to create order"}));
+        const err = await res.json().catch(() => ({ detail: "Failed to create order" }));
         extraMsg.style.color = "red";
         extraMsg.textContent = err.detail || "Failed to create order.";
         return;
       }
+
       const orderData = await res.json();
       extraMsg.textContent = "Opening payment window…";
 
@@ -2810,28 +3060,61 @@ function initExtraModalHandlers() {
         name: "Sahayi - Extra Time",
         description: `${mins} extra minutes`,
         handler: async function (response) {
+          // response has: razorpay_payment_id, razorpay_order_id, razorpay_signature
           extraMsg.style.color = "#28a745";
-          extraMsg.textContent = "Payment success — starting extra time…";
+          extraMsg.textContent = "Payment success — verifying and starting extra time…";
 
           try {
+            // 1) Verify payment + credit worker wallet
+            const vr = await fetch("/razorpay/verify_extra_payment", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                booking_id: bookingId,
+                extra_minutes: mins,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_signature: response.razorpay_signature
+              })
+            });
+
+            const vj = await vr.json().catch(() => ({}));
+            if (!vr.ok || !vj.success) {
+              extraMsg.style.color = "red";
+              extraMsg.textContent =
+                vj.detail ||
+                vj.message ||
+                "Payment captured but verification failed; wallet credit may happen later via webhook.";
+              return;
+            }
+
+            // 2) Start extra timer on server
             const startRes = await fetch("/start_extra_timer", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ booking_id: bookingId, extra_minutes: mins })
             });
 
-            const startJson = await startRes.json().catch(()=>({success:!!startRes.ok}));
-
+            const startJson = await startRes.json().catch(() => ({ success: !!startRes.ok }));
             if (!startRes.ok || !startJson.success) {
               extraMsg.style.color = "red";
-              extraMsg.textContent = (startJson && startJson.message) ? startJson.message : "Payment received but failed to start extra time on server.";
-              startLocalExtraTimer(mins, bookingId);
-              setTimeout(() => { if (extraModal) extraModal.style.display = 'none'; }, 1500);
+              extraMsg.textContent =
+                (startJson && startJson.message) ||
+                "Payment verified but failed to start extra time on server.";
+              // still show local timer so UI moves on
+              startLocalExtraTimer({ minutes: mins, bookingId });
+              setTimeout(() => { if (extraModal) extraModal.style.display = "none"; }, 1500);
               return;
             }
 
+            // 3) Success → hide modal, start local countdown, refresh
             if (extraModal) extraModal.style.display = "none";
-            startLocalExtraTimer(mins, bookingId);
+            startLocalExtraTimer({
+              minutes: mins,
+              bookingId,
+              endsAtIso: startJson.extra_timer_ends_at || null,
+              extra_duration_seconds: startJson.extra_duration_seconds || null
+            });
 
             const start = Date.now();
             const poll = setInterval(async () => {
@@ -2840,13 +3123,14 @@ function initExtraModalHandlers() {
             }, 1500);
 
           } catch (err) {
-            console.error("Failed to confirm/start extra timer after payment", err);
+            console.error("Failed to verify/start extra time after payment", err);
             extraMsg.style.color = "red";
-            extraMsg.textContent = "Payment received but failed to start extra time. Please contact support.";
+            extraMsg.textContent =
+              "Payment received but failed to verify or start extra time. Please contact support.";
           }
         },
         modal: {
-          ondismiss: function() {
+          ondismiss: function () {
             extraMsg.style.color = "#666";
             extraMsg.textContent = "Payment cancelled or closed. No change made.";
           }
@@ -2869,160 +3153,109 @@ function initExtraModalHandlers() {
 }
 
 
-// Confirm button: create order -> open Razorpay -> on payment success call start_extra_timer
-extraConfirmBtn?.addEventListener("click", async () => {
-  const mins = Number(extraMinutesInput.value || 0);
-  if (!mins || mins <= 0) {
-    extraMsg.style.color = "red";
-    extraMsg.textContent = "Please enter a valid number of minutes.";
-    extraMinutesInput.focus();
-    return;
-  }
-
-  extraMsg.style.color = "#666";
-  extraMsg.textContent = "Creating payment order…";
-
-  const bookingId = _getBookingIdForExtra();
-  if (!bookingId) {
-    extraMsg.style.color = "red";
-    extraMsg.textContent = "Booking id not found. Refresh the page and try again.";
-    return;
-  }
-
-  try {
-    // 1) Create Razorpay order server-side (server returns order data)
-    const res = await fetch(`/razorpay/create_order_for_extra/${encodeURIComponent(bookingId)}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ extra_minutes: mins })
-    });
-
-    if (!res.ok) {
-      const err = await res.json().catch(()=>({detail:"Failed to create order"}));
-      extraMsg.style.color = "red";
-      extraMsg.textContent = err.detail || "Failed to create order.";
-      return;
-    }
-    const orderData = await res.json();
-    extraMsg.textContent = "Opening payment window…";
-
-    // 2) Load Razorpay script if necessary
-    if (!window.Razorpay) {
-      await new Promise((resolve, reject) => {
-        const s = document.createElement("script");
-        s.src = "https://checkout.razorpay.com/v1/checkout.js";
-        s.onload = resolve;
-        s.onerror = reject;
-        document.head.appendChild(s);
-      });
-    }
-
-    // 3) Configure Razorpay checkout. On successful payment -> call server to start extra timer
-    const options = {
-      key: orderData.key_id,
-      order_id: orderData.order_id,
-      amount: orderData.amount,
-      currency: orderData.currency || "INR",
-      name: "Sahayi - Extra Time",
-      description: `${mins} extra minutes`,
-      handler: async function (response) {
-        // Payment success → inform server to start the extra timer with the minutes entered by the giver.
-        extraMsg.style.color = "#28a745";
-        extraMsg.textContent = "Payment success — starting extra time…";
-
-        try {
-          const startRes = await fetch("/start_extra_timer", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ booking_id: bookingId, extra_minutes: mins })
-          });
-
-          const startJson = await startRes.json().catch(()=>({success:!!startRes.ok}));
-
-          if (!startRes.ok || !startJson.success) {
-            // Server didn't start the timer for some reason — still show message and attempt to refresh.
-            extraMsg.style.color = "red";
-            extraMsg.textContent = (startJson && startJson.message) ? startJson.message : "Payment received but failed to start extra time on server.";
-            // Still attempt to run local timer for UX if you want:
-            startLocalExtraTimer(mins, bookingId);
-            setTimeout(() => { if (extraModal) extraModal.style.display = 'none'; }, 1500);
-            return;
-          }
-
-          // Success — hide modal, start local timer UI for immediate feedback
-          if (extraModal) extraModal.style.display = "none";
-          startLocalExtraTimer(mins, bookingId);
-
-          // Optional: refresh booking status a few times to pick up server-side changes
-          const start = Date.now();
-          const poll = setInterval(async () => {
-            try { await checkBookingStatusAndShowChat(); } catch (e) {}
-            if (Date.now() - start > 20000) clearInterval(poll);
-          }, 1500);
-
-        } catch (err) {
-          console.error("Failed to confirm/start extra timer after payment", err);
-          extraMsg.style.color = "red";
-          extraMsg.textContent = "Payment received but failed to start extra time. Please contact support.";
-        }
-      },
-      modal: {
-        ondismiss: function() {
-          extraMsg.style.color = "#666";
-          extraMsg.textContent = "Payment cancelled or closed. No change made.";
-        }
-      },
-      notes: {
-        booking_id: String(bookingId),
-        extra_minutes: String(mins)
-      }
-    };
-
-    const rzp = new window.Razorpay(options);
-    rzp.open();
-
-  } catch (err) {
-    console.error("Payment flow failed", err);
-    extraMsg.style.color = "red";
-    extraMsg.textContent = "Unable to open payment window.";
-  }
-});
-
+// keep extra-time inline box visible for this booking until payment succeeds
+window.__extraInlineSticky = window.__extraInlineSticky || {};
 
 function maybeShowExtraConfirmForProvider(payload) {
+  const modal  = document.getElementById("extra-confirm-modal");
+  const inline = document.getElementById("extra-time-inline");
+
+  // No booking → hide everything
   if (!payload) {
-    const modal = document.getElementById('extra-confirm-modal');
-    const inline = document.getElementById('extra-time-inline');
-    if (modal) modal.style.display = 'none';
-    if (inline) inline.style.display = 'none';
+    if (modal)  modal.style.display  = "none";
+    if (inline) inline.style.display = "none";
     return;
   }
 
-  const isProvider =
-    CURRENT_USER_ROLE === 'giver' ||
-    CURRENT_USER_ROLE === 'provider' ||
-    document.body.dataset.role === 'giver';
+  const bookingId = payload.booking_id || payload.id || null;
 
-  // ✅ Correct logic: show only when worker just requested
+  // --- Figure out if this user is the provider (giver) ---
+  const rawRole = (window.CURRENT_USER_ROLE || document.body.dataset.role || "").toLowerCase();
+  let isProvider = rawRole === "giver" || rawRole === "provider";
+
+  // Only try to "guess" provider if we DON'T know the role at all.
+  // If rawRole is "worker", never override it.
+  if (!isProvider && !rawRole) {
+    const providerHints = !!(
+      payload.show_extra_time_input_to_giver ||
+      payload.extra_time_proposal ||
+      payload.extra_timer_requested ||
+      payload.extra_payment_required ||
+      payload.extra_razor_order_id
+    );
+    if (providerHints) {
+      isProvider = true;
+    }
+  }
+
+
+  if (!isProvider) {
+    if (modal)  modal.style.display  = "none";
+    if (inline) inline.style.display = "none";
+    return;
+  }
+
+  // Has worker requested extra time? (any of the flags)
+  const workerRequested = !!(
+    payload.show_extra_time_input_to_giver ||
+    payload.extra_time_proposal ||
+    payload.extra_timer_requested
+  );
+
+  // Extra order exists / payment stage active
+  const extraPending = !!(
+    payload.extra_timer_pending ||
+    payload.extra_payment_required ||     // <─ NEW: treat payment-required as pending
+    payload.extra_razor_order_id         // <─ NEW: order created but not finished
+  );
+
+  // Extra already running or fully paid → no inline box
+  const extraRunning  = !!payload.extra_timer_running;
+  const extraFinished = !!payload.extra_payment_completed;
+
+  // MAIN timer considered "ended" when:
+  //  - server says NOT (chat_active && time_left > 0), OR
+  //  - our local flag says it ended for this booking.
+  const timeLeft = Number(payload.time_left || 0);
+  let mainTimerEnded = !(payload.chat_active && timeLeft > 0);
   if (
-    isProvider &&
-    (payload.show_extra_time_input_to_giver || payload.extra_time_proposal)
+    bookingId &&
+    window.__mainTimerEndedByBooking &&
+    window.__mainTimerEndedByBooking[bookingId]
   ) {
-    const modal = document.getElementById('extra-confirm-modal');
-    const inline = document.getElementById('extra-time-inline');
-    if (modal) modal.style.display = 'none';
-    if (inline) inline.style.display = 'block';
-    const input = document.getElementById('extra-inline-minutes');
-    if (input) { input.value = ''; input.focus(); }
-    return;
+    mainTimerEnded = true;
   }
 
-  // default: hide both
-  const modal = document.getElementById('extra-confirm-modal');
-  const inline = document.getElementById('extra-time-inline');
-  if (modal) modal.style.display = 'none';
-  if (inline) inline.style.display = 'none';
+  // sticky flag: once user opened Razorpay for this booking, keep inline visible
+  const stickyMap = window.__extraInlineSticky || {};
+  const stickyForBooking = bookingId && stickyMap[bookingId];
+
+  const shouldShowInline =
+    !extraRunning &&
+    !extraFinished &&
+    (
+      (mainTimerEnded && (workerRequested || extraPending)) ||
+      stickyForBooking
+    );
+
+  if (shouldShowInline) {
+    if (modal)  modal.style.display  = "none";
+    if (inline) inline.style.display = "block";
+
+    const input = document.getElementById("extra-inline-minutes");
+    if (input) {
+      if (!input.value && payload.proposed_extra_minutes) {
+        input.value = payload.proposed_extra_minutes;
+      }
+      input.focus();
+    }
+  } else {
+    if (modal)  modal.style.display  = "none";
+    if (inline) inline.style.display = "none";
+  }
 }
+
+
 
 
 function getDistanceFromLatLon(lat1, lon1, lat2, lon2) {
@@ -3437,53 +3670,91 @@ function showOrHideChatPanel(data) {
 
 const slider = document.getElementById("reached-slider");
 slider?.addEventListener("change", async () => {
-  if (slider.value == 100) {  // only when fully slid
-    if (!navigator.geolocation) {
-      alert("❌ Geolocation not supported");
-      return;
+  if (slider.value != 100) return; // only act when fully slid
+
+  const msgEl = document.getElementById("reached-msg");
+
+  if (!navigator.geolocation) {
+    alert("❌ Geolocation not supported");
+    slider.value = 0;
+    return;
+  }
+
+  try {
+    // Optional: refresh UI/server with latest location first (recommended)
+    // This reuses your existing helper that updates UI and calls /update_location
+    if (typeof fetchLocationAndUpdate === "function") {
+      // give it a chance to update server/UI first
+      await fetchLocationAndUpdate().catch(() => {});
+      // small pause so the browser can stabilise (optional)
+      await new Promise(r => setTimeout(r, 400));
     }
 
+    // Force a fresh geolocation read — do not use a cached reading
     navigator.geolocation.getCurrentPosition(async pos => {
-      const lat = pos.coords.latitude, lon = pos.coords.longitude;
+      try {
+        const lat = pos.coords.latitude;
+        const lon = pos.coords.longitude;
 
-      const res = await fetch(`/verify_worker_location/${currentBookingId}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ latitude: lat, longitude: lon })
-      });
+        // Send the freshly-read coords to the server verify endpoint
+        const res = await fetch(`/verify_worker_location/${currentBookingId}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ latitude: lat, longitude: lon })
+        });
 
-      const data = await res.json();
-      const msgEl = document.getElementById("reached-msg");
+        const data = await res.json();
 
-      if (data.allow_otp) {
-        msgEl.style.color = "green";
-        msgEl.textContent = "✅ You are at the job location!";
-        setTimeout(() => { msgEl.textContent = ""; }, 2000);
+        if (data && data.allow_otp) {
+          msgEl.style.color = "green";
+          msgEl.textContent = "✅ You are at the job location!";
+          setTimeout(() => { msgEl.textContent = ""; }, 2000);
 
-        // Show OTP input box
-        document.getElementById("otp-input-section").style.display = "block";
-        document.getElementById("reached-location-section").style.display = "none";
+          // Show OTP input, hide slider
+          document.getElementById("otp-input-section").style.display = "block";
+          document.getElementById("reached-location-section").style.display = "none";
 
-        markArrivalConfirmed(); // ✅ cancel warn timer when worker confirms arrival
+          markArrivalConfirmed(); // cancel warn timer when worker confirms arrival
 
           try {
             await fetch(`/worker_arrived/${currentBookingId}`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ arrived: true })
-            });
-            // no need to await response body; server should persist and subsequent /get_booking_details will include arrival_confirmed
+            }).catch(()=>{});
           } catch (err) {
             console.warn("Failed to notify server about arrival:", err);
           }
-
-      } else {
+        } else {
+          msgEl.style.color = "red";
+          msgEl.textContent = (data && data.message) ? data.message : "❌ You are not within the required distance.";
+          setTimeout(() => { msgEl.textContent = ""; }, 3000);
+          slider.value = 0; // reset slider
+        }
+      } catch (err) {
+        console.error("Verification request failed", err);
         msgEl.style.color = "red";
-        msgEl.textContent = data.message;
+        msgEl.textContent = "Network error. Try again.";
         setTimeout(() => { msgEl.textContent = ""; }, 3000);
-        slider.value = 0; // reset slider
+        slider.value = 0;
       }
+    }, async (err) => {
+      console.warn("Geolocation error on verify:", err);
+      msgEl.style.color = "red";
+      msgEl.textContent = "Unable to get location. Ensure GPS is enabled and try again.";
+      setTimeout(() => { msgEl.textContent = ""; }, 3000);
+      slider.value = 0;
+    }, {
+      enableHighAccuracy: true,
+      timeout: 10000,
+      maximumAge: 0 // important — do not use cached position
     });
+  } catch (outerErr) {
+    console.error("Reached-slider handler error", outerErr);
+    msgEl.style.color = "red";
+    msgEl.textContent = "Error. Try again.";
+    setTimeout(() => { msgEl.textContent = ""; }, 3000);
+    slider.value = 0;
   }
 });
 

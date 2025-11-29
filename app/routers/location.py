@@ -99,7 +99,7 @@ def _extract_mapbox(fields: dict) -> GetLocDetailsOut:
     )
 
 def _mapbox_reverse_geocode(lat: float, lon: float) -> GetLocDetailsOut:
-    token = settings.MAPBOX_TOKEN or ""
+    token = settings.MAPBOX_ACCESS_TOKEN or ""
     if not token:
         # dev token; replace with your own
         token = "pk.eyJ1IjoiajBpMyIsImEiOiJjbWc5MHducmMwYWp5MmpzNmdvcTkxbHJlIn0.NHz6uC-dHVysD-SvDLmAgw"

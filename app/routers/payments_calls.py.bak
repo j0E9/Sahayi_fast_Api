@@ -14,7 +14,6 @@ import logging, os, hmac, hashlib
 from hmac import compare_digest
 from decimal import Decimal
 from datetime import datetime, timedelta
-from decimal import Decimal, ROUND_HALF_UP
 # Wallet services
 from app.services.wallet import add_ledger_row, compute_balance
 
@@ -323,21 +322,8 @@ def create_razorpay_order(
     if booking.rate is None or booking.quantity is None:
         raise HTTPException(status_code=400, detail="Missing rate/quantity")
 
-    # Use Decimal so floating digits are preserved (e.g. 123/hr → 2.05/min)
-    try:
-        rate = Decimal(str(booking.rate or "0"))
-        qty  = Decimal(str(booking.quantity or "0"))
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid rate/quantity")
-
-    # Total rupees with 2 decimal places (round half up)
-    total_rupees = (rate * qty).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-
-    # Convert to paise for Razorpay (integer)
-    amount_paise = int(
-        (total_rupees * Decimal("100")).to_integral_value(rounding=ROUND_HALF_UP)
-    )
-
+    total_rupees = int(booking.rate * booking.quantity)
+    amount_paise = total_rupees * 100
 
     # Reuse existing order if amount matches
     if getattr(booking, "razor_order_id", None):
@@ -430,36 +416,18 @@ def verify_razorpay_payment(
     if pay.get("status") != "captured":
         raise HTTPException(status_code=400, detail="Payment not captured")
 
-    # 4) Amount/currency match against booking (Decimal correct handling)
+    # 4) Amount/currency match against booking
     if booking.rate is None or booking.quantity is None:
         raise HTTPException(status_code=400, detail="Missing rate/quantity")
-
-    try:
-        rate = Decimal(str(booking.rate))
-        qty = Decimal(str(booking.quantity))
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid rate/quantity")
-
-    # Expected rupees with 2 decimal precision (supports fractional charges)
-    expected_rupees = (rate * qty).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-
-    # Convert expected to paise for direct Razorpay comparison
-    expected_amount = int(
-        (expected_rupees * Decimal("100")).to_integral_value(rounding=ROUND_HALF_UP)
-    )
-
-    # Razorpay actual amount
-    paid_amount = int(order.get("amount", 0))
-
-    if paid_amount != expected_amount or order.get("currency") != "INR":
+    expected_amount = int(booking.rate * booking.quantity) * 100
+    if int(order.get("amount", 0)) != expected_amount or order.get("currency") != "INR":
         raise HTTPException(status_code=400, detail="Amount/currency mismatch")
 
     provider = booking.provider
-    worker = booking.worker
+    worker   = booking.worker
+    total_tokens = expected_amount // 100
 
-    # Amount to credit to worker (Decimal)
-    total_tokens = expected_rupees
-
+    # 5) Atomic credit + flags + notification
     # 5) Atomic credit + flags + notification
     try:
         if booking.payment_completed:
@@ -481,7 +449,6 @@ def verify_razorpay_payment(
             order_id=o_id,
             method="razorpay",
         )
-
         db.add(Notification(
             recipient_id=worker.id,
             sender_id=provider.id,
@@ -491,7 +458,7 @@ def verify_razorpay_payment(
             is_read=False,
         ))
 
-        # --- NEW: surface next pending payment for this provider so provider sees next pay page ---
+        # --- NEW: surface next pending payment for this provider so that provider sees next pay page ---
         try:
             _notify_next_pending_for_provider(db, provider_id=provider.id, exclude_booking_id=booking.id)
         except Exception:
@@ -511,86 +478,11 @@ def verify_razorpay_payment(
     }
 
 
-@router.post("/razorpay/create_order_for_extra/{booking_id}")
-def create_razorpay_order_for_extra(
-    booking_id: int,
-    payload: dict = Body(...),
-    request: Request = None,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    """
-    Create a Razorpay order for extra time. Frontend: POST { "extra_minutes": <int> }.
-    Returns { key_id, order_id, amount, currency, display_amount }.
-    """
-    _enforce_same_origin(request)
-
-    minutes = int(payload.get("extra_minutes") or 0)
-    if minutes <= 0:
-        raise HTTPException(status_code=400, detail="Missing or invalid extra_minutes")
-
-    booking = db.get(Booking, booking_id)
-    if not booking:
-        raise HTTPException(status_code=404, detail="Booking not found")
-    if current_user.id != booking.provider_id:
-        raise HTTPException(status_code=403, detail="Not authorized")
-
-    # Compute amount_rupees (best-effort): assume booking.rate is hourly unless rate_type says otherwise
-    try:
-        rate = Decimal(str(getattr(booking, "rate", 0) or "0"))
-    except Exception:
-        rate = Decimal("0")
-
-        # amount = rate_per_hour * (minutes / 60)
-    amount_rupees = (rate * Decimal(minutes) / Decimal(60)).quantize(
-        Decimal("0.01"), rounding=ROUND_HALF_UP
-    )
-
-    # never allow zero/negative – at least ₹1.00
-    if amount_rupees <= 0:
-        amount_rupees = Decimal("1.00")
-
-    # convert to paise for Razorpay
-    amount_paise = int(
-        (amount_rupees * Decimal(100)).to_integral_value(rounding=ROUND_HALF_UP)
-    )
-
-    notes = {"booking_id": str(booking_id), "extra_minutes": str(minutes)}
-
-    order = razor.order.create({
-        "amount": amount_paise,
-        "currency": "INR",
-        "receipt": f"booking_extra_{booking_id}_{int(datetime.utcnow().timestamp())}",
-        "notes": notes,
-        "payment_capture": 1,
-    }, timeout=RZP_TIMEOUT)
-
-    # persist tentative extra order id + amount for later matching
-    booking.extra_razor_order_id = order["id"]
-    booking.extra_razor_amount = float(amount_rupees)
-    db.add(booking)
-    db.commit()
-
-    return {
-        "key_id": RAZORPAY_KEY_ID,
-        "order_id": order["id"],
-        "amount": order["amount"],        # paise
-        "currency": order.get("currency", "INR"),
-        "display_amount": amount_rupees,  # rupees for UI
-    }
-
-
 @router.post("/razorpay/verify_extra_payment")
 def verify_extra_payment(body: dict = Body(...), request: Request = None, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    """
-    Verify a client-side extra-time Razorpay payment and credit worker wallet.
-    This endpoint is idempotent: it will not duplicate ledger rows (add_ledger_row already guards).
-    Expected body keys: booking_id, razorpay_payment_id, razorpay_order_id, razorpay_signature
-    Optional: extra_minutes (best-effort).
-    """
     _enforce_same_origin(request)
 
-    for k in ("booking_id", "razorpay_payment_id", "razorpay_order_id", "razorpay_signature"):
+    for k in ("booking_id","razorpay_payment_id","razorpay_order_id","razorpay_signature"):
         if not body.get(k):
             raise HTTPException(status_code=400, detail=f"Missing {k}")
 
@@ -598,9 +490,8 @@ def verify_extra_payment(body: dict = Body(...), request: Request = None, db: Se
     p_id = body["razorpay_payment_id"]
     o_id = body["razorpay_order_id"]
     sig  = body["razorpay_signature"]
-    extra_minutes = body.get("extra_minutes")
 
-    # load booking and validate provider owns it
+    # load booking and validate ownership (provider)
     booking = db.get(Booking, booking_id)
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found")
@@ -611,106 +502,61 @@ def verify_extra_payment(body: dict = Body(...), request: Request = None, db: Se
     data = f"{o_id}|{p_id}".encode()
     expected = hmac.new((RAZORPAY_KEY_SECRET or "").encode(), data, hashlib.sha256).hexdigest()
     if not compare_digest(expected, sig):
-        # signature mismatch: don't proceed
         raise HTTPException(status_code=400, detail="Invalid Razorpay signature")
 
-    # fetch authoritative objects (Razorpay)
-    try:
-        order = razor.order.fetch(o_id, timeout=RZP_TIMEOUT)
-        pay   = razor.payment.fetch(p_id, timeout=RZP_TIMEOUT)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch from Razorpay: {e}")
+    # fetch authoritative objects
+    order = razor.order.fetch(o_id, timeout=RZP_TIMEOUT)
+    pay   = razor.payment.fetch(p_id, timeout=RZP_TIMEOUT)
 
-    # sanity checks
     if pay.get("order_id") != order.get("id"):
         raise HTTPException(status_code=400, detail="Payment/order mismatch")
     if pay.get("status") != "captured":
         raise HTTPException(status_code=400, detail="Payment not captured")
 
-    # Ensure order belongs to booking (notes) OR order_id matches booking.extra_razor_order_id
+    # confirm order belongs to booking (notes) or matches booking.extra_razor_order_id
     notes = order.get("notes") or {}
     if str(notes.get("booking_id")) != str(booking_id) and booking.extra_razor_order_id != o_id:
         raise HTTPException(status_code=400, detail="Order not tied to this booking")
 
-    # Determine amount in rupees (keep paise / floating part)
-    amount_paise_raw = int(pay.get("amount", 0) or 0)
-    amount_rupees = (Decimal(amount_paise_raw) / Decimal(100)).quantize(
-        Decimal("0.01"), rounding=ROUND_HALF_UP
-    )
-
-    if amount_rupees <= 0:
-        raise HTTPException(status_code=400, detail="Zero/invalid amount")
-
-    # Idempotent credit via add_ledger_row
+    # credit worker (idempotent via add_ledger_row)
+    amount_rupees = int(pay.get("amount", 0)) // 100
     try:
-        # Pass as string/Decimal, same style as webhook
-        wt = add_ledger_row(
+        add_ledger_row(
             db=db,
             user_id=booking.worker_id,
-            amount_rupees=str(amount_rupees),
+            amount_rupees=int(amount_rupees),
             kind="extra_payment",
             reference=p_id,
-            meta={
-                "booking_id": booking.id,
-                "order_id": o_id,
-                "extra_minutes": extra_minutes,
-            },
+            meta={"booking_id": booking.id, "order_id": o_id}
         )
-
         # persist booking flags
         booking.extra_payment_completed = True
         booking.extra_razor_payment_id = p_id
         booking.extra_razor_order_id = o_id
         booking.extra_razor_amount = float(amount_rupees)
-
-        # best-effort: persist proposed_extra_minutes if provided and not set
+        # store proposed minutes if present
         try:
-            if not getattr(booking, "proposed_extra_minutes", None) and (extra_minutes or notes.get("extra_minutes")):
-                booking.proposed_extra_minutes = int(extra_minutes or notes.get("extra_minutes"))
+            if not getattr(booking, "proposed_extra_minutes", None) and notes.get("extra_minutes"):
+                booking.proposed_extra_minutes = int(notes.get("extra_minutes"))
         except Exception:
             pass
-
         db.commit()
-    except Exception as e:
+    except Exception:
         db.rollback()
-        # If add_ledger_row failed due to unique constraint concurrency but row exists, return success
-        # Try to detect if ledger row already exists:
-        try:
-            from app.models import WalletTransaction
-            exists = db.query(WalletTransaction).filter(
-                WalletTransaction.user_id == booking.worker_id,
-                WalletTransaction.kind == "extra_payment",
-                WalletTransaction.reference == p_id
-            ).first()
-            if exists:
-                # mark booking flags (best-effort)
-                booking.extra_payment_completed = True
-                booking.extra_razor_payment_id = p_id
-                booking.extra_razor_order_id = o_id
-                booking.extra_razor_amount = float(amount_rupees)
-                try:
-                    db.commit()
-                except Exception:
-                    db.rollback()
-                return {"success": True, "message": "Already credited (concurrent)"}
-        except Exception:
-            pass
-        raise HTTPException(status_code=500, detail=f"Failed to credit extra payment: {e}")
+        raise
 
     return {"success": True}
 
 
 # -------- Razorpay: Webhook ----------
-# Consolidated Razorpay webhook handler (cleaned + hardened)
+# Consolidated Razorpay webhook handler (replace old function in payments_calls.py)
+
 
 logger = logging.getLogger("app.payments.webhook_consolidated")
 RAZORPAY_WEBHOOK_SECRET = os.getenv("RAZORPAY_WEBHOOK_SECRET", "")
 
 @router.post("/razorpay/webhook")
 async def razorpay_webhook(request: Request, x_razorpay_signature: str = Header(None), db: Session = Depends(get_db)):
-    """
-    Consolidated Razorpay webhook.
-    """
     if not RAZORPAY_WEBHOOK_SECRET:
         logger.error("Webhook secret not configured")
         return JSONResponse({"error": "Webhook secret not configured"}, status_code=500)
@@ -737,10 +583,9 @@ async def razorpay_webhook(request: Request, x_razorpay_signature: str = Header(
     amount_paise = int(entity.get("amount") or 0)
     notes = entity.get("notes") or {}
 
-    # Improved logging
-    logger.info("Webhook received payment=%s order=%s amount_paise=%s notes=%s", payment_id, order_id, amount_paise, notes)
+    logger.info("Webhook received: payment=%s order=%s amount_paise=%s", payment_id, order_id, amount_paise)
 
-    # Find booking: prefer booking_id in notes, else match order fields
+    # Try find booking: prefer booking_id in notes, else match order fields
     booking = None
     booking_id_note = notes.get("booking_id")
     if booking_id_note:
@@ -761,83 +606,34 @@ async def razorpay_webhook(request: Request, x_razorpay_signature: str = Header(
         logger.info("No booking found for order_id=%s payment=%s", order_id, payment_id)
         return {"ok": True}
 
-    # Robust is_extra detection:
-    #  - match extra_razor_order_id
-    #  - or notes.extra_minutes present
-    #  - or heuristic fallback when booking.proposed_extra_minutes set and amount matches booking.extra_razor_amount or is small
-    is_extra = False
-    try:
-        if getattr(booking, "extra_razor_order_id", None) and booking.extra_razor_order_id == order_id:
-            is_extra = True
-        elif notes.get("extra_minutes"):
-            is_extra = True
-        else:
-            # heuristic fallback
-            rupees = (Decimal(amount_paise) / Decimal(100)).quantize(Decimal("0.01"))
-            if getattr(booking, "proposed_extra_minutes", None):
-                if getattr(booking, "extra_razor_amount", None) is not None:
-                    try:
-                        expected_extra = Decimal(str(booking.extra_razor_amount)).quantize(Decimal("0.01"))
-                        if expected_extra == rupees:
-                            is_extra = True
-                    except Exception:
-                        pass
-                else:
-                    # small-amount heuristic (tunable)
-                    if rupees <= Decimal("500.00"):
-                        is_extra = True
-    except Exception:
-        is_extra = False
-
-    logger.info("Webhook booking=%s is_extra=%s (proposed_extra_minutes=%s extra_razor_order_id=%s extra_razor_amount=%s)",
-                booking.id, is_extra, getattr(booking, "proposed_extra_minutes", None),
-                getattr(booking, "extra_razor_order_id", None), getattr(booking, "extra_razor_amount", None))
+    # Consider extra if order id matches extra_razor_order_id OR notes contain extra_minutes
+    is_extra = (getattr(booking, "extra_razor_order_id", None) == order_id) or bool(notes.get("extra_minutes"))
 
     try:
         with db.begin():
             rupees = (Decimal(amount_paise) / Decimal(100)).quantize(Decimal("0.01"))
 
             if not is_extra:
-                # normal booking payment (tokens): verify expected amount and mark paid (with decimals)
-                if booking.rate is None or booking.quantity is None:
-                    logger.info("Booking %s missing rate/quantity for webhook", booking.id)
-                else:
-                    try:
-                        rate = Decimal(str(booking.rate or "0"))
-                        qty = Decimal(str(booking.quantity or "0"))
-                    except Exception:
-                        logger.exception("Invalid rate/quantity on booking %s", booking.id)
-                        rate = Decimal("0")
-                        qty = Decimal("0")
-
-                    expected_rupees = (rate * qty).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-                    expected_amount = int(
-                        (expected_rupees * Decimal("100")).to_integral_value(rounding=ROUND_HALF_UP)
+                # normal booking payment (tokens): verify expected amount and mark paid
+                expected_rupees = Decimal(int((booking.rate or 0) * (booking.quantity or 0)))
+                if int(expected_rupees * 100) == amount_paise and not getattr(booking, "payment_completed", False):
+                    provider = booking.provider
+                    worker = booking.worker
+                    total_tokens = int(expected_rupees)
+                    _mark_booking_paid(
+                        db=db,
+                        booking=booking,
+                        provider=provider,
+                        worker=worker,
+                        total_tokens=total_tokens,
+                        payment_id=payment_id,
+                        order_id=order_id,
+                        method="razorpay",
                     )
-
-                    if expected_amount == amount_paise and not getattr(booking, "payment_completed", False):
-                        provider = booking.provider
-                        worker = booking.worker
-                        total_tokens = expected_rupees  # keep decimals
-                        _mark_booking_paid(
-                            db=db,
-                            booking=booking,
-                            provider=provider,
-                            worker=worker,
-                            total_tokens=total_tokens,
-                            payment_id=payment_id,
-                            order_id=order_id,
-                            method="razorpay",
-                        )
-                        logger.info("Marked booking %s paid via webhook payment=%s", booking.id, payment_id)
-                    else:
-                        logger.info(
-                            "Booking payment mismatch booking=%s expected_paise=%s got_paise=%s",
-                            booking.id,
-                            expected_amount,
-                            amount_paise,
-                        )
-
+                    logger.info("Marked booking %s paid via webhook payment=%s", booking.id, payment_id)
+                else:
+                    logger.info("Booking payment mismatch booking=%s expected_paise=%s got_paise=%s",
+                                booking.id, int(expected_rupees * 100), amount_paise)
             else:
                 # extra-time payment: credit worker only (idempotent)
                 reference = str(payment_id or order_id)
@@ -882,6 +678,8 @@ async def razorpay_webhook(request: Request, x_razorpay_signature: str = Header(
     return {"ok": True}
 
 
+
+
 # --- helpers ---------------------------------------------------------------
 def _already_recorded(db: Session, *, user_id: int, kind: str, reference: str) -> bool:
     """Idempotency guard: has this (user, kind, reference) been saved?"""
@@ -892,52 +690,27 @@ def _already_recorded(db: Session, *, user_id: int, kind: str, reference: str) -
     ).first() is not None
 
 
-def _credit_worker_only(
-    db: Session,
-    *,
-    worker: User,
-    amount,
-    reference: str,
-    booking: Booking,
-    order_id: str | None,
-    method: str,
-):
-    """Credit worker once (no giver debit), preserving paise."""
+def _credit_worker_only(db: Session, *, worker: User, amount: int, reference: str, booking: Booking, order_id: str | None, method: str):
+    """Credit worker once (no giver debit)."""
     if _already_recorded(db, user_id=worker.id, kind="booking_payment_credit", reference=reference):
         return
-
-    amt_dec = Decimal(str(amount)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-
     add_ledger_row(
         db=db,
         user_id=worker.id,
-        amount_rupees=str(amt_dec),
+        amount_rupees=int(amount),
         kind="booking_payment_credit",
         reference=reference,
         meta={"booking_id": booking.id, "order_id": order_id, "method": method},
     )
 
 
-
-def _debit_giver_and_credit_worker(
-    db: Session,
-    *,
-    provider: User,
-    worker: User,
-    amount,
-    reference: str,
-    booking: Booking,
-    order_id: str | None,
-    method: str,
-):
-    """Manual flow: debit giver wallet and credit worker wallet (idempotent per side), preserving paise."""
-    amt_dec = Decimal(str(amount)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-
+def _debit_giver_and_credit_worker(db: Session, *, provider: User, worker: User, amount: int, reference: str, booking: Booking, order_id: str | None, method: str):
+    """Manual flow: debit giver wallet and credit worker wallet (idempotent per side)."""
     if not _already_recorded(db, user_id=provider.id, kind="booking_payment_debit", reference=reference):
         add_ledger_row(
             db=db,
             user_id=provider.id,
-            amount_rupees=str(-amt_dec),
+            amount_rupees=-int(amount),
             kind="booking_payment_debit",
             reference=reference,
             meta={"booking_id": booking.id, "order_id": order_id, "method": method},
@@ -946,7 +719,7 @@ def _debit_giver_and_credit_worker(
         add_ledger_row(
             db=db,
             user_id=worker.id,
-            amount_rupees=str(amt_dec),
+            amount_rupees=int(amount),
             kind="booking_payment_credit",
             reference=reference,
             meta={"booking_id": booking.id, "order_id": order_id, "method": method},

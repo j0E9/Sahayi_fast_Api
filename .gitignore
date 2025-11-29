@@ -8,4 +8,5 @@ venv/
 .DS_Store
 Thumbs.db
 *.pyc
+.env
 app/static/uploads/

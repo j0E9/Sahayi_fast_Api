@@ -1,5 +1,3 @@
-
-
 # app/settings.py
 import os
 import logging
@@ -57,6 +55,10 @@ class Settings:
 
     MAPBOX_ACCESS_TOKEN: Optional[str] = os.getenv("MAPBOX_ACCESS_TOKEN")
     WALLET_HMAC_KEY: Optional[str] = os.getenv("WALLET_HMAC_KEY")
+
+    RAZORPAY_KEY_ID: Optional[str] = os.getenv("RAZORPAY_KEY_ID")
+    RAZORPAY_KEY_SECRET: Optional[str] = os.getenv("RAZORPAY_KEY_SECRET")
+    RAZORPAY_WEBHOOK_SECRET: Optional[str] = os.getenv("RAZORPAY_WEBHOOK_SECRET")
 
     # File uploads
     UPLOAD_FOLDER: Path = BASE_DIR / "static" / "uploads"
