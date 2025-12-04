@@ -44,40 +44,148 @@
       text-decoration: none;
       border-radius: 20px;
     }
-    /* 📍 Minimized location pill (appears when box is hidden) */
-    #location-min {
-      position: fixed;
-      top: 10px;
-      left: 10px;
-      z-index: 1090;
-      height: 38px;                 /* a bit slimmer */
-      min-width: 46px;              /* keeps a nice minimum */
-      padding: 0 10px;              /* room for text */
-      border-radius: 999px;         /* pill shape */
-      background: #d7f0e3;
-      box-shadow: 0 0 5px rgba(0,0,0,0.2);
-      display: none;
+
+    /* Row with "Change" + "Save" as pills */
+    .location-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 6px;
+      flex-wrap: wrap;
+    }
+
+    /* base pill button */
+    .location-actions .loc-btn {
+      border-radius: 999px;
+      border: 1px solid #d2e0ff;
+      background: #f8fbff;
+      color: #0b3c6f;
+      padding: 4px 14px;
+      font-size: 12px;
+      font-weight: 500;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      box-shadow: 0 4px 10px rgba(6, 32, 66, 0.08);
+      cursor: pointer;
+      outline: none;
+    }
+
+    /* blue primary pill for Save */
+    .location-actions .loc-btn-primary {
+      border-color: #0d6efd;
+      color: #0d6efd;
+      background: #ffffff;
+    }
+
+    .location-actions .loc-btn-primary:hover {
+      background: #0d6efd;
+      color: #ffffff;
+    }
+
+    /* small icon circle */
+    .location-actions .loc-icon {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      display: inline-flex;
       align-items: center;
       justify-content: center;
-      font-size: 14px;              /* readable but compact */
-      line-height: 1;
-      white-space: nowrap;          /* stay on one line */
-      cursor: pointer;
+      font-size: 12px;
+      background: #eef3ff;
     }
-    #location-min:active { transform: scale(0.96); }
 
-    .worker-toggle{
+
+    /* ======================
+   NEW WORKER STATUS TOGGLE (aligned)
+   ====================== */
+    .worker-toggle {
       position: fixed;
-      left: 10px;
+      top: 76px;          /* sits under location card */
+      left: 14px;
       z-index: 1085;
-      background: #fff;
-      padding: 6px 10px;
-      border-radius: 10px;
-      box-shadow: 0 0 5px rgba(0,0,0,0.2);
+      background: transparent;
+      padding: 0;
       font-size: 13px;
     }
-    @media (max-width:768px){
-      .worker-toggle{ font-size:12px; }
+
+    /* remove Bootstrap's padding on form-switch */
+    #worker-toggle .form-check.form-switch {
+      padding-left: 0;
+      margin: 0;
+    }
+
+    /* hide default switch UI */
+    #worker-toggle .form-check-input {
+      opacity: 0;
+      position: absolute;
+      pointer-events: none;
+    }
+
+    /* pill chip */
+    #worker-status-label {
+      position: relative;
+      display: inline-flex;
+      align-items: center;         /* vertical centering */
+      gap: 8px;
+
+      padding: 4px 12px 4px 8px;   /* slimmer pill */
+      border-radius: 999px;
+      background: #ffffff;
+      border: 1px solid #d7e6ff;
+      box-shadow: 0 6px 16px rgba(12, 49, 96, 0.18);
+
+      cursor: pointer;
+      user-select: none;
+      font-weight: 600;
+      font-size: 12px;
+      color: #0f172a;
+      line-height: 1;             /* important for alignment */
+      transition: 0.22s ease;
+    }
+
+    /* slider track */
+    #worker-status-label::before {
+      content: "";
+      width: 38px;
+      height: 20px;                /* a bit taller */
+      border-radius: 999px;
+      background: #cfd6e8;
+      flex-shrink: 0;
+      transition: background 0.22s ease;
+    }
+
+    /* slider knob */
+    #worker-status-label::after {
+      content: "";
+      width: 16px;
+      height: 16px;
+      border-radius: 999px;
+      background: #ffffff;
+      position: absolute;
+      left: 6px;
+      top: 50%;
+      transform: translateY(-50%); /* centers knob vertically in track */
+      box-shadow: 0 2px 6px rgba(15, 23, 42, 0.25);
+      transition: left 0.22s ease;
+    }
+
+    /* ON state */
+    #worker-status-toggle:checked + #worker-status-label {
+      background: #e7ffe9;
+      border-color: #16a34a;
+    }
+
+    #worker-status-toggle:checked + #worker-status-label::before {
+      background: #16a34a;
+    }
+
+    #worker-status-toggle:checked + #worker-status-label::after {
+      left: 26px;                  /* knob ends nicely inside track */
+    }
+
+    /* hover */
+    #worker-status-label:hover {
+      box-shadow: 0 10px 22px rgba(15, 23, 42, 0.22);
     }
 
 
@@ -347,19 +455,20 @@
         cursor: pointer;
       }
 
-      /* small action sheet */
+     /* small action sheet */
       #sos-sheet {
         display: none;
         position: fixed;
         right: 18px;
         bottom: 92px;
-        z-index: 4100;
+        z-index: 4700;          /* ✅ above bottom nav (4200) and chat-fab (4600) */
         width: 220px;
         border-radius: 12px;
         background: #fff;
         box-shadow: 0 10px 30px rgba(0,0,0,0.18);
         padding: 8px;
       }
+
 
       #sos-sheet .sos-option {
         display: flex;
@@ -379,7 +488,7 @@
         display: none;
         position: fixed;
         inset: 0;
-        z-index: 4050;
+        z-index: 4650;          /* ✅ just under sheet, above nav */
         background: rgba(0,0,0,0.2);
       }
 
@@ -462,42 +571,73 @@
         pointer-events: none;
       }
 
-      /* Centered, tidy category grid */
+      /* Category grid: 4×2 desktop, wraps nicely on smaller screens */
       #category-grid {
-        margin: 16px auto 0;
+        margin: 4px auto 0;
         display: grid;
-        grid-template-columns: repeat(auto-fit, 220px);
+        grid-template-columns: repeat(4, minmax(0, 1fr));
         gap: 16px;
-        justify-content: center;
       }
 
       .cat-card {
-        width: 220px;
-        background: #fff;
-        border-radius: 14px;
-        padding: 18px 12px;
-        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+        width: auto; /* IMPORTANT: override old 220px width */
+        background: #ffffff;
+        border-radius: 18px;
+        padding: 14px 8px;
+        box-shadow: 0 6px 16px rgba(6, 32, 66, 0.10);
         text-align: center;
         cursor: pointer;
-        transition: transform 0.12s, box-shadow 0.12s;
+        position: relative;
+        overflow: hidden;
+        transition:
+          transform 0.16s ease,
+          box-shadow 0.16s ease,
+          border-color 0.16s ease,
+          background 0.16s ease;
+        border: 1px solid #dbe6ff;
+      }
+
+      .cat-card::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: radial-gradient(circle at top center, rgba(13,110,253,0.12), transparent 60%);
+        opacity: 0;
+        transition: opacity 0.18s ease;
       }
 
       .cat-card:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 8px 18px rgba(0, 0, 0, 0.1);
+        transform: translateY(-4px);
+        box-shadow: 0 10px 24px rgba(6, 32, 66, 0.18);
+        border-color: #b7ccff;
+        background: #f9fbff;
+      }
+
+      .cat-card:hover::before {
+        opacity: 1;
       }
 
       .cat-emoji {
+        position: relative;
+        z-index: 1;
         font-size: 22px;
-        display: block;
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: #f0f5ff;
         margin-bottom: 6px;
       }
 
       .cat-title {
+        position: relative;
+        z-index: 1;
         font-weight: 600;
-        font-size: 15px;
+        font-size: 14px;
+        color: #0b3c6f;
       }
-
       /* 📱 Responsive improvements for mobile */
       @media (max-width: 768px) {
         .hero {
@@ -549,66 +689,596 @@
           font-size: 13px;
         }
       }
+
+     /* =============================
+       BLUE + WHITE THEME OVERRIDES
+       ============================= */
+    :root {
+      --primary: #0d6efd;
+      --primary-soft: #e7f1ff;
+      --primary-soft-strong: #d4e5ff;
+      --accent: #0b3c6f;
+      --bg-soft: #f4f7ff;
+    }
+
+    /* Overall background */
+    body {
+      background:
+        linear-gradient(180deg, #f5f9ff 0%, #ffffff 45%, #e7f1ff 100%);
+      color: #263238;
+    }
+
+
+    /* Location box – SMALL compact card */
+    .location-box {
+      position: fixed;
+      top: 12px;
+      left: 12px;
+      z-index: 1050;
+
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+
+      max-width: 240px;          /* made narrower */
+      padding: 6px 10px 8px;     /* tighter padding */
+      border-radius: 12px;
+
+      background: #ffffff;
+      border: 1px solid #d9e5ff;
+      box-shadow: 0 6px 16px rgba(6, 32, 66, 0.18);
+
+      font-size: 12px;           /* smaller text */
+      line-height: 1.3;
+    }
+
+
+    /* First row: "Current Location" */
+    .location-box > div:first-child {
+      font-weight: 500;
+      color: #0b3c6f;
+    }
+    .location-box > div:first-child b {
+      font-weight: 600;
+    }
+
+    /* Error chip inside location box */
+    #location-error {
+      background: #fff3f3 !important;
+      border-radius: 10px !important;
+    }
+
+    /* Buttons in location box */
+    .location-box .btn {
+      border-radius: 999px;
+      font-size: 12px;
+      padding: 4px 10px;
+    }
+    #change-location-btn {
+      border-color: #c8d5f5;
+      color: #0b3c6f;
+      background: #f6f8ff;
+    }
+    #change-location-btn:hover {
+      background: #e0e7ff;
+    }
+    #show-save-location {
+      border-color:var(--primary);
+      color: var(--primary);
+    }
+    #show-save-location:hover {
+      background:var(--primary);
+      color: #ffffff;
+    }
+
+    /* Save form inside location box */
+    #save-location-form .form-control {
+      border-radius: 999px;
+      font-size: 12px;
+    }
+    #save-location-btn {
+      margin-left: 4px;
+      border-radius: 999px;
+    }
+
+    /* Minimized location pill INSIDE the top-left-stack */
+    #location-min {
+      position: static;       /* <-- important: no fixed, no top/left */
+      height: 34px;
+      min-width: 130px;
+      padding: 0 12px;
+      border-radius: 999px;
+      background: #ffffff;
+      border: 1px solid #d2e0ff;
+      display: none;          /* you’ll toggle this via JS */
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      color: #0b3c6f;
+      box-shadow: 0 6px 14px rgba(6, 32, 66, 0.15);
+      cursor: pointer;
+    }
+    #location-min:hover { background: #f4f7ff; }
+    #location-min:active { transform: scale(0.97); }
+
+    #location-min:hover {
+      background: #f4f7ff;
+    }
+    #location-min:active {
+      transform: scale(0.97);
+    }
+
+    /* Hero area – cleaner blue/white */
+    .hero {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      padding: 80px 16px 40px;
+      background: transparent; /* body gradient handles it */
+    }
+
+    .container-hero {
+      width: 100%;
+      max-width: 980px;
+      text-align: center;
+    }
+
+    /* Search bar card */
+    .search-wrap {
+      max-width: 560px;
+      margin: 12px auto 18px;
+    }
+    .search-pill {
+      position: relative;
+      border-radius: 999px;
+      overflow: hidden;
+      background: linear-gradient(135deg, #ffffff, #edf3ff);
+      border: 1px solid #d4e2ff;
+      box-shadow: 0 10px 24px rgba(6, 32, 66, 0.15);
+    }
+    .search-pill .form-control {
+      height: 44px;
+      border: none;
+      padding-left: 40px;
+      background: transparent;
+    }
+    .search-pill .form-control::placeholder {
+      color: #90a4c2;
+    }
+    .search-pill .btn {
+      height: 44px;
+      border: none;
+      border-radius: 999px;
+      margin: 4px;
+      padding: 0 20px;
+      font-weight: 600;
+      background: linear-gradient(135deg, var(--primary), #3b82f6);
+      box-shadow: 0 8px 18px rgba(13, 110, 253, 0.35);
+    }
+    .search-pill .btn:hover {
+      filter: brightness(1.05);
+    }
+    .search-pill .search-icon {
+      position: absolute;
+      left: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 16px;
+      opacity: 0.65;
+    }
+
+    /* Category grid: blue/white interactive cards */
+    #category-grid {
+      margin: 18px auto 0;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 14px;
+      justify-content: center;
+    }
+    .cat-card {
+      background: #ffffff;
+      border-radius: 16px;
+      padding: 14px 10px;
+      box-shadow: 0 6px 16px rgba(6, 32, 66, 0.12);
+      text-align: center;
+      cursor: pointer;
+      position: relative;
+      overflow: hidden;
+      transition:
+        transform 0.15s ease,
+        box-shadow 0.15s ease,
+        border-color 0.15s ease,
+        background 0.15s ease;
+      border: 1px solid #dbe6ff;
+    }
+    .cat-card::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, rgba(13,110,253,0.08), transparent);
+      opacity: 0;
+      transition: opacity 0.15s ease;
+    }
+    .cat-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 10px 22px rgba(6, 32, 66, 0.18);
+      border-color: #b7ccff;
+      background: #f9fbff;
+    }
+    .cat-card:hover::before {
+      opacity: 1;
+    }
+    .cat-emoji {
+      position: relative;
+      z-index: 1;
+      font-size: 22px;
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: #f0f5ff;
+      margin-bottom: 6px;
+    }
+    .cat-title {
+      position: relative;
+      z-index: 1;
+      font-weight: 600;
+      font-size: 14px;
+      color: #0b3c6f;
+    }
+
+    /* Hero responsive tweaks */
+    @media (max-width: 768px) {
+      .hero {
+        padding-top: 120px;
+        padding-bottom: 40px;
+      }
+      .search-pill .form-control {
+        height: 40px;
+        font-size: 14px;
+        padding-left: 34px;
+      }
+      .search-pill .btn {
+        height: 40px;
+        padding: 0 14px;
+        font-size: 14px;
+      }
+    }
+
+    @media (max-width: 576px) {
+      .search-wrap { max-width: 92%; }
+      #category-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+      }
+      .cat-card {
+        padding: 10px 8px;
+      }
+    }
+
+    .category-section {
+      margin: 28px auto 0;
+      max-width: 880px;
+      padding: 18px 18px 22px;
+      border-radius: 24px;
+      background: linear-gradient(135deg, #ffffff, #f3f6ff);
+      box-shadow: 0 14px 28px rgba(6, 32, 66, 0.14);
+      border: 1px solid #dde7ff;
+    }
+
+    .category-header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .category-header h2 {
+      margin: 0;
+      font-size: 1.3rem;
+      font-weight: 600;
+      color: #0b3c6f;
+    }
+
+    .category-header p {
+      margin: 4px 0 0;
+      font-size: 0.9rem;
+      color: #60748f;
+    }
+
+    /* ===========================
+       HERO TEXT STYLE - CLEAN BLUE WHITE
+       =========================== */
+
+    .welcome-block {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+
+    /* Pill tag */
+    .welcome-pill {
+      display: inline-block;
+      background: #ffffff;
+      padding: 6px 18px;
+      border-radius: 50px;
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.6px;
+      border: 1px solid #d9e7ff;
+      color: #1b4c97;
+      box-shadow: 0px 4px 10px rgba(67, 113, 184, 0.12);
+      margin-bottom: 8px;
+    }
+
+    /* Main heading */
+    .welcome-block h1 {
+      font-size: 2.2rem;
+      font-weight: 700;
+      color: #102a53;
+      line-height: 1.25;
+    }
+
+    /* Highlighted blue words */
+    .welcome-block h1 span {
+      color: #0d6efd;
+    }
+
+    /* Responsive adjustments */
+    @media (max-width: 576px) {
+      .welcome-block h1 {
+        font-size: 1.7rem;
+      }
+      .welcome-pill {
+        font-size: 11px;
+        padding: 5px 14px;
+      }
+    }
+
+    /* Wrapper that is fixed, not individual elements */
+    .top-left-stack {
+      position: fixed;
+      top: 12px;
+      left: 12px;
+      z-index: 1050;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;          /* space between box and toggle */
+    }
+
+    /* Inside wrapper, let location box be normal flow */
+    .top-left-stack .location-box {
+      position: static;
+      top: auto;
+      left: auto;
+    }
+
+    /* Inside wrapper, toggle is also normal flow, sits under box */
+    .top-left-stack .worker-toggle {
+      position: static;
+      top: auto;
+      left: auto;
+      margin-left: 2px;   /* tiny indent to match your screenshot */
+    }
+
+    /* === Mobile bottom nav (fixed) === */
+    #mobile-bottom-nav {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 4200;              /* above content, below big modals */
+      background: #ffffff;
+      box-shadow: 0 -4px 14px rgba(15, 23, 42, 0.18);
+      padding: 6px 10px;
+      display: none;              /* only visible on mobile via media query */
+    }
+
+    .mobile-nav-inner {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .mobile-nav-item {
+      flex: 1;
+      border: none;
+      background: transparent;
+      padding: 4px 0 2px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      color: #0b3c6f;
+      border-radius: 999px;
+    }
+
+    .mobile-nav-item .nav-icon {
+      font-size: 18px;
+      margin-bottom: 2px;
+    }
+
+    .mobile-nav-item:focus-visible {
+      outline: 2px solid #0d6efd;
+      outline-offset: 2px;
+    }
+
+    .mobile-nav-item:active {
+      background: #eef2ff;
+    }
+
+    /* Mobile-specific visibility rules */
+    @media (max-width: 768px) {
+      /* show bottom nav on mobile */
+      #mobile-bottom-nav {
+        display: block;
+      }
+
+      /* hide desktop top-right bar on mobile */
+      .top-right-actions {
+        display: none !important;
+      }
+
+      /* hide floating SOS circle on mobile (we use nav instead) */
+      #sos-btn {
+        display: none !important;
+      }
+    }
+
+    /* === Mobile profile sheet (bottom drawer) === */
+    #mobile-profile-sheet {
+      position: fixed;
+      inset: 0;
+      z-index: 4300;                  /* above bottom nav (4200) */
+      display: none;                  /* controlled by JS and media query */
+    }
+
+    #mobile-profile-sheet.open {
+      display: block;
+    }
+
+    #mobile-profile-sheet .mobile-profile-backdrop {
+      position: absolute;
+      inset: 0;
+      background: rgba(0,0,0,0.35);
+    }
+
+    #mobile-profile-sheet .mobile-profile-panel {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: #ffffff;
+      border-radius: 18px 18px 0 0;
+      padding: 14px 16px 10px;
+      box-shadow: 0 -10px 26px rgba(15,23,42,0.3);
+      max-height: 70vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Header row */
+    .mobile-profile-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+      font-weight: 600;
+      color: #0b3c6f;
+    }
+
+    .mobile-profile-close-btn {
+      border: none;
+      background: transparent;
+      font-size: 18px;
+      line-height: 1;
+      cursor: pointer;
+    }
+
+    /* Options list */
+    .mobile-profile-options {
+      overflow-y: auto;
+      padding-top: 4px;
+    }
+
+    #mobile-profile-sheet .profile-option {
+      padding: 8px;
+      border-radius: 8px;
+    }
+
+    #mobile-profile-sheet .profile-option a {
+      display: block;
+      text-decoration: none;
+      color: #333;
+    }
+
+    /* Highlight on tap/hover */
+    #mobile-profile-sheet .profile-option:hover {
+      background: #f3f4ff;
+    }
+
+    /* Only show this sheet on small screens */
+    @media (max-width: 768px) {
+      #mobile-profile-sheet {
+        display: none;      /* base state; .open will override */
+      }
+    }
+
+
+
+
     </style>
 
 </head>
 <body data-role="{{ role|default('') }}">
 
 
-<!-- Location Box -->
-<div class="location-box" style="position:fixed; top:10px; left:10px; z-index:1050;
-     background:#d7f0e3; padding:8px 10px; border-radius:10px; box-shadow:0 0 5px rgba(0,0,0,0.2);
-     display:flex; flex-direction:column; gap:6px; max-width:280px; font-size:13px;">
-
-  <!-- Current location -->
-  <div style="display:flex; align-items:center; gap:4px; flex-wrap:wrap;">
-    📍 <b>Current Location:</b> <span id="location-display">Fetching...</span>
-  </div>
-
+<!-- TOP-LEFT STACK: Location box + Online toggle -->
+<div class="top-left-stack">
+  <div class="location-box">
+    <!-- Current location -->
+    <div style="display:flex; align-items:center; gap:4px; flex-wrap:wrap;">
+      📍 <b>Current Location:</b> <span id="location-display">Fetching...</span>
+    </div>
 
     <div id="location-error" style="display:none; background:#fff3f3;
-       color:#b00020; font-size:12px; padding:6px 8px; border-radius:6px;
-       margin-top:4px; border:1px solid #f5c2c7;">
-    ⚠️ Location unavailable. Please enable GPS/Location Services.
-    <br>
-    <button onclick="retryLocation()"
-            class="btn btn-sm btn-outline-danger"
-            style="margin-top:4px; font-size:12px; padding:2px 6px;">
-      🔄 Retry Location
-    </button>
+         color:#b00020; font-size:12px; padding:6px 8px; border-radius:6px;
+         margin-top:4px; border:1px solid #f5c2c7;">
+      ⚠️ Location unavailable. Please enable GPS/Location Services.
+      <br>
+      <button onclick="retryLocation()"
+              class="btn btn-sm btn-outline-danger"
+              style="margin-top:4px; font-size:12px; padding:2px 6px;">
+        🔄 Retry Location
+      </button>
+    </div>
+
+    <!-- Controls Row (Change + Save pills) -->
+    <div class="location-actions">
+      <button id="change-location-btn" class="loc-btn">
+        <span class="loc-icon">🔁</span>
+        <span>Change</span>
+      </button>
+
+      <button id="show-save-location" class="loc-btn loc-btn-primary">
+        <span class="loc-icon">💾</span>
+        <span>Save</span>
+      </button>
+    </div>
+
+
+    <!-- Hidden Save form -->
+    <div id="save-location-form" style="display:none; margin-top:6px;">
+      <input type="text" id="place-name-input"
+             class="form-control form-control-sm"
+             placeholder="Enter place name"
+             style="max-width:180px; display:inline-block;">
+      <button id="save-location-btn" class="btn btn-success btn-sm">Save</button>
+      <span id="save-location-msg" style="margin-left:6px; color:red;"></span>
+    </div>
   </div>
 
-  <!-- Controls Row (Change Location first, Save below) -->
-  <div style="display:flex; flex-direction:column; gap:4px; flex-wrap:wrap;">
-    <button id="change-location-btn" class="btn btn-outline-secondary btn-sm">🔄 Change Location</button>
-    <button id="show-save-location" class="btn btn-outline-primary btn-sm">💾 Save Location</button>
-
+  <!-- Minimized pill stays outside -->
+  <div id="location-min" title="Show location">📍</div>
+  {% if show_worker_toggle %}
+  <div id="worker-toggle" class="worker-toggle" style="display:none;">
+    <div class="form-check form-switch mb-0">
+      <input class="form-check-input" type="checkbox" id="worker-status-toggle" {% if is_online %}checked{% endif %}>
+      <label class="form-check-label mb-0" id="worker-status-label" for="worker-status-toggle">
+        <span style="color:{{ 'green' if is_online else 'red' }};">{{ "🟢 Online" if is_online else "🔴 Offline" }}</span>
+      </label>
+    </div>
   </div>
-
-  <!-- Hidden Save form -->
-  <div id="save-location-form" style="display:none; margin-top:6px;">
-    <input type="text" id="place-name-input"
-           class="form-control form-control-sm"
-           placeholder="Enter place name"
-           style="max-width:180px; display:inline-block;">
-    <button id="save-location-btn" class="btn btn-success btn-sm">Save</button>
-    <span id="save-location-msg" style="margin-left:6px; color:red;"></span>
-  </div>
+  {% endif %}
 </div>
 
-<!-- ✅ Minimized pill must be OUTSIDE the location box -->
-<div id="location-min" title="Show location">📍</div>
 
-{% if show_worker_toggle %}
-<div id="worker-toggle" class="worker-toggle" style="display:none;">
-  <div class="form-check form-switch mb-0">
-    <input class="form-check-input" type="checkbox" id="worker-status-toggle" {% if is_online %}checked{% endif %}>
-    <label class="form-check-label mb-0" id="worker-status-label" for="worker-status-toggle">
-      <span style="color:{{ 'green' if is_online else 'red' }};">{{ "🟢 Online" if is_online else "🔴 Offline" }}</span>
-    </label>
-  </div>
-</div>
-{% endif %}
 
 
 
@@ -636,8 +1306,62 @@
 </div>
 
 
+<!-- Mobile bottom navigation (notifications, SOS, profile) -->
+<nav id="mobile-bottom-nav" aria-label="Main actions (mobile)">
+  <div class="mobile-nav-inner">
+    <button type="button" id="mobile-nav-notify" class="mobile-nav-item">
+      <span class="nav-icon">🔔</span>
+      <span class="nav-label">Alerts</span>
+    </button>
+
+    <button type="button" id="mobile-nav-sos" class="mobile-nav-item">
+      <span class="nav-icon">🚨</span>
+      <span class="nav-label">SOS</span>
+    </button>
+
+    <button type="button" id="mobile-nav-profile" class="mobile-nav-item">
+      <span class="nav-icon">👤</span>
+      <span class="nav-label">Profile</span>
+    </button>
+  </div>
+</nav>
+
+
+<!-- Mobile profile sheet (for bottom nav) -->
+<div id="mobile-profile-sheet" aria-hidden="true">
+  <div class="mobile-profile-backdrop"></div>
+
+  <div class="mobile-profile-panel">
+    <div class="mobile-profile-header">
+      <span>Account</span>
+      <button type="button" id="mobile-profile-close" class="mobile-profile-close-btn">✕</button>
+    </div>
+
+    <!-- Same options as desktop dropdown -->
+    <div class="mobile-profile-options">
+      <div class="profile-option">
+        {% if has_profile %}
+          <a href="{{ worker_profile_url }}">👷 Sahayi Profile</a>
+        {% else %}
+          <a href="{{ create_worker_url }}">🛠️ Be a Sahayi</a>
+        {% endif %}
+      </div>
+      <div class="profile-option"><a href="/wallet">💳 Wallet</a></div>
+      <div class="profile-option"><a href="/payment_history">📂 History</a></div>
+      <div class="profile-option"><a href="/agreement">📜 Agreement</a></div>
+      <div class="profile-option"><a href="/support">❓ Help & Support</a></div>
+      <div class="profile-option"><a href="/logout">🚪 Logout</a></div>
+    </div>
+  </div>
+</div>
+
+
 <!-- Top-right action buttons -->
-<div style="position: fixed; top: 10px; right: 10px; z-index: 1080; display: flex; gap: 10px; align-items: center;">
+<div class="top-right-actions"
+     style="position: fixed; top: 10px; right: 10px; z-index: 1080; display: flex; gap: 10px; align-items: center;">
+
+
+
 
   <!-- Notification button -->
   <a href="/notifications" class="btn btn-light btn-sm"
@@ -678,6 +1402,11 @@
 
   <div class="hero">
     <div class="container-hero">
+      <div class="welcome-block">
+        <div class="welcome-pill">✨ WELCOME TO SAHAYI</div>
+        <h1>Find <span>trusted help</span> around you</h1>
+      </div>
+
 
       <form id="get-sahayi-search" class="search-wrap" method="POST" action="/provide_job">
       <div class="input-group input-group-sm search-pill">
@@ -692,33 +1421,51 @@
     </form>
 
 
-      <!-- Categories -->
-      <div id="category-grid" class="mt-3">
-        <div class="cat-card" data-cat="Plumbing">
-          <span class="cat-emoji">🔧</span><span class="cat-title">Plumbing</span>
+            <!-- Categories panel -->
+      <section class="category-section">
+        <div class="category-header">
+          <div>
+            <h2>Popular Sahayi categories</h2>
+            <p>Choose a service to see partners near you.</p>
+          </div>
         </div>
-        <div class="cat-card" data-cat="Electrical">
-          <span class="cat-emoji">💡</span><span class="cat-title">Electrical</span>
+
+        <div id="category-grid">
+          <div class="cat-card" data-cat="Plumbing">
+            <span class="cat-emoji">🔧</span>
+            <span class="cat-title">Plumbing</span>
+          </div>
+          <div class="cat-card" data-cat="Electrical">
+            <span class="cat-emoji">💡</span>
+            <span class="cat-title">Electrical</span>
+          </div>
+          <div class="cat-card" data-cat="Cleaning">
+            <span class="cat-emoji">🧹</span>
+            <span class="cat-title">Cleaning</span>
+          </div>
+          <div class="cat-card" data-cat="Carpentry">
+            <span class="cat-emoji">🪵</span>
+            <span class="cat-title">Carpentry</span>
+          </div>
+          <div class="cat-card" data-cat="Construction">
+            <span class="cat-emoji">🏗️</span>
+            <span class="cat-title">Construction</span>
+          </div>
+          <div class="cat-card" data-cat="Cooking">
+            <span class="cat-emoji">🍳</span>
+            <span class="cat-title">Cooking</span>
+          </div>
+          <div class="cat-card" data-cat="Tutoring">
+            <span class="cat-emoji">📘</span>
+            <span class="cat-title">Tutoring</span>
+          </div>
+          <div class="cat-card" data-cat="Other">
+            <span class="cat-emoji">⋯</span>
+            <span class="cat-title">Other</span>
+          </div>
         </div>
-        <div class="cat-card" data-cat="Cleaning">
-          <span class="cat-emoji">🧹</span><span class="cat-title">Cleaning</span>
-        </div>
-        <div class="cat-card" data-cat="Carpentry">
-          <span class="cat-emoji">🪵</span><span class="cat-title">Carpentry</span>
-        </div>
-        <div class="cat-card" data-cat="Construction">
-          <span class="cat-emoji">🏗️</span><span class="cat-title">Construction</span>
-        </div>
-        <div class="cat-card" data-cat="Cooking">
-          <span class="cat-emoji">🍳</span><span class="cat-title">Cooking</span>
-        </div>
-        <div class="cat-card" data-cat="Tutoring">
-          <span class="cat-emoji">📘</span><span class="cat-title">Tutoring</span>
-        </div>
-        <div class="cat-card" data-cat="Other">
-          <span class="cat-emoji">...</span><span class="cat-title">Other</span>
-        </div>
-      </div>
+      </section>
+
 
   </div>
 </div>
@@ -1114,6 +1861,61 @@
 
 
 <script src="/static/js/actions.js" defer></script>
+
+
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const mobileNotify = document.getElementById("mobile-nav-notify");
+    const mobileSOS = document.getElementById("mobile-nav-sos");
+    const mobileProfile = document.getElementById("mobile-nav-profile");
+
+    const desktopNotifyLink = document.querySelector('.top-right-actions a[href="/notifications"]');
+    const sosBtn = document.getElementById("sos-btn");
+    const profileBtn = document.getElementById("profile-btn");
+
+    const mobileProfileSheet = document.getElementById("mobile-profile-sheet");
+    const mobileProfileBackdrop = mobileProfileSheet?.querySelector(".mobile-profile-backdrop");
+    const mobileProfileClose = document.getElementById("mobile-profile-close");
+
+    // Notifications
+    if (mobileNotify && desktopNotifyLink) {
+      mobileNotify.addEventListener("click", () => {
+        window.location.href = desktopNotifyLink.getAttribute("href");
+      });
+    }
+
+    // SOS – reuse existing SOS logic
+    if (mobileSOS && sosBtn) {
+      mobileSOS.addEventListener("click", () => {
+        sosBtn.click();
+      });
+    }
+
+    // Profile – open mobile sheet on small screens,
+    // keep desktop dropdown behaviour unchanged
+    if (mobileProfile && mobileProfileSheet) {
+      mobileProfile.addEventListener("click", () => {
+        // Only use sheet on mobile; on desktop you still have the normal dropdown
+        if (window.innerWidth <= 768) {
+          mobileProfileSheet.classList.add("open");
+        } else if (profileBtn) {
+          // desktop fallback – open original dropdown
+          profileBtn.click();
+        }
+      });
+    }
+
+    // Close handlers for sheet
+    const closeMobileProfile = () => {
+      mobileProfileSheet?.classList.remove("open");
+    };
+    mobileProfileBackdrop?.addEventListener("click", closeMobileProfile);
+    mobileProfileClose?.addEventListener("click", closeMobileProfile);
+  });
+</script>
+
+
+
 
 <script>
   // --- Location persistence keys ---
