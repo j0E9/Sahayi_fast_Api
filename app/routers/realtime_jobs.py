@@ -4,19 +4,24 @@ from fastapi import Query
 import math
 import random
 import time
-from datetime import datetime, timedelta
-from decimal import Decimal
+import os
 from typing import Optional
 from fastapi import Body
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status, Header
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session, joinedload
-
+import razorpay
 from app.database import get_db
 from app.models import (
-    User, Booking, Notification, Message, WorkerProfile
+    User, Booking, Notification, Message, WorkerProfile, WalletTransaction
 )
+from app.services.wallet import add_ledger_row
+from decimal import Decimal
+from razorpay.errors import SignatureVerificationError
+import logging
+from datetime import datetime, timedelta
+from app.settings import settings
 # If you use Twilio in this file, import your client/TWILIO_PHONE as needed.
 # from app.twilio import client, TWILIO_PHONE
 
@@ -80,75 +85,102 @@ class SendMessageIn(BaseModel):
 class UpdateQuantityIn(BaseModel):
     completed_quantity: int = Field(ge=0)
 
-# ---------- routes ----------
-@router.post("/razorpay/webhook")
-def razorpay_webhook(payload: dict = Body(...), db: Session = Depends(get_db)):
+logger = logging.getLogger("app.realtime.webhook")
+
+
+@router.post("/razorpay/verify_extra_payment")
+def verify_extra_payment(
+    payload: dict = Body(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     """
-    Basic webhook handler to mark extra payment completed.
-    In production: verify X-Razorpay-Signature header.
-    Expected: payload with payment.captured event and notes containing booking_id and extra_minutes.
+    Called from Razorpay Checkout success handler for EXTRA TIME.
+    Expects JSON body with:
+      - razorpay_order_id
+      - razorpay_payment_id
+      - razorpay_signature
+      - booking_id
+      - extra_minutes
     """
-    event = payload.get("event")
-    data = payload.get("payload", {})
-    if event == "payment.captured":
-        entity = data.get("payment", {}).get("entity", {}) or {}
-        notes = entity.get("notes", {}) or {}
-        booking_id = notes.get("booking_id")
-        extra_minutes = notes.get("extra_minutes")
-        # Also store payment id & amount if present (defensive)
-        payment_id = entity.get("id")
-        amount = entity.get("amount")  # amount in paise (if using Razorpay)
-        try:
-            if booking_id:
-                b = db.get(Booking, int(booking_id))
-                if b:
-                    # Mark payment completed
-                    b.extra_payment_completed = True
-                    # persist proposed minutes if provided
-                    if extra_minutes:
-                        try:
-                            b.proposed_extra_minutes = int(extra_minutes)
-                        except Exception:
-                            pass
-                    # persist payment/order ids if present
-                    if payment_id:
-                        # store in extra_razor_payment_id for traceability
-                        try:
-                            b.extra_razor_payment_id = str(payment_id)
-                        except Exception:
-                            pass
-                    if amount is not None:
-                        try:
-                            # convert paise -> rupees
-                            b.extra_razor_amount = float(amount) / 100.0
-                        except Exception:
-                            pass
 
-                    # If main session already ended, automatically start extra timer now
-                    # Compute main_time_left similar to /start_extra_timer logic
-                    main_time_left = 0
-                    if getattr(b, "otp_verified", False) and getattr(b, "otp_verified_time", None) and (b.rate_type or "").strip().lower() == "per hour":
-                        duration_secs = (b.quantity or 0) * 3600
-                        expiry_time = b.otp_verified_time + timedelta(seconds=duration_secs)
-                        now = datetime.utcnow()
-                        main_time_left = (expiry_time - now).total_seconds()
+    # 1) Verify Razorpay signature
+    try:
+        client = razorpay.Client(
+            auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET)
+        )
+        client.utility.verify_payment_signature(
+            {
+                "razorpay_order_id": payload["razorpay_order_id"],
+                "razorpay_payment_id": payload["razorpay_payment_id"],
+                "razorpay_signature": payload["razorpay_signature"],
+            }
+        )
+    except KeyError:
+        return {"success": False, "message": "Missing Razorpay fields"}
+    except SignatureVerificationError:
+        return {"success": False, "message": "Signature verification failed"}
 
-                    # Only auto-start if not already started and main session ended
-                    if (not getattr(b, "extra_timer_started_at", None)) and main_time_left <= 0:
-                        b.extra_timer_started_at = datetime.utcnow()
-                        try:
-                            mins = int(getattr(b, "proposed_extra_minutes", 0) or 0)
-                        except Exception:
-                            mins = 0
-                        if mins > 0:
-                            b.extra_timer_ends_at = b.extra_timer_started_at + timedelta(minutes=mins)
-                        else:
-                            b.extra_timer_ends_at = None
+    # 2) Extract booking + minutes from payload
+    booking_id = int(payload.get("booking_id") or 0)
+    extra_minutes = int(payload.get("extra_minutes") or 0)
+    if booking_id <= 0 or extra_minutes <= 0:
+        return {"success": False, "message": "Invalid booking or minutes"}
 
-                    db.commit()
-        except Exception:
-            db.rollback()
-    return {"status": "ok"}
+    # 3) Use existing logic to mark extra payment + start (or schedule) timer
+    timer_result = start_extra_timer(
+        payload={"booking_id": booking_id, "extra_minutes": extra_minutes},
+        db=db,
+        current_user=current_user,
+    )
+    if not timer_result.get("success"):
+        # If something failed in start_extra_timer, do not touch wallet
+        return timer_result
+
+    # 4) CREDIT worker wallet for the extra-time amount
+    booking = db.get(Booking, booking_id)
+    if not booking or not booking.worker:
+        return {"success": False, "message": "Booking/worker not found"}
+
+    worker = booking.worker
+
+    # Amount stored when order was created (in rupees)
+    amount_rupees = Decimal(str(booking.extra_razor_amount or 0)).quantize(Decimal("0.01"))
+    if amount_rupees <= 0:
+        # Timer is started but there is no monetary amount to record
+        return timer_result
+
+    payment_id = payload["razorpay_payment_id"]
+    order_id = payload["razorpay_order_id"]
+
+    # Idempotency: do not credit twice for the same Razorpay payment
+    existing = (
+        db.query(WalletTransaction)
+        .filter(
+            WalletTransaction.user_id == worker.id,
+            WalletTransaction.kind == "Extra_time_payment",
+            WalletTransaction.reference == payment_id,
+        )
+        .first()
+    )
+    if not existing:
+        add_ledger_row(
+            db=db,
+            user_id=worker.id,
+            amount_rupees=amount_rupees,
+            kind="Extra_time_payment",  # same kind as main booking credits
+            reference=payment_id,
+            meta={
+                "booking_id": booking.id,
+                "order_id": order_id,
+                "method": "razorpay_extra",
+                "extra_minutes": extra_minutes,
+            },
+        )
+        db.commit()
+
+    return timer_result
+
 
 
 @router.post("/verify_worker_location/{booking_id}")
@@ -267,6 +299,7 @@ def get_estimated_drive_time_by_booking(
 
     return {"seconds": seconds}
 
+
 @router.post("/razorpay/create_order_for_extra/{booking_id}")
 def create_order_for_extra(
     booking_id: int,
@@ -274,51 +307,84 @@ def create_order_for_extra(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """
-    Create and persist a Razorpay order for extra minutes.
-    Expects body: { "extra_minutes": <int> }
-    """
-    minutes = int(payload.get("extra_minutes") or 0)
+    # 1) Read minutes safely
+    minutes_raw = payload.get("extra_minutes")
+    try:
+        minutes = int(minutes_raw)
+    except (TypeError, ValueError):
+        return {"success": False, "message": "Invalid minutes"}
+
     booking = db.get(Booking, booking_id)
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found")
 
-    # Only provider (giver) should create the order
+    # Only provider (giver) can pay
     if current_user.id != booking.provider_id:
         raise HTTPException(status_code=403, detail="Not authorized")
 
     if minutes <= 0:
         return {"success": False, "message": "Invalid minutes"}
 
-    # TODO: Replace with real Razorpay order creation.
-    # Example placeholder order id & amount calculation:
-    # amount in paise (e.g. INR * 100). Adjust pricing logic as needed.
-    price_per_minute_inr = getattr(booking, "rate_per_minute", None) or 1  # fallback: 1 INR/min
-    amount_in_inr = minutes * price_per_minute_inr
+    # --- NEW: compute per-minute rate from your hourly rate ---
+    rate_type = (booking.rate_type or "").strip().lower()
+    rate_rupees = Decimal(str(booking.rate or 0))
+
+    if getattr(booking, "rate_per_minute", None):
+        # if you already have it in DB, reuse
+        price_per_minute_inr = Decimal(str(booking.rate_per_minute))
+    elif rate_type == "per hour":
+        # convert per-hour to per-minute
+        price_per_minute_inr = (rate_rupees / Decimal("60")).quantize(Decimal("0.01"))
+        # optionally persist it for later reuse:
+        if hasattr(booking, "rate_per_minute"):
+            booking.rate_per_minute = float(price_per_minute_inr)
+    else:
+        # fallback: treat rate as total for job_duration_minutes
+        duration_minutes = getattr(booking, "job_duration_minutes", 0) or 60
+        price_per_minute_inr = (rate_rupees / Decimal(str(duration_minutes))).quantize(Decimal("0.01"))
+
+    amount_in_inr = (Decimal(str(minutes)) * price_per_minute_inr).quantize(Decimal("0.01"))
     amount_paise = int(amount_in_inr * 100)
 
-    # Example pseudo-order id (replace by razorpay client call)
-    razor_order_id = f"rzp_extra_{int(time.time())}_{booking_id}"
+    # Safety check so we don’t crash with empty keys
+    if not settings.RAZORPAY_KEY_ID or not settings.RAZORPAY_KEY_SECRET:
+        raise HTTPException(
+            status_code=500,
+            detail="Razorpay keys not configured on server",
+        )
 
-    # Persist proposed minutes and order id BEFORE returning to client
-    try:
-        booking.proposed_extra_minutes = minutes
-        booking.extra_razor_order_id = razor_order_id
-        booking.extra_razor_amount = float(amount_in_inr)
-        booking.extra_payment_completed = False
-        db.commit()
-    except Exception:
-        db.rollback()
-        raise HTTPException(status_code=500, detail="Failed to persist order data")
+    # 4) Create Razorpay order for the extra-time amount
+    client = razorpay.Client(
+        auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET)
+    )
+    order = client.order.create(
+        {
+            "amount": amount_paise,
+            "currency": "INR",
+            "payment_capture": 1,
+            "notes": {
+                "booking_id": str(booking_id),
+                "extra_minutes": str(minutes),
+            },
+        }
+    )
 
-    # Return payload expected by frontend (match your current modal's expectation)
+    # 5) Persist order details on the booking
+    booking.proposed_extra_minutes = minutes
+    booking.extra_razor_order_id = order["id"]
+    booking.extra_razor_amount = float(amount_in_inr)  # store rupees for wallet credit
+    booking.extra_payment_completed = False
+    db.commit()
+
+    # 6) Return data for Razorpay Checkout.js on frontend
     return {
-        "order_id": razor_order_id,
-        "amount": amount_paise,
-        "currency": "INR",
-        "key_id": "RAZORPAY_KEY_ID_PLACEHOLDER",
-        "message": "Order created. Open Razorpay checkout on client.",
+        "success": True,
+        "order_id": order["id"],
+        "amount": order["amount"],
+        "currency": order["currency"],
+        "key_id": settings.RAZORPAY_KEY_ID,
     }
+
 
 @router.post("/verify_extra_timer_otp")
 def verify_extra_timer_otp(

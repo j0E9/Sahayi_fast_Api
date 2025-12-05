@@ -4,171 +4,435 @@
     <meta charset="UTF-8">
     <title>Edit Worker Profile</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
+
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
     <style>
-        body { background: #f8f9fa; }
-        .profile-card {
-            max-width: 850px;
-            margin: auto;
-            background: #fff;
-            padding: 30px;
-            border-radius: 15px;
-            box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+        /* === GLOBAL === */
+        body {
+            background:
+              radial-gradient(circle at 0% 0%, #e0f2fe 0, #eef2ff 35%, #f9fafb 100%);
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            padding: 20px 10px;
         }
+
+        .profile-shell {
+            max-width: 980px;
+            margin: 0 auto;
+        }
+
+        .profile-card {
+            background: #ffffff;
+            border-radius: 22px;
+            box-shadow:
+              0 20px 45px rgba(15, 23, 42, 0.16),
+              0 0 0 1px rgba(148, 163, 184, 0.18);
+            overflow: hidden;
+            animation: fadeUp .45s ease-out;
+        }
+
+        @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(18px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+
+        .card-header-gradient {
+            background: linear-gradient(135deg, #0ea5e9, #2563eb);
+            color: #f9fafb;
+            padding: 18px 22px;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .card-header-gradient h2 {
+            font-size: 1.3rem;
+            margin: 0;
+            font-weight: 600;
+        }
+
+        .card-header-gradient .sub {
+            font-size: 0.85rem;
+            opacity: 0.9;
+        }
+
+        .badge-soft {
+            border-radius: 999px;
+            padding: 4px 10px;
+            font-size: 0.75rem;
+            background: rgba(15, 23, 42, 0.3);
+            color: #e5f3ff;
+        }
+
+        .profile-body {
+            padding: 24px 24px 22px;
+        }
+
+        /* === PROFILE PHOTO / INFO === */
+        .profile-photo-wrap {
+            text-align: center;
+        }
+
         .profile-photo {
             width: 160px;
             height: 160px;
             object-fit: cover;
             border-radius: 50%;
-            border: 4px solid #0d6efd;
+            border: 4px solid #ffffff;
+            box-shadow: 0 14px 32px rgba(15, 23, 42, 0.35);
         }
-        .skill-group {
+
+        .photo-label {
+            font-size: 0.8rem;
+            color: #6b7280;
+            margin-top: 4px;
+        }
+
+        .section-title {
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: #111827;
             display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-            margin-bottom: 10px;
+            align-items: center;
+            gap: 6px;
+            margin-bottom: 8px;
+        }
+
+        .section-title span.icon {
+            width: 24px;
+            height: 24px;
+            border-radius: 999px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: #e0f2fe;
+            font-size: 0.9rem;
+        }
+
+        .helper-text {
+            font-size: 0.8rem;
+            color: #6b7280;
+        }
+
+        /* === FORM CONTROLS === */
+        .form-control,
+        .form-select {
+            border-radius: 10px;
+            border-color: #d1d5db;
+        }
+
+        .form-control:focus,
+        .form-select:focus {
+            border-color: #2563eb;
+            box-shadow: 0 0 0 0.18rem rgba(37, 99, 235, 0.25);
+        }
+
+        textarea.form-control {
+            min-height: 90px;
+        }
+
+        /* === SKILLS === */
+        #skills-section {
+            margin-top: 6px;
+        }
+
+        .skill-group-outer {
+            border-radius: 14px;
+            background: #f9fafb;
+            border: 1px solid #e5e7eb;
+            padding: 8px 10px;
+            margin-bottom: 8px;
+            transition: box-shadow .15s ease, transform .15s ease, border-color .15s ease;
+        }
+
+        .skill-group-outer:hover {
+            box-shadow: 0 10px 28px rgba(15, 23, 42, 0.12);
+            transform: translateY(-2px);
+            border-color: #3b82f6;
+        }
+
+        .skill-chip-label {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: .05em;
+            color: #9ca3af;
+            margin-bottom: 4px;
+        }
+
+        .skill-group .form-control-sm,
+        .skill-group .form-select-sm {
+            font-size: 0.83rem;
+        }
+
+        .btn-add-skill {
+            border-radius: 999px;
+            padding-inline: 14px;
+            font-size: 0.85rem;
+        }
+
+        /* === MEDIA PREVIEW === */
+        .preview-image {
+            width: 100px;
+            height: 70px;
+            object-fit: cover;
+            border-radius: 10px;
+            box-shadow: 0 4px 10px rgba(15,23,42,0.18);
+        }
+
+        .current-media-block {
+            background: #f9fafb;
+            border-radius: 14px;
+            padding: 14px 12px;
+            border: 1px solid #e5e7eb;
+        }
+
+        /* === SUBMIT BUTTON === */
+        .btn-primary.w-100 {
+            border-radius: 999px;
+            padding-block: 10px;
+            font-weight: 600;
+            box-shadow: 0 10px 22px rgba(37, 99, 235, 0.35);
+            transition: transform .08s ease-out, box-shadow .08s ease-out;
+        }
+
+        .btn-primary.w-100:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 14px 30px rgba(37, 99, 235, 0.45);
+        }
+
+        .btn-outline-danger.btn-sm {
+            border-radius: 999px;
+        }
+
+        /* === NEGOTIATION OVERLAY === */
+        #neg-overlay {
+            backdrop-filter: blur(3px);
+        }
+
+        @media (max-width: 767.98px) {
+            .profile-body {
+                padding: 18px 16px 20px;
+            }
         }
     </style>
 </head>
 <body>
-<div class="container mt-5">
+<div class="profile-shell mt-4 mt-md-5">
     <div class="profile-card">
-        <h2 class="text-center mb-4 text-primary">✏️ Edit Worker Profile</h2>
-
-        <!-- Profile Photo (non-editable) -->
-        <div class="text-center mb-4">
-            <img src="{% if profile.photo %}
-                        {{ url_for('static', path='uploads/' ~ profile.photo) }}
-                      {% else %}
-                        {{ url_for('static', path='default-profile.jpg') }}
-                      {% endif %}"
-                 class="profile-photo" alt="Profile Photo">
+        <!-- Header -->
+        <div class="card-header-gradient">
+            <div>
+                <h2>✏️ Edit Worker Profile</h2>
+                <div class="sub">Keep your details up to date so job givers can find the best match.</div>
+            </div>
+            <div class="ms-auto d-none d-md-block">
+                <span class="badge-soft">Profile · Sahayi Partner</span>
+            </div>
         </div>
 
-        <!-- JS-handled Form -->
-        <form id="editForm" enctype="multipart/form-data">
+        <div class="profile-body">
+            <!-- Profile Photo (non-editable) -->
+            <div class="row g-4 mb-3">
+                <!-- LEFT: basic details + form -->
+                <div class="col-md-8 order-md-1 order-2">
+                    <div class="section-title">
+                        <span class="icon">👤</span>
+                        <span>Basic Details</span>
+                    </div>
+                    <p class="helper-text mb-2">
+                        These details help customers know who you are and what you can do.
+                    </p>
 
+                    <!-- JS-handled Form -->
+                    <form id="editForm" enctype="multipart/form-data">
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Gender</label>
+                                <select class="form-select" name="gender" required>
+                                    <option value="Male"   {% if profile.gender == 'Male' %}selected{% endif %}>Male</option>
+                                    <option value="Female" {% if profile.gender == 'Female' %}selected{% endif %}>Female</option>
+                                </select>
+                            </div>
+
+                            <div class="col-md-6">
+                                <label class="form-label">Qualification</label>
+                                <input type="text" class="form-control" name="qualification"
+                                       value="{{ profile.qualification }}" required>
+                            </div>
+
+                            <div class="col-md-12">
+                                <label class="form-label">Experience</label>
+                                <input type="text" class="form-control" name="experience"
+                                       value="{{ profile.experience }}" required>
+                                <div class="helper-text mt-1">Example: “5 years as electrician”, “2 years as home cook”.</div>
+                            </div>
+
+                            <div class="col-md-12">
+                                <label class="form-label">About Me</label>
+                                <textarea class="form-control" name="about" rows="3" required>{{ profile.about }}</textarea>
+                                <div class="helper-text mt-1">Write a short intro about yourself and how you work.</div>
+                            </div>
+                        </div>
+                        <!-- the rest of the form (skills, media, submit, etc.) stays exactly as you already have it below -->
+
+
+                        <!-- Skills Section -->
+                        <hr class="my-4">
+
+                        <div class="section-title">
+                            <span class="icon">🛠️</span>
+                            <span>Skills & Rates</span>
+                        </div>
+                        <p class="helper-text mb-2">
+                            Add all services you offer. You can have different categories and price types.
+                        </p>
+
+                        <div id="skills-section">
+                            {% for skill in skills %}
+                            <div class="skill-group-outer">
+                                <div class="skill-chip-label">Skill {{ loop.index }}</div>
+                                <div class="row g-2 align-items-center skill-group">
+                                    <div class="col-md-3 col-6">
+                                        <input type="text" class="form-control form-control-sm"
+                                               name="skills" value="{{ skill.name }}" required
+                                               placeholder="Skill name">
+                                    </div>
+
+                                    <!-- Category -->
+                                    <div class="col-md-3 col-6">
+                                        <select class="form-select form-select-sm" name="categories" required>
+                                            <option value="" disabled {% if not skill.category %}selected{% endif %}>Category</option>
+                                            <option value="Plumbing"   {% if skill.category == 'Plumbing' %}selected{% endif %}>Plumbing</option>
+                                            <option value="Electrical" {% if skill.category == 'Electrical' %}selected{% endif %}>Electrical</option>
+                                            <option value="Cleaning"   {% if skill.category == 'Cleaning' %}selected{% endif %}>Cleaning</option>
+                                            <option value="Carpentry"  {% if skill.category == 'Carpentry' %}selected{% endif %}>Carpentry</option>
+                                            <option value="Construction" {% if skill.category == 'Construction' %}selected{% endif %}>Construction</option>
+                                            <option value="Cooking"    {% if skill.category == 'Cooking' %}selected{% endif %}>Cooking</option>
+                                            <option value="Tutoring"   {% if skill.category == 'Tutoring' %}selected{% endif %}>Tutoring</option>
+                                            <option value="Other"      {% if skill.category == 'Other' %}selected{% endif %}>Other</option>
+                                        </select>
+                                    </div>
+
+                                    <div class="col-md-2 col-6">
+                                        <input type="number" class="form-control form-control-sm"
+                                               name="rates" value="{{ skill.rate }}" required
+                                               placeholder="Rate ₹">
+                                    </div>
+
+                                    <div class="col-md-3 col-6">
+                                        <select class="form-select form-select-sm" name="rate_types" required>
+                                            <option value="per hour"     {% if skill.rate_type == 'per hour' %}selected{% endif %}>₹ / Hour</option>
+                                            <option value="per job"      {% if skill.rate_type == 'per job' %}selected{% endif %}>₹ / Job</option>
+                                            <option value="per kilogram" {% if skill.rate_type == 'per kilogram' %}selected{% endif %}>₹ / Kilogram</option>
+                                            <option value="custom"       {% if skill.rate_type == 'custom' %}selected{% endif %}>₹ / Custom</option>
+                                        </select>
+                                    </div>
+
+                                    <div class="col-md-1 col-12 text-end mt-1 mt-md-0">
+                                        {% if not loop.first %}
+                                        <button type="button"
+                                                class="btn btn-outline-danger btn-sm"
+                                                onclick="removeSkill(this)">✕</button>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+
+                        <div class="mb-2">
+                            <button type="button"
+                                    class="btn btn-outline-primary btn-sm btn-add-skill"
+                                    onclick="addSkill()">
+                                ➕ Add another skill
+                            </button>
+                        </div>
+
+                        <!-- Media Upload -->
+                        <hr class="my-4">
+                        <div class="section-title">
+                            <span class="icon">📸</span>
+                            <span>Showcase Media</span>
+                        </div>
+                        <p class="helper-text mb-2">
+                            Good photos and a short video help customers trust you more.
+                        </p>
+
+                        <div class="row g-3 mb-2">
+                            <div class="col-md-6">
+                                <label class="form-label">Showcase Images</label>
+                                <input type="file" class="form-control" name="showcase_images" accept="image/*" multiple>
+                                <div class="helper-text mt-1">You can upload multiple images (JPG, PNG).</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Profile Video</label>
+                                <input type="file" class="form-control" name="video" accept="video/*">
+                                <div class="helper-text mt-1">Optional short introduction or work demo.</div>
+                            </div>
+                        </div>
+
+                        <!-- Submit -->
+                        <hr class="my-4">
+                        <button type="submit" class="btn btn-primary w-100">
+                            💾 Save &amp; Update Profile
+                        </button>
+                    </form>
+                </div>
+
+                 <!-- RIGHT: profile photo -->
+                <div class="col-md-4 profile-photo-wrap order-md-2 order-1">
+                    <img src="{% if profile.photo %}
+                                {{ url_for('static', path='uploads/' ~ profile.photo) }}
+                              {% else %}
+                                {{ url_for('static', path='default-profile.jpg') }}
+                              {% endif %}"
+                         class="profile-photo" alt="Profile Photo">
+                    <div class="photo-label">This is your current profile photo.</div>
+                </div>
+            </div>
+            </div>
+
+            <!-- Existing Media -->
+            {% if profile.video or showcase_images %}
+            <hr class="my-4">
             <div class="row g-3">
+                {% if profile.video %}
                 <div class="col-md-6">
-                    <label class="form-label">Gender</label>
-                    <select class="form-select" name="gender" required>
-                        <option value="Male" {% if profile.gender == 'Male' %}selected{% endif %}>Male</option>
-                        <option value="Female" {% if profile.gender == 'Female' %}selected{% endif %}>Female</option>
-                    </select>
+                    <div class="section-title">
+                        <span class="icon">🎥</span>
+                        <span>Current Video</span>
+                    </div>
+                    <div class="current-media-block">
+                        <video width="100%" controls class="rounded">
+                            <source src="{{ url_for('static', path='uploads/' ~ profile.video) }}">
+                        </video>
+                        <div class="helper-text mt-1">You can upload a new video above to replace this.</div>
+                    </div>
                 </div>
+                {% endif %}
 
+                {% if showcase_images %}
                 <div class="col-md-6">
-                    <label class="form-label">Qualification</label>
-                    <input type="text" class="form-control" name="qualification" value="{{ profile.qualification }}" required>
+                    <div class="section-title">
+                        <span class="icon">📷</span>
+                        <span>Current Showcase Images</span>
+                    </div>
+                    <div class="current-media-block d-flex flex-wrap gap-2">
+                        {% for img in showcase_images %}
+                        <img src="{{ url_for('static', path='uploads/' ~ img.image_url) }}"
+                             class="preview-image" alt="Showcase">
+                        {% endfor %}
+                    </div>
                 </div>
-
-                <div class="col-md-12">
-                    <label class="form-label">Experience</label>
-                    <input type="text" class="form-control" name="experience" value="{{ profile.experience }}" required>
-                </div>
-
-                <div class="col-md-12">
-                    <label class="form-label">About Me</label>
-                    <textarea class="form-control" name="about" rows="3" required>{{ profile.about }}</textarea>
-                </div>
+                {% endif %}
             </div>
-
-            <!-- Skills Section -->
-            <hr class="my-4">
-            <h5 class="text-primary">🛠️ Skills</h5>
-            <div id="skills-section">
-              {% for skill in skills %}
-              <div class="row g-2 align-items-center mb-2 skill-group">
-                <div class="col-md-3">
-                  <input type="text" class="form-control form-control-sm" name="skills" value="{{ skill.name }}" required>
-                </div>
-
-                <!-- NEW: Skill Category -->
-                <div class="col-md-3">
-                  <select class="form-select form-select-sm" name="categories" required>
-                    <option value="" disabled {% if not skill.category %}selected{% endif %}>Select category</option>
-                    <option value="Plumbing"   {% if skill.category == 'Plumbing' %}selected{% endif %}>Plumbing</option>
-                    <option value="Electrical" {% if skill.category == 'Electrical' %}selected{% endif %}>Electrical</option>
-                    <option value="Cleaning"   {% if skill.category == 'Cleaning' %}selected{% endif %}>Cleaning</option>
-                    <option value="Carpentry"  {% if skill.category == 'Carpentry' %}selected{% endif %}>Carpentry</option>
-                    <option value="Construction"   {% if skill.category == 'Construction' %}selected{% endif %}>Construction</option>
-                    <option value="Cooking"    {% if skill.category == 'Cooking' %}selected{% endif %}>Cooking</option>
-                    <option value="Tutoring"   {% if skill.category == 'Tutoring' %}selected{% endif %}>Tutoring</option>
-                    <option value="Other"      {% if skill.category == 'Other' %}selected{% endif %}>Other</option>
-                  </select>
-                </div>
-
-                <div class="col-md-2">
-                  <input type="number" class="form-control form-control-sm" name="rates" value="{{ skill.rate }}" required>
-                </div>
-
-                <div class="col-md-3">
-                  <select class="form-select form-select-sm" name="rate_types" required>
-                    <option value="per hour"     {% if skill.rate_type == 'per hour' %}selected{% endif %}>₹/Hour</option>
-                    <option value="per job"      {% if skill.rate_type == 'per job' %}selected{% endif %}>₹/Job</option>
-                    <option value="per kilogram" {% if skill.rate_type == 'per kilogram' %}selected{% endif %}>₹/Kilogram</option>
-                    <option value="custom"       {% if skill.rate_type == 'custom' %}selected{% endif %}>₹/Custom</option>
-                  </select>
-                </div>
-
-                <div class="col-md-1">
-                  {% if not loop.first %}
-                  <button type="button" class="btn btn-outline-danger btn-sm w-100" onclick="removeSkill(this)">❌ Remove</button>
-                  {% endif %}
-                </div>
-              </div>
-              {% endfor %}
-            </div>
-
-            <div>
-                <button type="button" class="btn btn-outline-primary btn-sm" onclick="addSkill()">➕ Add Skill</button>
-            </div>
-
-            <!-- Media Upload -->
-            <hr class="my-4">
-            <h5 class="text-primary">📸 Upload Media</h5>
-            <div class="mb-3">
-                <label class="form-label">Showcase Images</label>
-                <input type="file" class="form-control" name="showcase_images" accept="image/*" multiple>
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Profile Video</label>
-                <input type="file" class="form-control" name="video" accept="video/*">
-            </div>
-
-            <!-- Submit -->
-            <div class="mt-4">
-                <button type="submit" class="btn btn-primary w-100">💾 Update Profile</button>
-            </div>
-        </form>
-
-        <!-- Existing Media -->
-        {% if profile.video %}
-        <hr class="my-4">
-        <h5 class="text-primary">🎥 Current Video</h5>
-        <video width="300" controls>
-            <source src="{{ url_for('static', path='uploads/' ~ profile.video) }}">
-        </video>
-        {% endif %}
-
-        {% if showcase_images %}
-        <hr class="my-4">
-        <h5 class="text-primary">📷 Current Showcase Images</h5>
-        <div class="d-flex flex-wrap gap-2">
-            {% for img in showcase_images %}
-            <div>
-                <img src="{{ url_for('static', path='uploads/' ~ img.image_url) }}" width="100" class="rounded">
-
-            </div>
-            {% endfor %}
+            {% endif %}
         </div>
-        {% endif %}
     </div>
 </div>
 
-
-<!-- Worker negotiation popup (global) -->
+<!-- Worker negotiation popup (global) – unchanged -->
 <div id="neg-overlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:5000; align-items:center; justify-content:center;">
   <div style="background:#fff; border-radius:12px; width:92%; max-width:420px; padding:18px;">
     <h5 id="neg-title" class="mb-2">Custom price confirmation</h5>
@@ -182,49 +446,65 @@
     </div>
   </div>
 </div>
+
 <!-- Scripts -->
 <script>
 function addSkill() {
   const container = document.getElementById('skills-section');
-  const row = document.createElement('div');
-  row.className = 'row g-2 align-items-center mb-2 skill-group';
-  row.innerHTML = `
-    <div class="col-md-3">
-      <input type="text" name="skills" class="form-control form-control-sm" placeholder="Skill" required>
-    </div>
-    <div class="col-md-3">
-      <select class="form-select form-select-sm" name="categories" required>
-        <option value="" selected disabled>Select category</option>
-        <option>Plumbing</option>
-        <option>Electrical</option>
-        <option>Cleaning</option>
-        <option>Carpentry</option>
-        <option>Construction</option>
-        <option>Cooking</option>
-        <option>Tutoring</option>
-        <option>Other</option>
-      </select>
-    </div>
-    <div class="col-md-2">
-      <input type="number" name="rates" class="form-control form-control-sm" placeholder="Rate ₹" required>
-    </div>
-    <div class="col-md-3">
-      <select class="form-select form-select-sm" name="rate_types" required>
-        <option value="per hour">₹/Hour</option>
-        <option value="per job">₹/Job</option>
-        <option value="per kilogram">₹/Kilogram</option>
-        <option value="custom">₹/Custom</option>
-      </select>
-    </div>
-    <div class="col-md-1">
-      <button type="button" class="btn btn-outline-danger btn-sm w-100" onclick="removeSkill(this)">❌</button>
+  const index = container.querySelectorAll('.skill-group-outer').length + 1;
+
+  const outer = document.createElement('div');
+  outer.className = 'skill-group-outer';
+  outer.innerHTML = `
+    <div class="skill-chip-label">Skill ${index}</div>
+    <div class="row g-2 align-items-center skill-group">
+      <div class="col-md-3 col-6">
+        <input type="text" name="skills"
+               class="form-control form-control-sm"
+               placeholder="Skill name" required>
+      </div>
+      <div class="col-md-3 col-6">
+        <select class="form-select form-select-sm" name="categories" required>
+          <option value="" selected disabled>Category</option>
+          <option>Plumbing</option>
+          <option>Electrical</option>
+          <option>Cleaning</option>
+          <option>Carpentry</option>
+          <option>Construction</option>
+          <option>Cooking</option>
+          <option>Tutoring</option>
+          <option>Other</option>
+        </select>
+      </div>
+      <div class="col-md-2 col-6">
+        <input type="number" name="rates"
+               class="form-control form-control-sm"
+               placeholder="Rate ₹" required>
+      </div>
+      <div class="col-md-3 col-6">
+        <select class="form-select form-select-sm" name="rate_types" required>
+          <option value="per hour">₹ / Hour</option>
+          <option value="per job">₹ / Job</option>
+          <option value="per kilogram">₹ / Kilogram</option>
+          <option value="custom">₹ / Custom</option>
+        </select>
+      </div>
+      <div class="col-md-1 col-12 text-end mt-1 mt-md-0">
+        <button type="button"
+                class="btn btn-outline-danger btn-sm"
+                onclick="removeSkill(this)">✕</button>
+      </div>
     </div>
   `;
-  container.appendChild(row);
+  container.appendChild(outer);
+
+  // small scroll / highlight effect
+  outer.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
 function removeSkill(btn) {
-    btn.closest('.skill-group').remove();
+    const group = btn.closest('.skill-group-outer');
+    if (group) group.remove();
 }
 
 // JavaScript form submit
@@ -247,8 +527,8 @@ document.getElementById('editForm').addEventListener('submit', async function(e)
     }
 });
 
+/* Negotiation overlay JS – unchanged from your version */
 (function(){
-  // Only run for signed-in workers (no harm if others see it; nothing will show)
   let negId = null;
   let pollTimer = null;
   const overlay  = document.getElementById('neg-overlay');
@@ -278,12 +558,12 @@ document.getElementById('editForm').addEventListener('submit', async function(e)
   }
 
   async function checkInbox(){
-    if (negId) return; // already handling a negotiation
+    if (negId) return;
     try{
       const r = await fetch('/negotiation/pending', {credentials:'same-origin'});
       const j = await r.json();
       if (j && j.ok && j.negotiation) showPopup(j.negotiation);
-    }catch(e){ /* ignore */ }
+    }catch(e){}
   }
 
   async function checkStatus() {
@@ -296,7 +576,6 @@ document.getElementById('editForm').addEventListener('submit', async function(e)
       const giver = d.giver_price ? Number(d.giver_price).toFixed(2) : null;
       const worker = d.worker_price ? Number(d.worker_price).toFixed(2) : null;
 
-      // === dynamic UI messages ===
       if (d.status === 'confirmed') {
         msgEl.textContent = `✅ Price matched at ₹${giver || worker}. You can book now.`;
         setTimeout(hidePopup, 1000);
@@ -304,7 +583,6 @@ document.getElementById('editForm').addEventListener('submit', async function(e)
         msgEl.textContent = '❌ Negotiation cancelled.';
         setTimeout(hidePopup, 800);
       } else {
-        // Status: open
         if (worker && !giver) {
           msgEl.textContent = `Your offer: ₹${worker}. Waiting for job giver to respond…`;
         } else if (giver && !worker) {
@@ -320,14 +598,10 @@ document.getElementById('editForm').addEventListener('submit', async function(e)
     }
   }
 
-
   btnOK?.addEventListener('click', async () => {
     if (!negId) return;
     const val = priceEl.value;
-    if (!val) {
-      priceEl.focus();
-      return;
-    }
+    if (!val) { priceEl.focus(); return; }
     try {
       const r = await fetch('/negotiation/offer', {
         method: 'POST',
@@ -344,7 +618,6 @@ document.getElementById('editForm').addEventListener('submit', async function(e)
       const worker = Number(val).toFixed(2);
       const giver = d.giver_price ? Number(d.giver_price).toFixed(2) : null;
 
-      // === update the message immediately ===
       if (d.status === 'confirmed') {
         msgEl.textContent = `✅ Price matched at ₹${giver || worker}. You can book now.`;
         setTimeout(hidePopup, 1000);
@@ -359,8 +632,7 @@ document.getElementById('editForm').addEventListener('submit', async function(e)
     }
   });
 
-
-  btnCancel?.addEventListener('click', async ()=>{
+  btnCancel?.addEventListener('click', async ()=> {
     if (!negId) return hidePopup();
     try{
       await fetch('/negotiation/cancel', {
@@ -371,11 +643,9 @@ document.getElementById('editForm').addEventListener('submit', async function(e)
     hidePopup();
   });
 
-  // Start polling inbox every 3 seconds, and once immediately.
   setInterval(checkInbox, 3000);
   checkInbox();
 })();
-
 </script>
 </body>
 </html>

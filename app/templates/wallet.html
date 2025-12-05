@@ -5,54 +5,558 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Wallet</title>
   <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+
   <style>
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; padding:24px; }
-    .card { max-width: 720px; margin:auto; border:1px solid #e5e7eb; border-radius:14px; padding:20px; }
-    .row { display:flex; justify-content:space-between; margin:8px 0; }
-    .muted { color:#6b7280; }
-    .btn { padding:10px 14px; border-radius:10px; border:none; cursor:pointer; }
-    .btn-primary { background:#2563eb; color:#fff; }
-    input { padding:10px; border:1px solid #e5e7eb; border-radius:10px; width:160px; }
-    table { width:100%; border-collapse:collapse; margin-top:12px; }
-    th,td { padding:8px; border-bottom:1px solid #eef2f7; font-size:14px; }
+    :root {
+      --primary: #0d6efd;
+      --primary-soft: #e7f1ff;
+      --primary-soft-strong: #d4e5ff;
+      --accent: #2563eb;
+      --danger: #dc2626;
+      --border-subtle: #d0ddf5;
+      --text-main: #1f2933;
+      --text-muted: #6b7280;
+      --card-bg: #ffffff;
+      --bg-soft: #f5f7fe;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      background:
+        linear-gradient(135deg, #e3f2fd 0%, #ffffff 40%, #e0ecff 100%);
+      color: var(--text-main);
+      padding: 16px;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .wallet-shell {
+      width: 100%;
+      max-width: 880px;
+    }
+
+    .wallet-header {
+      margin-bottom: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .wallet-title {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .wallet-title h1 {
+      margin: 0;
+      font-size: 1.7rem;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: #0b3c6f;
+    }
+
+    .wallet-title h1 span.emoji {
+      font-size: 1.5em;
+    }
+
+    .wallet-title p {
+      margin: 0;
+      font-size: 0.9rem;
+      color: var(--text-muted);
+    }
+
+    .integrity-pill {
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 0.78rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border: 1px solid var(--border-subtle);
+      background: #ffffff;
+      box-shadow: 0 4px 10px rgba(148, 163, 184, 0.25);
+      color: var(--text-main);
+    }
+
+    .integrity-pill.ok {
+      border-color: rgba(22,163,74,0.4);
+      background: #ecfdf3;
+      color: #166534;
+    }
+
+    .integrity-pill.fail {
+      border-color: rgba(248,113,113,0.5);
+      background: #fef2f2;
+      color: #b91c1c;
+    }
+
+    /* Main card */
+    .wallet-card {
+      background: var(--card-bg);
+      border-radius: 22px;
+      padding: 18px 18px 16px;
+      border: 1px solid var(--border-subtle);
+      box-shadow:
+        0 14px 35px rgba(15,23,42,0.12);
+    }
+
+    .wallet-top-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+      align-items: stretch;
+    }
+
+    .balance-card {
+      flex: 1.4;
+      padding: 14px 14px 12px;
+      border-radius: 18px;
+      background: linear-gradient(135deg, #ffffff, #edf3ff);
+      border: 1px solid #d6e4ff;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      min-width: 220px;
+      box-shadow: 0 10px 22px rgba(15,23,42,0.08);
+    }
+
+    .balance-label {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 6px;
+    }
+
+    .balance-value {
+      font-size: 2rem;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      color: #0b3c6f;
+    }
+
+    .balance-sub {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    .quick-badges {
+      margin-top: 10px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .quick-badge {
+      font-size: 0.78rem;
+      padding: 3px 9px;
+      border-radius: 999px;
+      border: 1px solid #dbe4ff;
+      background: #f5f7ff;
+      color: #44546a;
+    }
+
+    .actions-column {
+      flex: 1;
+      min-width: 220px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .action-card {
+      border-radius: 16px;
+      padding: 10px 12px;
+      background: #f9fbff;
+      border: 1px solid #dde7ff;
+      box-shadow: 0 6px 16px rgba(15,23,42,0.05);
+    }
+
+    .action-card h3 {
+      margin: 0 0 4px;
+      font-size: 0.98rem;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: #0b3c6f;
+    }
+
+    .action-card p {
+      margin: 0 0 8px;
+      font-size: 0.78rem;
+      color: var(--text-muted);
+    }
+
+    .field-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .field-row input {
+      padding: 9px 10px;
+      border-radius: 10px;
+      border: 1px solid #d0ddf5;
+      background: #ffffff;
+      color: var(--text-main);
+      width: 100%;
+      max-width: 160px;
+      font-size: 0.9rem;
+    }
+
+    .field-row input::placeholder {
+      color: #94a3b8;
+    }
+
+    .field-row input:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 1px rgba(37,99,235,0.35);
+    }
+
+    .btn {
+      padding: 8px 12px;
+      border-radius: 999px;
+      border: none;
+      cursor: pointer;
+      font-size: 0.88rem;
+      font-weight: 500;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+      transition: 0.15s ease;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #0ea5e9, #2563eb);
+      color: white;
+      box-shadow: 0 10px 20px rgba(37,99,235,0.35);
+    }
+
+    .btn-primary:hover {
+      filter: brightness(1.05);
+      transform: translateY(-1px);
+    }
+
+    .btn-ghost {
+      background: #ffffff;
+      color: #0b3c6f;
+      border: 1px solid #cbd5f5;
+      box-shadow: 0 4px 10px rgba(15,23,42,0.06);
+    }
+
+    .btn-ghost:hover {
+      background: #e0ebff;
+      border-color: #b0c4ff;
+    }
+
+    .help-text {
+      margin-top: 4px;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    .help-text.danger {
+      color: #b91c1c;
+    }
+
+    /* Transactions section */
+    .tx-section {
+      margin-top: 18px;
+      padding-top: 12px;
+      border-top: 1px dashed #d1ddf5;
+    }
+
+    .tx-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 6px;
+    }
+
+    .tx-header h3 {
+      margin: 0;
+      font-size: 1rem;
+      color: #0b3c6f;
+    }
+
+    .tx-sub {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+
+    .tx-table-wrap {
+      margin-top: 6px;
+      border-radius: 12px;
+      border: 1px solid #dde7ff;
+      overflow: hidden;
+      background: #ffffff;
+      max-height: 260px;
+      overflow-y: auto;
+      box-shadow: 0 8px 18px rgba(15,23,42,0.06);
+    }
+
+    table {
+      width: 100%;
+      min-width: 520px;     /* force horizontal scrolling on small screens */
+      border-collapse: collapse;
+      font-size: 0.86rem;
+    }
+
+
+    thead tr {
+      background: #f5f7ff;
+    }
+
+    th, td {
+      padding: 8px 10px;
+      text-align: left;
+      border-bottom: 1px solid #edf2ff;
+    }
+
+    th {
+      font-weight: 500;
+      color: #6b7280;
+      position: sticky;
+      top: 0;
+      background: #f5f7ff;
+      z-index: 1;
+    }
+
+    tbody tr:nth-child(even) {
+      background: #f9fbff;
+    }
+
+    tbody tr:nth-child(odd) {
+      background: #ffffff;
+    }
+
+    tbody tr:hover {
+      background: #e4ecff;
+    }
+
+    .tx-kind {
+      font-size: 0.78rem;
+      padding: 2px 8px;
+      border-radius: 999px;
+      border: 1px solid #cbd5f5;
+      background: #eff3ff;
+      color: #1e3a8a;
+      display: inline-block;
+    }
+
+    .tx-amount {
+      font-variant-numeric: tabular-nums;
+      text-align: right;
+      white-space: nowrap;
+      color: #111827;
+    }
+
+    .tx-ref {
+      max-width: 160px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: #4b5563;
+    }
+
+    .tx-empty {
+      text-align: center;
+      padding: 16px;
+      color: var(--text-muted);
+      font-size: 0.86rem;
+    }
+
+    /* Mobile adjustments */
+    @media (max-width: 720px) {
+      body {
+        padding: 12px;
+        align-items: stretch;
+      }
+
+      .wallet-shell {
+        max-width: 100%;
+      }
+
+      .wallet-card {
+        border-radius: 18px;
+        padding: 14px 12px 12px;
+      }
+
+      .wallet-top-row {
+        flex-direction: column;
+      }
+
+      .balance-card {
+        min-width: 0;
+      }
+
+      .wallet-title h1 {
+        font-size: 1.5rem;
+      }
+
+      .tx-table-wrap {
+        margin-top: 6px;
+        border-radius: 12px;
+        border: 1px solid #dde7ff;
+        background: #ffffff;
+
+        /* scrolling */
+        max-height: 260px;       /* vertical limit */
+        overflow-y: auto;        /* vertical scroll */
+        overflow-x: auto;        /* horizontal scroll */
+
+        box-shadow: 0 8px 18px rgba(15,23,42,0.06);
+
+        /* important for sideways scrolling on small screens */
+        white-space: nowrap;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .wallet-header {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
+      .integrity-pill {
+        margin-top: 4px;
+      }
+    }
   </style>
 </head>
 <body>
-  <div class="card">
-    <h2>💳 Wallet</h2>
-    <div class="row"><span>Balance</span><strong>₹{{ balance }}</strong></div>
-    <div class="row"><span>Integrity</span><span class="muted">{{ "OK" if integrity_ok else "⚠️ FAILED" }}</span></div>
+  <div class="wallet-shell">
+    <div class="wallet-header">
+      <div class="wallet-title">
+        <h1><span class="emoji">💳</span> Wallet</h1>
+        <p>Top up your Sahayi balance and track every transaction in one place.</p>
+      </div>
 
-    <div style="margin-top:16px;">
-      <label>Add money (₹): </label>
-      <input id="amt" type="number" min="1" step="1" placeholder="500" />
-      <button class="btn btn-primary" id="addBtn" {% if not has_razor %}disabled{% endif %}>Add Money</button>
-      {% if not has_razor %}<div class="muted" style="margin-top:6px;">Razorpay keys not configured.</div>{% endif %}
+      <div class="integrity-pill {{ 'ok' if integrity_ok else 'fail' }}">
+        {% if integrity_ok %}
+          <span>✅ Integrity OK</span>
+        {% else %}
+          <span>⚠️ Integrity check failed</span>
+        {% endif %}
+      </div>
     </div>
 
-    <div style="margin-top:16px;">
-      <label>Withdraw (₹): </label>
-      <input id="wd" type="number" min="1" step="1" placeholder="500" />
-      <button class="btn" id="wdBtn">Request Withdraw</button>
-      <div class="muted" style="margin-top:6px;">We’ll review and pay out to your bank (from your Profile → Bank details).</div>
-    </div>
+    <div class="wallet-card">
+      <!-- Top row: balance + actions -->
+      <div class="wallet-top-row">
+        <!-- Balance card -->
+        <div class="balance-card">
+          <div>
+            <div class="balance-label">
+              <span>Available balance</span>
+            </div>
+            <div class="balance-value">
+              ₹{{ '%.2f' % ((balance or 0)|float) }}
+            </div>
+            <div class="balance-sub">
+              Use this for bookings, tips, and extra-time payments inside Sahayi.
+            </div>
+          </div>
 
-    <h3 style="margin-top:18px;">Recent Transactions</h3>
-    <table>
-      <thead><tr><th>When</th><th>Kind</th><th>Amount</th><th>Ref</th></tr></thead>
-      <tbody>
-      {% for t in txns %}
-        <tr>
-          <td>{{ t.created_at.strftime("%Y-%m-%d %H:%M") }}</td>
-          <td>{{ t.kind }}</td>
-          <td>{{ '₹%.2f' % (t.amount or 0) }}</td>
-          <td>{{ t.reference or "" }}</td>
-        </tr>
-      {% else %}
-        <tr><td colspan="4" class="muted">No transactions yet</td></tr>
-      {% endfor %}
-      </tbody>
-    </table>
+          <div class="quick-badges">
+            <span class="quick-badge">Instant top-up via Razorpay</span>
+            <span class="quick-badge">Secure ledger</span>
+          </div>
+        </div>
+
+        <!-- Actions: Add & Withdraw -->
+        <div class="actions-column">
+          <!-- Add money -->
+          <div class="action-card">
+            <h3>➕ Add money</h3>
+            <p>Recharge your wallet using UPI / cards through Razorpay.</p>
+            <div class="field-row">
+              <input id="amt" type="number" min="1" step="1" placeholder="Amount (₹)" />
+              <button class="btn btn-primary" id="addBtn" {% if not has_razor %}disabled{% endif %}>
+                ⚡ Add
+              </button>
+            </div>
+            {% if not has_razor %}
+              <div class="help-text danger">
+                Razorpay keys are not configured. Please contact support.
+              </div>
+            {% else %}
+              <div class="help-text">
+                Money is credited instantly after successful payment.
+              </div>
+            {% endif %}
+          </div>
+
+          <!-- Withdraw -->
+          <div class="action-card">
+            <h3>⬇ Withdraw</h3>
+            <p>Request payout to your bank account.</p>
+            <div class="field-row">
+              <input id="wd" type="number" min="1" step="1" placeholder="Amount (₹)" />
+              <button class="btn btn-ghost" id="wdBtn">
+                💸 Request
+              </button>
+            </div>
+            <div class="help-text">
+              We’ll review and send to your saved bank details
+              (<strong>Profile → Bank details</strong>).
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Transactions -->
+      <div class="tx-section">
+        <div class="tx-header">
+          <h3>Recent transactions</h3>
+          <span class="tx-sub">Latest activity in your wallet</span>
+        </div>
+
+        <div class="tx-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>When</th>
+                <th>Type</th>
+                <th style="text-align:right;">Amount</th>
+                <th>Ref</th>
+              </tr>
+            </thead>
+            <tbody>
+            {% for t in txns %}
+              <tr>
+                <td>{{ t.created_at.strftime("%Y-%m-%d %H:%M") }}</td>
+                <td><span class="tx-kind">{{ t.kind }}</span></td>
+                <td class="tx-amount">{{ '₹%.2f' % (t.amount or 0) }}</td>
+                <td class="tx-ref">{{ t.reference or "" }}</td>
+              </tr>
+            {% else %}
+              <tr>
+                <td colspan="4" class="tx-empty">
+                  No transactions yet. Top up your wallet to get started.
+                </td>
+              </tr>
+            {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
   </div>
 
 <script>
@@ -60,15 +564,15 @@ async function addMoney(){
   const v = parseInt(document.getElementById('amt').value || '0', 10);
   if (!v || v <= 0) return alert('Enter a valid amount');
 
-  // 1) Create order
   const r = await fetch('/wallet/create_order', {
-    method: 'POST', headers: {'Content-Type':'application/json'}, credentials: 'same-origin',
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    credentials: 'same-origin',
     body: JSON.stringify({ amount_rupees: v })
   });
   const d = await r.json();
   if (!r.ok) return alert(d.detail || 'Failed to create order');
 
-  // 2) Open Razorpay
   const rz = new Razorpay({
     key: d.key_id,
     amount: d.amount,
@@ -77,9 +581,10 @@ async function addMoney(){
     description: 'Wallet top-up',
     order_id: d.order_id,
     handler: async function(resp){
-      // 3) Verify + ledger credit
       const vr = await fetch('/wallet/verify_topup', {
-        method: 'POST', headers: {'Content-Type':'application/json'}, credentials: 'same-origin',
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        credentials: 'same-origin',
         body: JSON.stringify({
           amount_rupees: v,
           razorpay_payment_id: resp.razorpay_payment_id,
@@ -88,8 +593,54 @@ async function addMoney(){
         })
       });
       const vv = await vr.json();
-      if (vr.ok && vv.success) { alert('✅ Added to wallet'); location.reload(); }
-      else alert(vv.detail || 'Verification failed');
+      if (vr.ok && vv.success) {
+        alert('✅ Added to wallet');
+        location.reload();
+      } else {
+        alert(vv.detail || 'Verification failed');
+      }
+    }
+  });
+  rz.open();
+}
+
+async function payExtra(bookingId, minutes){
+  const r = await fetch(`/razorpay/create_order_for_extra/${bookingId}`, {
+    method: 'POST',
+    headers:{'Content-Type':'application/json'},
+    credentials:'same-origin',
+    body: JSON.stringify({ extra_minutes: minutes })
+  });
+  const d = await r.json();
+  if (!r.ok) { alert(d.detail || d.message || 'Failed to create order'); return; }
+
+  const rz = new Razorpay({
+    key: d.key_id,
+    amount: d.amount,
+    currency: d.currency || 'INR',
+    order_id: d.order_id,
+    name: 'Sahayi',
+    description: `Extra time (${minutes} min)`,
+    handler: async function(resp){
+      const vr = await fetch('/razorpay/verify_extra_payment', {
+        method: 'POST',
+        headers:{'Content-Type':'application/json'},
+        credentials:'same-origin',
+        body: JSON.stringify({
+          booking_id: bookingId,
+          extra_minutes: minutes,
+          razorpay_payment_id: resp.razorpay_payment_id,
+          razorpay_order_id: resp.razorpay_order_id,
+          razorpay_signature: resp.razorpay_signature
+        })
+      });
+      const vv = await vr.json();
+      if (vr.ok && vv.success){
+        alert('✅ Extra time paid and wallet credited');
+        location.reload();
+      } else {
+        alert(vv.detail || vv.message || 'Verification failed; will be processed by webhook if delivered.');
+      }
     }
   });
   rz.open();
@@ -99,7 +650,9 @@ async function withdraw(){
   const v = parseInt(document.getElementById('wd').value || '0', 10);
   if (!v || v <= 0) return alert('Enter a valid amount');
   const r = await fetch('/wallet/request_withdraw', {
-    method: 'POST', headers: {'Content-Type':'application/json'}, credentials: 'same-origin',
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    credentials: 'same-origin',
     body: JSON.stringify({ amount_rupees: v })
   });
   const d = await r.json();

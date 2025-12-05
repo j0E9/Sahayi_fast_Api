@@ -84,41 +84,126 @@ def notifications_page(
     html_notifications = []
 
     for n in notes:
+        was_unread = not n.is_read
         if not n.is_read:
             n.is_read = True  # mark read
 
+        base_type = n.action_type or "general"
+
+        # ---- derive payment state (for correct label) ----
+        booking = None
+        payment_state = None
+        now = None
+
+        if base_type in ("payment_required", "waiting_payment") and n.booking_id:
+            booking = db.get(Booking, n.booking_id)
+            if booking:
+                now = datetime.utcnow()
+                if booking.status == "Token Paid":
+                    payment_state = "paid"
+                elif booking.expires_at < now:
+                    payment_state = "expired"
+                else:
+                    payment_state = "pending"
+
+        # effective type for display (badge & icon)
+        display_type = base_type
+        if payment_state == "paid":
+            display_type = "token_paid"
+        elif payment_state == "expired":
+            display_type = "payment_expired"
+
+        type_label_map = {
+            "booking_request": "Booking Request",
+            "auto_rejected": "Auto Rejected",
+            "payment_required": "Payment Required",
+            "waiting_payment": "Waiting for Payment",
+            "token_paid": "Payment Successful",
+            "payment_expired": "Payment Cancelled",
+        }
+        type_icon_map = {
+            "booking_request": "📩",
+            "auto_rejected": "❌",
+            "payment_required": "💳",
+            "waiting_payment": "⏳",
+            "token_paid": "✅",
+            "payment_expired": "❌",
+        }
+        type_badge_class_map = {
+            "booking_request": "bg-primary",
+            "auto_rejected": "bg-danger",
+            "payment_required": "bg-warning text-dark",
+            "waiting_payment": "bg-info text-dark",
+            "token_paid": "bg-success",
+            "payment_expired": "bg-danger",
+        }
+
+        type_label = type_label_map.get(display_type, "Notification")
+        type_icon = type_icon_map.get(display_type, "🔔")
+        type_badge_class = type_badge_class_map.get(display_type, "bg-secondary")
+
+        read_class = "notification-unread" if was_unread else "notification-read"
+
+        timestamp_str = ""
+        if getattr(n, "timestamp", None):
+            timestamp_str = n.timestamp.strftime("%d %b %Y, %I:%M %p")
+
         block = [
-            '<div class="card mb-3">',
-            '  <div class="card-body">',
-            f'    <p class="card-text">{n.message}</p>',
+            f'<div class="notification-card card mb-3 shadow-sm {read_class}" '
+            f'     data-type="{base_type}" data-read={"false" if was_unread else "true"}>',
+            '  <div class="card-body d-flex flex-column flex-md-row gap-3 align-items-start">',
+            '    <div class="notif-icon flex-shrink-0 d-flex align-items-center justify-content-center rounded-circle">',
+            f'      <span class="fs-4">{type_icon}</span>',
+            '    </div>',
+            '    <div class="flex-grow-1">',
+            '      <div class="d-flex justify-content-between align-items-center mb-1 flex-wrap gap-2">',
+            f'        <span class="badge {type_badge_class} rounded-pill px-3 py-1">{type_label}</span>',
+            '      </div>',
+            f'      <p class="card-text mb-1">{n.message}</p>',
         ]
 
+        if timestamp_str:
+            block.append(
+                f'      <small class="text-muted">Received on {timestamp_str}</small>'
+            )
+
+        # --- context-specific UI blocks ---
         if n.action_type == "booking_request":
-            booking = db.get(Booking, n.booking_id) if n.booking_id else None
-            if booking and booking.status == "Pending":
-                remaining = max(0, int((booking.expires_at - datetime.utcnow()).total_seconds()))
+            booking_req = db.get(Booking, n.booking_id) if n.booking_id else None
+            if booking_req and booking_req.status == "Pending":
+                remaining = max(
+                    0,
+                    int((booking_req.expires_at - datetime.utcnow()).total_seconds()),
+                )
                 block.append(
                     f"""
-                    <div class="d-flex gap-2 mt-2">
-                        <button onclick="respondNotification({n.id}, 'Accept')" class="btn btn-success btn-sm">Accept</button>
-                        <button onclick="respondNotification({n.id}, 'Reject')" class="btn btn-danger btn-sm">Reject</button>
+                    <div class="mt-3">
+                        <div class="d-flex flex-wrap gap-2 align-items-center">
+                            <button onclick="respondNotification({n.id}, 'Accept')" class="btn btn-success btn-sm">
+                                Accept
+                            </button>
+                            <button onclick="respondNotification({n.id}, 'Reject')" class="btn btn-outline-danger btn-sm">
+                                Reject
+                            </button>
+                            <div class="ms-md-3 small text-muted d-flex align-items-center gap-1">
+                                ⏳ <span>Auto-rejects in</span>
+                                <span class="fw-semibold" id="countdown-{booking_req.id}">{remaining}</span>
+                            </div>
+                        </div>
                     </div>
-                    <small class="text-muted">
-                        ⏳ Auto-rejects in <span id="countdown-{booking.id}">{remaining}</span>
-                    </small>
                     <script>
-                        function formatTime(seconds) {{
+                        function formatTime_{booking_req.id}(seconds) {{
                             const m = Math.floor(seconds / 60);
                             const s = seconds % 60;
                             return `${{m}}:${{String(s).padStart(2, '0')}}`;
                         }}
 
-                        let timeLeft{booking.id} = {remaining};
-                        const timer{booking.id} = setInterval(() => {{
-                            const el = document.getElementById("countdown-{booking.id}");
+                        let timeLeft{booking_req.id} = {remaining};
+                        const timer{booking_req.id} = setInterval(() => {{
+                            const el = document.getElementById("countdown-{booking_req.id}");
                             if (!el) return;
-                            if (timeLeft{booking.id} <= 0) {{
-                                clearInterval(timer{booking.id});
+                            if (timeLeft{booking_req.id} <= 0) {{
+                                clearInterval(timer{booking_req.id});
                                 el.innerText = "0:00";
                                 fetch("/respond_notification/{n.id}", {{
                                     method: "POST",
@@ -126,12 +211,12 @@ def notifications_page(
                                     body: JSON.stringify({{ response: "Reject" }})
                                 }}).then(r => r.json()).then(() => location.reload());
                             }} else {{
-                                el.innerText = formatTime(timeLeft{booking.id}--);
+                                el.innerText = formatTime_{booking_req.id}(timeLeft{booking_req.id}--);
                             }}
                         }}, 1000);
 
-                        // initialize immediately
-                        document.getElementById("countdown-{booking.id}").innerText = formatTime(timeLeft{booking.id});
+                        document.getElementById("countdown-{booking_req.id}")
+                                .innerText = formatTime_{booking_req.id}(timeLeft{booking_req.id});
                     </script>
                     """
                 )
@@ -139,56 +224,75 @@ def notifications_page(
         elif n.action_type == "auto_rejected":
             block.append(
                 """
-                <div class="alert alert-danger mt-2 p-2">
+                <div class="mt-3 alert alert-danger border-0 py-2 mb-0">
                     ❌ Booking auto-rejected because the worker did not respond in time.
                 </div>
                 """
             )
 
         elif n.action_type in ("payment_required", "waiting_payment"):
-            booking = db.get(Booking, n.booking_id) if n.booking_id else None
+            # Use the booking/payment_state we computed above
             if booking:
-                now = datetime.utcnow()
-                if booking.status == "Token Paid":
+                if payment_state == "paid":
                     block.append(
                         f"""
-                        <div class="alert alert-success mt-2 p-2">
+                        <div class="mt-3 alert alert-success border-0 py-2 mb-0">
                             ✅ Token paid by {booking.provider.name}. Job confirmed.
                         </div>
                         """
                     )
-                elif booking.expires_at < now:
+                elif payment_state == "expired":
                     block.append(
                         """
-                        <div class="alert alert-danger mt-2 p-2">
+                        <div class="mt-3 alert alert-danger border-0 py-2 mb-0">
                             ❌ Token not received in time. Booking cancelled.
                         </div>
                         """
                     )
-                else:
+                else:  # pending
                     if n.action_type == "payment_required" and current_user.id == booking.provider_id:
                         block.append(
                             f"""
-                            <form action="/pay_token/{booking.token}" method="get" class="d-flex gap-2 mt-2">
-                                <button type="submit" class="btn btn-warning btn-sm">💳 Pay Token Now</button>
-                            </form>
+                            <div class="mt-3 d-flex flex-wrap gap-2">
+                                <form action="/pay_token/{booking.token}" method="get" class="d-inline-block">
+                                    <button type="submit" class="btn btn-warning btn-sm">
+                                        💳 Pay Token Now
+                                    </button>
+                                </form>
+                            </div>
                             """
                         )
                     elif n.action_type == "waiting_payment" and current_user.id == booking.worker_id:
                         block.append(
                             f"""
-                            <form action="/waiting_for_payment/{booking.token}" method="get" class="d-flex gap-2 mt-2">
-                                <button type="submit" class="btn btn-info btn-sm">⏳ Go to Waiting Page</button>
-                            </form>
+                            <div class="mt-3 d-flex flex-wrap gap-2">
+                                <form action="/waiting_for_payment/{booking.token}" method="get" class="d-inline-block">
+                                    <button type="submit" class="btn btn-info btn-sm">
+                                        ⏳ Go to Waiting Page
+                                    </button>
+                                </form>
+                            </div>
                             """
                         )
 
-        block.append("  </div></div>")
+        block.append("    </div>")
+        block.append("  </div>")
+        block.append("</div>")
         html_notifications.append("\n".join(block))
 
-    db.commit()  # save read flags
+    db.commit()
 
-    body = "\n".join(html_notifications) or "<p>No notifications yet.</p>"
+    body = "\n".join(html_notifications) or """
+        <div class="text-center text-muted py-5">
+            <h5 class="fw-semibold mb-2">No notifications yet</h5>
+            <p class="mb-0">You will see booking and payment updates here.</p>
+        </div>
+    """
+
+    # keep the same HTML shell + CSS + JS you already had
+    # (omitted here for brevity) – only the loop above needed fixing
+    ...
+
 
     html = f"""
     <!DOCTYPE html>
@@ -199,17 +303,96 @@ def notifications_page(
         <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
         <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
         <style>
-            body {{ background-color: #f8f9fa; padding: 20px; }}
-            .card {{ border-radius: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.05); }}
-            .card-text {{ font-size: 16px; line-height: 1.5; }}
+            body {{
+                background: radial-gradient(circle at top left, #e0f2ff, #f8f9fa 45%, #f1f3f5);
+                min-height: 100vh;
+                padding: 24px 12px;
+                font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            }}
+            .notifications-wrapper {{
+                max-width: 900px;
+                margin: 0 auto;
+            }}
+            .notifications-header {{
+                text-align: center;
+                margin-bottom: 24px;
+            }}
+            .notifications-header h2 {{
+                font-weight: 700;
+                letter-spacing: 0.02em;
+            }}
+            .notifications-header p {{
+                color: #6c757d;
+                margin: 0;
+            }}
+            .filter-pill {{
+                border-radius: 999px;
+                padding: 6px 14px;
+                border: 1px solid #dee2e6;
+                background-color: #ffffff;
+                font-size: 0.85rem;
+                cursor: pointer;
+                transition: all 0.15s ease-in-out;
+            }}
+            .filter-pill:hover {{
+                background-color: #f1f3f5;
+            }}
+            .filter-pill.active {{
+                background-color: #0d6efd;
+                color: #ffffff;
+                border-color: #0d6efd;
+                box-shadow: 0 0.25rem 0.5rem rgba(13,110,253,0.25);
+            }}
+            .notification-card {{
+                border-radius: 16px;
+                border: 1px solid rgba(0,0,0,0.03);
+                transition: transform 0.12s ease-out, box-shadow 0.12s ease-out, border-color 0.12s ease-out;
+                background-color: #ffffff;
+            }}
+            .notification-card.notification-unread {{
+                border-color: #0d6efd33;
+                box-shadow: 0 0.5rem 1rem rgba(13,110,253,0.05);
+            }}
+            .notification-card:hover {{
+                transform: translateY(-2px);
+                box-shadow: 0 0.7rem 1.2rem rgba(15,23,42,0.08);
+            }}
+            .notif-icon {{
+                width: 44px;
+                height: 44px;
+                background: linear-gradient(135deg, #eef4ff, #edf2ff);
+                border: 1px solid #e0e7ff;
+            }}
+            .card-text {{
+                font-size: 0.95rem;
+                line-height: 1.5;
+            }}
+            @media (max-width: 576px) {{
+                body {{
+                    padding: 16px 8px;
+                }}
+            }}
         </style>
     </head>
     <body>
-        <div class="container">
-            <h2 class="mb-4 text-center">🔔 Your Notifications</h2>
+        <div class="notifications-wrapper">
+            <div class="notifications-header">
+                <h2 class="mb-2">🔔 Your Notifications</h2>
+                <p>Stay up to date with booking requests, auto-rejections, and payment status.</p>
+            </div>
+
+            <div class="d-flex flex-wrap justify-content-center gap-2 mb-4">
+                <button class="filter-pill active" data-filter="all">All</button>
+                <button class="filter-pill" data-filter="unread">Unread</button>
+                <button class="filter-pill" data-filter="booking_request">Bookings</button>
+                <button class="filter-pill" data-filter="payments">Payments</button>
+            </div>
+
             {body}
         </div>
+
         <script>
+            // Respond to booking Accept/Reject
             function respondNotification(noteId, response) {{
                 fetch(`/respond_notification/${{noteId}}`, {{
                     method: "POST",
@@ -224,6 +407,8 @@ def notifications_page(
                         location.reload();
                     }} else if (data.error) {{
                         alert("Error: " + data.error);
+                    }} else {{
+                        location.reload();
                     }}
                 }})
                 .catch(err => {{
@@ -231,11 +416,45 @@ def notifications_page(
                     alert("Something went wrong!");
                 }});
             }}
+
+            // Simple client-side filters
+            (function() {{
+                const pills = document.querySelectorAll(".filter-pill");
+                const cards = document.querySelectorAll(".notification-card");
+
+                function applyFilter(filter) {{
+                    cards.forEach(card => {{
+                        const type = card.getAttribute("data-type");
+                        const isRead = card.getAttribute("data-read") === "true";
+
+                        let show = true;
+                        if (filter === "unread") {{
+                            show = !isRead;
+                        }} else if (filter === "booking_request") {{
+                            show = (type === "booking_request");
+                        }} else if (filter === "payments") {{
+                            show = (type === "payment_required" || type === "waiting_payment");
+                        }}
+
+                        card.style.display = show ? "" : "none";
+                    }});
+                }}
+
+                pills.forEach(pill => {{
+                    pill.addEventListener("click", () => {{
+                        pills.forEach(p => p.classList.remove("active"));
+                        pill.classList.add("active");
+                        const filter = pill.getAttribute("data-filter");
+                        applyFilter(filter);
+                    }});
+                }});
+            }})();
         </script>
     </body>
     </html>
     """
     return HTMLResponse(content=html)
+
 
 # If you already have this path, skip or rename to /notifications/unread_count2
 @router.get("/notifications/unread_count")

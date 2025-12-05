@@ -11,6 +11,7 @@ from app.models import User, WalletTransaction, PayoutRequest
 from app.services.wallet import compute_balance, verify_chain, add_ledger_row, open_payout_request
 from app.razor_client import client as razor   # shared client
 from urllib.parse import urlparse
+from decimal import Decimal
 
 templates = Jinja2Templates(directory="app/templates")
 router = APIRouter(prefix="", tags=["wallet"])
@@ -113,12 +114,17 @@ def wallet_create_order(payload: dict = Body(...),
                         current_user: User = Depends(get_current_user)):
     _enforce_same_origin(request)
 
-    amount_rupees = int(payload.get("amount_rupees", 0))
-    if amount_rupees <= 0 or amount_rupees > 200000:  # cap ₹2L per order
+    amount_str = str(payload.get("amount_rupees", "0")).strip()
+    try:
+        amount_rupees = Decimal(amount_str).quantize(Decimal("0.01"))
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid amount")
+
+    if amount_rupees <= 0 or amount_rupees > Decimal("200000"):
         raise HTTPException(status_code=400, detail="Invalid amount")
 
     order = razor.order.create({
-        "amount": amount_rupees * 100,
+        "amount": int(amount_rupees * 100),  # paise
         "currency": "INR",
         "receipt": f"wallet_topup_{current_user.id}",
         "notes": {"user_id": str(current_user.id), "kind": "wallet_topup"},
@@ -170,7 +176,8 @@ def wallet_verify_topup(payload: dict = Body(...),
         raise HTTPException(status_code=403, detail="Order not owned by this user")
 
     # 5) Amount from Razorpay (authoritative)
-    amount_rupees = int(pay.get("amount", 0)) // 100
+    amount_paise = int(pay.get("amount", 0) or 0)
+    amount_rupees = (Decimal(amount_paise) / Decimal("100")).quantize(Decimal("0.01"))
     if amount_rupees <= 0:
         raise HTTPException(status_code=400, detail="Zero/invalid amount")
 
@@ -195,13 +202,18 @@ def wallet_request_withdraw(payload: dict = Body(...),
                             current_user: User = Depends(get_current_user)):
     _enforce_same_origin(request)
 
-    amt = int(payload.get("amount_rupees", 0))
+    amt_str = str(payload.get("amount_rupees", "0")).strip()
+    try:
+        amt = Decimal(amt_str).quantize(Decimal("0.01"))
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid amount")
+
     if amt <= 0:
         raise HTTPException(status_code=400, detail="Invalid amount")
 
     try:
-        bal = compute_balance(db, current_user.id)
-        if amt > int(bal):
+        bal = compute_balance(db, current_user.id)  # should return Decimal
+        if amt > bal:
             raise HTTPException(status_code=400, detail="Insufficient balance")
 
         pr = open_payout_request(db, user_id=current_user.id, amount_rupees=amt)
@@ -209,6 +221,7 @@ def wallet_request_withdraw(payload: dict = Body(...),
             db, user_id=current_user.id, amount_rupees=-amt,
             kind="withdraw_hold", reference=f"payoutreq:{pr.id}", meta={}
         )
+
         db.commit()
     except Exception:
         db.rollback()

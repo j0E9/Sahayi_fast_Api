@@ -91,7 +91,6 @@ def seek_job(
     user = current_user
     profile = db.query(WorkerProfile).filter_by(user_id=user.id).first()
     if not profile:
-        # mirror your behavior: redirect to create page
         return RedirectResponse(url="/create_worker_profile", status_code=status.HTTP_303_SEE_OTHER)
 
     # Ratings
@@ -103,96 +102,507 @@ def seek_job(
     )
     if ratings:
         avg = round(sum(r.stars for r in ratings) / len(ratings), 1)
-        avg_rating = f"{avg} ★"
+        avg_rating_text = f"{avg} / 5"
     else:
-        avg_rating = "No ratings yet"
+        avg_rating_text = "No ratings yet"
 
-    # Skills list string
+    # Skills
     skills = db.query(Skill).filter_by(user_id=user.id).all()
     skills_str = ", ".join(s.name for s in skills) if skills else "None"
+    skill_chips = "".join(
+        f"<span class='skill-pill'>{(s.name or '').title()}</span>"
+        for s in skills
+    )
+
+    # Ratings list HTML
+    ratings_html = ""
+    for r in ratings:
+        date_str = r.timestamp.strftime("%d %b %Y") if getattr(r, "timestamp", None) else ""
+        comment = (r.comment or "").replace("<", "&lt;").replace(">", "&gt;")
+        ratings_html += f"""
+        <div class="rating-row">
+          <div class="rating-score">
+            <span class="rating-score-main">{r.stars:.1f}</span>
+            <span class="rating-score-sub">★</span>
+          </div>
+          <div class="rating-row-body">
+            <div class="rating-row-top">
+              <span class="rating-row-name">{comment or "No comment"}</span>
+            </div>
+            <div class="rating-row-meta">{date_str}</div>
+          </div>
+        </div>
+        """
 
     # Showcase
-    showcase = db.query(ShowcaseImage).filter_by(user_id=user.id).order_by(ShowcaseImage.uploaded_at.desc()).all()
-    video_item = profile.video  # filename or None
+    showcase = (
+        db.query(ShowcaseImage)
+        .filter_by(user_id=user.id)
+        .order_by(ShowcaseImage.uploaded_at.desc())
+        .all()
+    )
+    video_item = profile.video
 
     photo_url = f"/static/uploads/{profile.photo}" if profile.photo else "/static/default_profile.jpg"
     gender = profile.gender or "Not specified"
 
-    # Render a mini page (you already have a full HTML string in Flask;
-    # if you prefer a template, create one & pass all vars below).
     html = f"""
     <!DOCTYPE html>
     <html lang="en">
     <head>
-        <title>My Worker Profile - JobConnect</title>
+        <title>My Worker Profile - Sahayi</title>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
         <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-        <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+        <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
         <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
         <style>
-            body {{
-                font-family: 'Poppins', sans-serif;
-                background: linear-gradient(to right, #f0f4f8, #ffffff);
-                color: #333;
+            :root {{
+              --sahayi-blue: #2563eb;
+              --sahayi-blue-soft: #dbeafe;
+              --sahayi-bg: #f3f4f6;
             }}
-            .profile-card {{
-                background: #fff;
-                border-radius: 12px;
-                padding: 30px;
-                box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+
+            * {{
+              box-sizing: border-box;
+            }}
+
+            body {{
+                margin: 0;
+                font-family: 'Poppins', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+                background:
+                    radial-gradient(circle at 0% 0%, #e0f2fe 0, #f5f3ff 40%, #f9fafb 75%, #eef2ff 100%);
+                color: #111827;
+            }}
+            body::before {{
+                content: "";
+                position: fixed;
+                inset: -120px;
+                background:
+                    radial-gradient(circle at 10% 20%, rgba(59,130,246,0.16) 0, transparent 40%),
+                    radial-gradient(circle at 80% 10%, rgba(16,185,129,0.16) 0, transparent 45%),
+                    radial-gradient(circle at 50% 90%, rgba(139,92,246,0.1) 0, transparent 45%);
+                z-index: -1;
+            }}
+
+            .shell {{
+              max-width: 980px;
+              padding-inline: .75rem;
+            }}
+
+            /* HERO */
+            .profile-hero {{
+                border-radius: 30px;
+                background: linear-gradient(135deg, #0ea5e9, #2563eb);
+                color: #f9fafb;
+                padding: 1.6rem 1.7rem 1.4rem;
+                box-shadow: 0 22px 55px rgba(15,23,42,0.45);
+                position: relative;
+                overflow: hidden;
+                margin-bottom: 1.8rem;
+            }}
+            .profile-hero::after {{
+                content: "";
+                position: absolute;
+                right: -40px;
+                top: -40px;
+                width: 180px;
+                height: 180px;
+                border-radius: 999px;
+                border: 18px solid rgba(191,219,254,0.4);
+                opacity: .9;
+            }}
+            .profile-photo-wrap {{
+                position: relative;
+                z-index: 1;
             }}
             .profile-photo {{
-                width: 130px; height: 130px; object-fit: cover;
-                border-radius: 50%; border: 3px solid #007bff;
+                width: 96px;
+                height: 96px;
+                border-radius: 999px;
+                object-fit: cover;
+                border: 4px solid rgba(255,255,255,0.98);
+                box-shadow: 0 18px 40px rgba(15,23,42,0.65);
+            }}
+            .hero-name-row {{
+                display: flex;
+                align-items: center;
+                flex-wrap: wrap;
+                gap: .35rem .6rem;
+            }}
+            .hero-name-row h1 {{
+                font-size: 1.3rem;
+                margin: 0;
+            }}
+            .code-pill {{
+                display: inline-flex;
+                align-items: center;
+                gap: .3rem;
+                padding: .16rem .7rem;
+                border-radius: 999px;
+                background: rgba(15,23,42,0.35);
+                font-size: .8rem;
+            }}
+            .status-pill {{
+                display: inline-flex;
+                align-items: center;
+                gap: .35rem;
+                padding: .26rem .8rem;
+                border-radius: 999px;
+                background: rgba(15,23,42,0.88);
+                font-size: .78rem;
+            }}
+            .status-dot {{
+                width: 8px; height: 8px;
+                border-radius: 999px;
+                background: #22c55e;
+            }}
+            .hero-subline {{
+                font-size: .8rem;
+                opacity: .96;
+            }}
+
+            .hero-actions {{
+                display: flex;
+                gap: .5rem;
+                justify-content: flex-end;
+                margin-top: .6rem;
+            }}
+            .hero-actions .btn-sm {{
+                border-radius: 999px;
+                font-size: .78rem;
+                padding-inline: .95rem;
+            }}
+
+            /* STACKED CARDS */
+            .section-card {{
+                border-radius: 22px;
+                background: linear-gradient(135deg, #ffffff, #f9fafb);
+                box-shadow:
+                  0 14px 34px rgba(15,23,42,0.08),
+                  0 0 0 1px rgba(148,163,184,0.12);
+                padding: 1.15rem 1.35rem 1.05rem;
+                margin-top: 1.25rem;
+                position: relative;
+                overflow: hidden;
+            }}
+            .section-card::before {{
+                content: "";
+                position: absolute;
+                inset-inline: 16px;
+                top: 0;
+                height: 3px;
+                border-radius: 999px;
+                background: linear-gradient(90deg, rgba(59,130,246,0.45), rgba(16,185,129,0.4));
+                opacity: .55;
+            }}
+            .section-title {{
+                font-size: .92rem;
+                font-weight: 600;
+                display: flex;
+                align-items: center;
+                gap: .45rem;
+                margin-bottom: .55rem;
+                margin-top: .1rem;
+            }}
+            .section-title-icon {{
+                width: 22px;
+                height: 22px;
+                border-radius: 999px;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                font-size: .9rem;
+                background: #eff6ff;
+                color: var(--sahayi-blue);
+            }}
+
+            .stat-grid {{
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+                gap: .7rem;
+                margin-top: .3rem;
+            }}
+            .stat-chip {{
+                border-radius: 16px;
+                border: 1px solid #e5e7eb;
+                padding: .6rem .8rem;
+                background: #f9fafb;
+                font-size: .8rem;
+            }}
+            .stat-label {{
+                text-transform: uppercase;
+                letter-spacing: .08em;
+                font-size: .7rem;
+                color: #9ca3af;
+            }}
+            .stat-value {{
+                font-weight: 600;
+                color: #111827;
+            }}
+
+            .skill-pill {{
+                display: inline-flex;
+                align-items: center;
+                padding: .3rem .85rem;
+                border-radius: 999px;
+                font-size: .8rem;
+                background: #eff6ff;
+                color: #1e293b;
+                margin: .18rem .3rem .18rem 0;
+                box-shadow: 0 4px 8px rgba(148,163,184,0.3);
+            }}
+
+            /* RATINGS */
+            .rating-top {{
+                display: flex;
+                align-items: center;
+                gap: 1rem;
+                margin-bottom: .65rem;
+            }}
+            .rating-badge {{
+                width: 70px;
+                height: 70px;
+                border-radius: 999px;
+                background: linear-gradient(145deg, #3b82f6, #1d4ed8);
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                color: #fff;
+                font-weight: 700;
+                box-shadow: 0 15px 35px rgba(37,99,235,0.35);
+                font-size: .98rem;
+            }}
+            .rating-badge span.small {{
+                font-size: .66rem;
+                font-weight: 500;
+                opacity: .92;
+            }}
+            .rating-count-text {{
+                font-size: .8rem;
+                color: #6b7280;
+            }}
+
+            .rating-list {{
+                max-height: 260px;
+                overflow-y: auto;
+                padding-right: .25rem;
+                margin-top: .15rem;
+            }}
+            .rating-row {{
+                display: flex;
+                gap: .7rem;
+                padding: .55rem .7rem;
+                border-radius: 16px;
+                background: #f9fafb;
+                border: 1px solid #e5e7eb;
+                font-size: .8rem;
+                margin-bottom: .45rem;
+            }}
+            .rating-score {{
+                min-width: 48px;
+                height: 48px;
+                border-radius: 999px;
+                background: #111827;
+                color: #facc15;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+            }}
+            .rating-score-main {{
+                font-size: .98rem;
+                font-weight: 600;
+            }}
+            .rating-score-sub {{
+                font-size: .7rem;
+                color: #e5e7eb;
+            }}
+            .rating-row-body {{
+                flex: 1;
+            }}
+            .rating-row-name {{
+                font-weight: 500;
+            }}
+            .rating-row-meta {{
+                font-size: .7rem;
+                color: #6b7280;
+                margin-top: .08rem;
+            }}
+
+            /* SHOWCASE */
+            .showcase-grid {{
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+                gap: .7rem;
+                margin-top: .25rem;
+            }}
+            .showcase-thumb {{
+                border-radius: 14px;
+                overflow: hidden;
+                border: 1px solid #e5e7eb;
+                background: #f3f4f6;
+                box-shadow: 0 10px 18px rgba(15,23,42,0.12);
+            }}
+            .showcase-thumb img {{
+                width: 100%;
+                height: 96px;
+                object-fit: cover;
+                display: block;
+            }}
+
+            .video-wrap {{
+                border-radius: 16px;
+                overflow: hidden;
+                border: 1px solid #e5e7eb;
+                background: #020617;
+                margin-top: .9rem;
+            }}
+
+            @media (max-width: 576px) {{
+                .profile-hero {{
+                    border-radius: 0 0 30px 30px;
+                    margin-left: -.75rem;
+                    margin-right: -.75rem;
+                    margin-bottom: 1.5rem;
+                }}
+                .hero-actions {{
+                    justify-content: flex-start;
+                    margin-top: .7rem;
+                }}
+                .section-card {{
+                    border-radius: 20px;
+                    padding-inline: 1.05rem;
+                }}
             }}
         </style>
     </head>
     <body>
-        <div class="container my-5">
-            <div class="profile-card">
-                <div class="d-flex flex-row flex-wrap align-items-start justify-content-between">
-                    <div>
-                        <h2 class="mb-2">👤 {user.name}</h2>
-                        <p><b>Worker ID:</b> {profile.worker_code}</p>
-                        <p><b>Gender:</b> {gender}</p>
-                        <p><b>Age:</b> {profile.age}</p>
-                        <p><b>Phone:</b> {user.phone}</p>
-                        <p><b>Qualification:</b> {profile.qualification}</p>
-                        <p><b>Experience:</b> {profile.experience}</p>
-                        <p><b>Skills:</b> {skills_str}</p>
+        <div class="container shell py-3 py-md-4">
+
+            <!-- HERO -->
+            <section class="profile-hero">
+                <div class="row g-3 align-items-center">
+                    <div class="col-auto profile-photo-wrap">
+                        <img src="{photo_url}" class="profile-photo" alt="Profile Photo">
                     </div>
-                    <div class="ms-auto text-end">
-                        <img src="{photo_url}" class="profile-photo shadow-sm" alt="Profile Photo">
+                    <div class="col">
+                        <div class="hero-name-row mb-1">
+                            <h1>{user.name}</h1>
+                            <span class="code-pill">
+                                <i class="bi bi-hash"></i> {profile.worker_code}
+                            </span>
+                        </div>
+                        <div class="hero-subline mb-1">
+                            <span class="me-3"><strong>Gender:</strong> {gender}</span>
+                            <span class="me-3"><strong>Age:</strong> {profile.age or "N/A"}</span>
+                        </div>
+                        <div class="hero-subline">
+                            <i class="bi bi-telephone me-1"></i>{user.phone or "N/A"}
+                        </div>
+                    </div>
+                    <div class="col-12 col-md-auto text-end d-flex flex-column align-items-start align-items-md-end mt-2 mt-md-0">
+                        <span class="status-pill mb-2">
+                            <span class="status-dot"></span>
+                            <span>Available on Sahayi</span>
+                        </span>
+                        <div class="hero-actions">
+                            <a href="/edit_worker_profile" class="btn btn-light btn-sm">
+                                <i class="bi bi-pencil-square me-1"></i>Edit
+                            </a>
+                            <a href="/provide_job" class="btn btn-outline-light btn-sm">
+                                <i class="bi bi-eye me-1"></i>Preview search
+                            </a>
+                        </div>
                     </div>
                 </div>
-                <hr>
-                <div class="mt-3">
-                    <h5>About Me</h5>
-                    <p>{profile.about or ""}</p>
+            </section>
+
+            <!-- BASIC INFO -->
+            <section class="section-card">
+                <div class="section-title">
+                    <span class="section-title-icon"><i class="bi bi-badge-ad"></i></span>
+                    Profile summary
                 </div>
-                <div class="mt-4">
-                    <h5>⭐ Ratings</h5>
-                    <p><b>Average:</b> {avg_rating}</p>
-                    <ul>
-                        {''.join(f"<li><b>{r.stars} ★</b> - {r.comment or ''}</li>" for r in ratings)}
-                    </ul>
+                <div class="stat-grid">
+                    <div class="stat-chip">
+                        <div class="stat-label">Qualification</div>
+                        <div class="stat-value">{profile.qualification or "N/A"}</div>
+                    </div>
+                    <div class="stat-chip">
+                        <div class="stat-label">Experience</div>
+                        <div class="stat-value">{profile.experience or "N/A"}</div>
+                    </div>
+                    <div class="stat-chip">
+                        <div class="stat-label">Skills</div>
+                        <div class="stat-value">{skills_str}</div>
+                    </div>
                 </div>
-                <div class="mt-4">
-                    <h5>🎥 Showcase</h5>
-                    {"".join(f'<img class="me-2 mb-2" src="/static/uploads/{img.image_url}" width="150">' for img in showcase) if showcase else "<p>No showcase items uploaded yet.</p>"}
-                    {"<div class='mt-2'><video width='300' controls><source src='/static/uploads/"+video_item+"' type='video/mp4'></video></div>" if video_item else ""}
+            </section>
+
+            <!-- ABOUT -->
+            <section class="section-card">
+                <div class="section-title">
+                    <span class="section-title-icon"><i class="bi bi-chat-square-text"></i></span>
+                    About me
                 </div>
-                <div class="mt-4 text-end">
-                    <a href="/edit_worker_profile" class="btn btn-outline-primary">✏️ Edit Profile</a>
+                <p class="mb-0 small">
+                    {(profile.about or "You have not added an about section yet.").replace("<","&lt;").replace(">","&gt;")}
+                </p>
+            </section>
+
+            <!-- SKILLS -->
+            <section class="section-card">
+                <div class="section-title">
+                    <span class="section-title-icon"><i class="bi bi-stars"></i></span>
+                    Skills & rates
                 </div>
-            </div>
+                <div class="mb-1">
+                    {skill_chips or "<span class='text-muted small'>No skills added yet.</span>"}
+                </div>
+            </section>
+
+            <!-- RATINGS -->
+            <section class="section-card">
+                <div class="section-title">
+                    <span class="section-title-icon"><i class="bi bi-star-half"></i></span>
+                    Ratings
+                </div>
+                <div class="rating-top">
+                    <div class="rating-badge">
+                        <div>{avg_rating_text}</div>
+                        <span class="small">Average</span>
+                    </div>
+                    <div class="rating-count-text">
+                        {len(ratings)} rating{"s" if len(ratings) != 1 else ""} received
+                    </div>
+                </div>
+                <div class="rating-list">
+                    {ratings_html or "<p class='text-muted small mb-0'>You do not have any ratings yet.</p>"}
+                </div>
+            </section>
+
+            <!-- SHOWCASE -->
+            <section class="section-card mb-4">
+                <div class="section-title">
+                    <span class="section-title-icon"><i class="bi bi-collection-play"></i></span>
+                    Showcase
+                </div>
+                {"<div class='showcase-grid'>" + "".join(
+                    f"<div class='showcase-thumb'><img src='/static/uploads/{img.image_url}' alt='Showcase'></div>"
+                    for img in showcase
+                ) + "</div>" if showcase else "<p class='text-muted small mb-1'>No images uploaded yet.</p>"}
+                {("<div class='video-wrap'><video class='w-100' controls><source src='/static/uploads/" + video_item + "' type='video/mp4'></video></div>" if video_item else "")}
+            </section>
+
         </div>
     </body>
     </html>
     """
     return HTMLResponse(html)
+
 
 
 @router.get("/create_worker_profile", response_class=HTMLResponse)

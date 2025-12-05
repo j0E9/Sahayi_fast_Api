@@ -6,93 +6,348 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
-    .profile-photo {
-      width: 150px;
-      height: 150px;
-      border-radius: 50%;
-      object-fit: cover;
-    }
-    .skill-badge { margin: 2px; }
-    .carousel-item img, .carousel-item video {
-      max-height: 500px;
-      object-fit: contain;
-    }
+      /* Star rating UI inside modal */
+      .star-rating {
+        display: inline-flex;
+        gap: 4px;
+      }
+      .star-rating .star-btn {
+        border: none;
+        background: none;
+        padding: 0 2px;
+        font-size: 1.9rem;
+        line-height: 1;
+        cursor: pointer;
+        color: #d1d5db;          /* gray */
+        transition: color 0.15s ease-out, transform 0.08s ease-out;
+      }
+      .star-rating .star-btn.active {
+        color: #facc15;          /* yellow */
+        transform: translateY(-1px);
+      }
+      .star-rating .star-btn:focus {
+        outline: none;
+      }
 
-    /* Floating call card styles */
-    #callFloatingCard {
-      display: none;
-      position: fixed;
-      right: 20px;
-      bottom: 20px;
-      z-index: 2100;
-      width: 320px;
-      border-radius: 12px;
-    }
-    #callFloatingCard .card {
-      border-radius: 12px;
-    }
-    #callFloatingCard .small-muted {
-      font-size: 0.85rem;
-      color: #6c757d;
-    }
-    /* make the End button vertically centered, compact, and aligned to the right */
-    #callFloatingCard .end-call-btn {
-      align-self: center;          /* vertical centering inside the flex container */
-      height: 34px;                /* matches typical button height */
-      padding: 0.25rem 0.6rem;     /* tighter padding */
-      border-radius: 6px;
-      font-size: 0.85rem;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-    }
+      /* Ratings & reviews styling */
+      .review-list {
+        max-height: 320px;           /* area is scrollable if many reviews */
+        overflow-y: auto;
+        padding-right: .25rem;
+      }
 
-  </style>
+      .review-item {
+        display: flex;
+        gap: 0.75rem;
+        padding: 0.75rem 0.85rem;
+        border-radius: 12px;
+        background: #f9fafb;
+        border: 1px solid #e5e7eb;
+        margin-bottom: 0.6rem;
+      }
+
+      .review-score {
+        min-width: 46px;
+        height: 46px;
+        border-radius: 999px;
+        background: linear-gradient(135deg,#f97316,#ea580c);
+        color: #fff;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        font-weight: 600;
+        font-size: 0.9rem;
+      }
+      .review-score small {
+        font-size: 0.7rem;
+        opacity: 0.9;
+      }
+
+      .review-meta {
+        font-size: 0.8rem;
+        color: #6b7280;
+        margin-bottom: 0.15rem;
+      }
+
+      .review-comment {
+        font-size: 0.9rem;
+        color: #111827;
+      }
+
+      body.bg-light {
+        background: radial-gradient(circle at top left, #fef3c7 0, #e0f2fe 40%, #eef2ff 100%);
+      }
+
+      .profile-photo {
+        width: 150px;
+        height: 150px;
+        border-radius: 50%;
+        object-fit: cover;
+        border: 4px solid rgba(255,255,255,0.9);
+        box-shadow: 0 16px 40px rgba(15, 23, 42, 0.35);
+      }
+
+      .skill-badge { margin: 2px; }
+
+      .carousel-item img, .carousel-item video {
+        max-height: 500px;
+        object-fit: contain;
+      }
+
+      /* Profile hero card */
+      .profile-hero-card {
+        border-radius: 18px;
+        overflow: hidden;
+        border: 0;
+      }
+      .profile-hero-left {
+        background: radial-gradient(circle at 10% 20%, #1d4ed8 0, #2563eb 35%, #0f172a 100%);
+        color: #fff;
+        text-align: center;
+        padding: 2.2rem 1.5rem;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+      }
+      .profile-hero-left h2 {
+        font-size: 1.4rem;
+        margin-top: 0.75rem;
+        margin-bottom: 0.25rem;
+      }
+      .rating-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 4px 10px;
+        border-radius: 999px;
+        background: rgba(15,23,42,0.55);
+        color: #fefce8;
+        font-size: 0.85rem;
+        margin-top: 0.35rem;
+      }
+      .rating-pill.empty {
+        background: rgba(15,23,42,0.3);
+      }
+      .rating-pill span.small {
+        opacity: 0.9;
+      }
+
+      .tag-pill {
+        display: inline-flex;
+        align-items: center;
+        padding: 4px 10px;
+        border-radius: 999px;
+        font-size: 0.8rem;
+        background: #eff6ff;
+        color: #1e293b;
+        margin-right: 6px;
+        margin-bottom: 4px;
+      }
+
+      .stat-chip {
+        display: inline-flex;
+        flex-direction: column;
+        padding: 6px 12px;
+        border-radius: 12px;
+        background: #f9fafb;
+        border: 1px solid #e5e7eb;
+        font-size: 0.8rem;
+        min-width: 120px;
+      }
+      .stat-chip .label {
+        text-transform: uppercase;
+        letter-spacing: .04em;
+        color: #9ca3af;
+        font-size: 0.7rem;
+      }
+      .stat-chip .value {
+        color: #111827;
+        font-weight: 600;
+      }
+
+      /* Top section navigation */
+      .profile-nav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        margin-bottom: 1rem;
+      }
+      .profile-nav a {
+        font-size: 0.85rem;
+        padding: 6px 12px;
+        border-radius: 999px;
+        border: 1px solid transparent;
+        text-decoration: none;
+        color: #4b5563;
+        background: rgba(255,255,255,0.7);
+        backdrop-filter: blur(8px);
+      }
+      .profile-nav a.active,
+      .profile-nav a:hover {
+        color: #111827;
+        border-color: #3b82f6;
+        background: #dbeafe;
+      }
+
+      /* Floating call card styles (unchanged from your version) */
+      #callFloatingCard {
+        display: none;
+        position: fixed;
+        right: 20px;
+        bottom: 20px;
+        z-index: 2100;
+        width: 320px;
+        border-radius: 12px;
+      }
+      #callFloatingCard .card {
+        border-radius: 12px;
+      }
+      #callFloatingCard .small-muted {
+        font-size: 0.85rem;
+        color: #6c757d;
+      }
+      #callFloatingCard .end-call-btn {
+        align-self: center;
+        height: 34px;
+        padding: 0.25rem 0.6rem;
+        border-radius: 6px;
+        font-size: 0.85rem;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      @media (max-width: 767.98px) {
+        .profile-hero-left {
+          padding: 1.75rem 1rem;
+        }
+        .profile-photo {
+          width: 120px;
+          height: 120px;
+        }
+      }
+</style>
+
 </head>
 <body class="bg-light">
 
 <div class="container py-4">
 
   <!-- Profile Card -->
-  <div class="card mb-4 shadow-sm">
-    <div class="row g-0 align-items-center">
-      <div class="col-md-3 text-center p-3">
-        <img src="{{ url_for('static', path='uploads/' ~ profile.photo) if profile and profile.photo else url_for('static', path='default_profile.jpg') }}" class="profile-photo img-fluid">
+  <!-- Small in-page nav -->
+  <div class="profile-nav">
+    <a href="#overview" class="active">Overview</a>
+    <a href="#showcase">Showcase</a>
+    <a href="#reviews">Ratings & Reviews</a>
+  </div>
+
+  <!-- Profile Card -->
+  <div id="overview" class="card mb-4 shadow-sm profile-hero-card">
+    <div class="row g-0">
+
+      <!-- Left: photo + rating -->
+      <div class="col-md-4 profile-hero-left">
+        <img
+          src="{{ url_for('static', path='uploads/' ~ profile.photo) if profile and profile.photo else url_for('static', path='default_profile.jpg') }}"
+          class="profile-photo img-fluid mb-2">
+
+        <h2 class="mb-0">{{ user.name }}</h2>
+
+        <p class="mb-1" style="font-size:0.9rem; opacity:.9;">
+          {{ worker_profile.age or 'N/A' }} years
+          {% if worker_profile.gender %} • {{ worker_profile.gender }}{% endif %}
+        </p>
+
+        {% if avg_rating != 'No ratings yet' %}
+          <div class="rating-pill">
+            <span>⭐ {{ avg_rating }}/5</span>
+            <span class="small">({{ ratings|length }} review{{ 's' if ratings|length != 1 }})</span>
+          </div>
+        {% else %}
+          <div class="rating-pill empty">
+            <span>No ratings yet</span>
+          </div>
+        {% endif %}
+
+        {% if selected_skill %}
+          <div class="mt-3 small" style="opacity:.95;">
+            <div>Primary skill</div>
+            <div style="font-weight:600;">
+              {{ selected_skill.name.title() }} –
+              ₹{{ selected_skill.rate }} / {{ selected_skill.rate_type }}
+            </div>
+          </div>
+        {% endif %}
       </div>
-      <div class="col-md-9 p-3">
-        <h2>{{ user.name }}</h2>
-        <p><strong>Age:</strong> {{ worker_profile.age or 'N/A' }} | <strong>Gender:</strong> {{ worker_profile.gender or 'N/A' }}</p>
-        <p><strong>About:</strong> {{ worker_profile.about or user.about or 'Not provided.' }}</p>
-        <p><strong>Experience:</strong> {{ worker_profile.experience or 'N/A' }}</p>
-        <p><strong>Qualification:</strong> {{ worker_profile.qualification or 'N/A' }}</p>
+
+      <!-- Right: details + actions -->
+      <div class="col-md-8 p-3 p-md-4">
+        <p class="mb-2">
+          <strong>About:</strong>
+          {{ worker_profile.about or user.about or 'Not provided.' }}
+        </p>
+
+        <div class="mb-2">
+          {% if worker_profile.experience %}
+            <span class="tag-pill">Experience: {{ worker_profile.experience }}</span>
+          {% endif %}
+          {% if worker_profile.qualification %}
+            <span class="tag-pill">Qualification: {{ worker_profile.qualification }}</span>
+          {% endif %}
+        </div>
+
+        <div class="d-flex flex-wrap gap-2 mb-3">
+          <div class="stat-chip">
+            <span class="label">Experience</span>
+            <span class="value">{{ worker_profile.experience or 'N/A' }}</span>
+          </div>
+          <div class="stat-chip">
+            <span class="label">Qualification</span>
+            <span class="value">{{ worker_profile.qualification or 'N/A' }}</span>
+          </div>
+          <div class="stat-chip">
+            <span class="label">Reviews</span>
+            <span class="value">{{ ratings|length }}</span>
+          </div>
+        </div>
 
         <div class="mb-2">
           <strong>Skills:</strong><br>
           {% for s in skills %}
-            <span class="badge bg-primary skill-badge">{{ s.name.title() }} (₹{{ s.rate }} / {{ s.rate_type }})</span>
+            <span class="badge bg-primary skill-badge">
+              {{ s.name.title() }} (₹{{ s.rate }} / {{ s.rate_type }})
+            </span>
           {% endfor %}
         </div>
 
-        <!-- Booking Button -->
-        {% if current_user.id != user.id and job_id %}
-          <a id="bookBtn"
-             href="{{ url_for('confirm_booking', worker_id=user.id) }}?job_id={{ job_id }}&skill_id={{ selected_skill.id }}"
-             class="btn btn-success mt-2"
-             {% if is_custom %}style="pointer-events:none;opacity:.6" aria-disabled="true"{% endif %}>
-             📘 Book Sahayi
-          </a>
-        {% elif current_user.id == user.id %}
-          <div class="alert alert-info mt-2">You cannot book your own profile.</div>
-        {% endif %}
+        <!-- Booking / Call actions -->
+        <div class="d-flex flex-wrap gap-2 mt-3">
+          {% if current_user.id != user.id and job_id %}
+            <a id="bookBtn"
+               href="{{ url_for('confirm_booking', worker_id=user.id) }}?job_id={{ job_id }}&skill_id={{ selected_skill.id }}"
+               class="btn btn-success"
+               {% if is_custom %}style="pointer-events:none;opacity:.6" aria-disabled="true"{% endif %}>
+               📘 Book Sahayi
+            </a>
+          {% elif current_user.id == user.id %}
+            <div class="alert alert-info mb-0 flex-grow-1">
+              You cannot book your own profile.
+            </div>
+          {% endif %}
 
-
-        <!-- Call Sahayi Button -->
-        {% if current_user.id != user.id %}
-          <button id="callBtn" class="btn btn-warning mt-2">📞 Call Sahayi</button>
-        {% endif %}
+          {% if current_user.id != user.id %}
+            <button id="callBtn" class="btn btn-warning">
+              📞 Call Sahayi
+            </button>
+          {% endif %}
+        </div>
       </div>
+
     </div>
   </div>
+
     {% if is_custom and current_user.id != user.id %}
       <div id="custom-price-wrap" class="mt-3" style="display:none;">
         <label class="form-label">💰 Enter price (INR):</label>
@@ -110,7 +365,7 @@
 
 
   <!-- Showcase Section -->
-  <div class="card shadow-sm mb-4 p-3">
+  <div id="showcase" class="card shadow-sm mb-4 p-3">
     <h5 class="mb-3">Showcase</h5>
     <div class="row">
       {% for img in showcase_images %}
@@ -139,21 +394,59 @@
     </div>
   </div>
 
-  <!-- Ratings Section -->
-  <div class="card shadow-sm mb-4 p-3">
-    <h5>Ratings & Reviews</h5>
-    <p><strong>Average:</strong> {{ avg_rating }}</p>
-    <ul class="list-group mb-3">
-      {% for r in ratings %}
-        <li class="list-group-item">
-          <b>{{ r.stars }} ★</b> from <i>{{ r.rater.name }}</i>: {{ r.comment }}
-        </li>
-      {% endfor %}
-    </ul>
+  <!-- Ratings Section (compact) -->
+  <div id="reviews" class="card shadow-sm mb-4 p-3">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <div>
+        <h5 class="mb-1">Ratings &amp; Reviews</h5>
+        <div class="d-flex align-items-center gap-2">
+          <span class="fs-4 fw-semibold">
+            ⭐ {{ avg_rating if avg_rating != 'No ratings yet' else '–' }}
+          </span>
+          <span class="text-muted small">
+            {{ ratings|length }} review{{ 's' if ratings|length != 1 }}
+          </span>
+        </div>
+      </div>
+      {% if avg_rating != 'No ratings yet' %}
+        <span class="badge rounded-pill text-bg-light">
+          Recent {{ ratings|length }} rating{{ 's' if ratings|length != 1 }}
+        </span>
+      {% endif %}
+    </div>
+
+    <div class="review-list">
+      {% if ratings %}
+        {% for r in ratings %}
+          <div class="review-item">
+            <div class="review-score">
+              <div>{{ '%.1f'|format(r.stars) }}</div>
+              <small>stars</small>
+            </div>
+            <div class="flex-grow-1">
+              <div class="review-meta">
+                from <span class="fst-italic">{{ r.rater.name }}</span>
+                {% if r.created_at %}
+                  · {{ r.created_at.strftime('%d %b %Y') }}
+                {% endif %}
+              </div>
+              <div class="review-comment">
+                {{ r.comment or 'No comment provided.' }}
+              </div>
+            </div>
+          </div>
+        {% endfor %}
+      {% else %}
+        <p class="text-muted small mb-0">
+          No reviews yet. Be the first to rate this partner.
+        </p>
+      {% endif %}
+    </div>
 
     {% if current_user.id != user.id %}
-      <!-- Trigger Rating Modal -->
-      <button class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#ratingModal">
+      <hr class="my-3">
+      <button class="btn btn-outline-primary w-100"
+              data-bs-toggle="modal" data-bs-target="#ratingModal">
         Leave a Rating
       </button>
     {% endif %}
@@ -162,19 +455,52 @@
 </div>
 
 <!-- Rating Modal -->
-<div class="modal fade" id="ratingModal" tabindex="-1">
+<div class="modal fade" id="ratingModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content p-3">
-      <form method="POST">
-        <div class="mb-3">
-          <label>Stars (0.5 to 5)</label>
-          <input type="number" name="stars" min="0.5" max="5" step="0.5" class="form-control" required>
+    <div class="modal-content">
+      <form method="POST" id="ratingForm">
+        <div class="modal-header">
+          <h5 class="modal-title">Rate {{ user.name }}</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
-        <div class="mb-3">
-          <label>Comment</label>
-          <textarea name="comment" class="form-control" required></textarea>
+
+        <div class="modal-body">
+          <!-- Star selector -->
+          <div class="mb-3">
+            <label class="form-label d-block">Your rating</label>
+
+            <div class="star-rating" id="starRatingControl">
+              <button type="button" class="star-btn" data-value="1">★</button>
+              <button type="button" class="star-btn" data-value="2">★</button>
+              <button type="button" class="star-btn" data-value="3">★</button>
+              <button type="button" class="star-btn" data-value="4">★</button>
+              <button type="button" class="star-btn" data-value="5">★</button>
+            </div>
+
+            <!-- hidden real field sent to backend -->
+            <input type="hidden" name="stars" id="rating-stars-input" value="">
+
+            <div id="rating-stars-help" class="small text-muted mt-1">
+              Click on a star to rate (1–5).
+            </div>
+          </div>
+
+          <!-- Comment -->
+          <div class="mb-3">
+            <label class="form-label">Comment</label>
+            <textarea
+              name="comment"
+              class="form-control"
+              rows="3"
+              placeholder="Share your experience..."
+              required></textarea>
+          </div>
         </div>
-        <button type="submit" class="btn btn-primary w-100">Submit</button>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary">Submit rating</button>
+        </div>
       </form>
     </div>
   </div>
@@ -885,8 +1211,93 @@ function startCooldownFromCancelledAt(cancelled_at, totalSeconds = 300, negotiat
 }
 
 
+// Simple smooth-scroll for Overview / Showcase / Reviews nav pills
+document.addEventListener('DOMContentLoaded', function () {
+  const navLinks = document.querySelectorAll('.profile-nav a[href^="#"]');
+
+  navLinks.forEach(link => {
+    link.addEventListener('click', function (e) {
+      e.preventDefault();
+      const targetId = this.getAttribute('href');
+      const targetEl = document.querySelector(targetId);
+      if (!targetEl) return;
+
+      // Smooth scroll
+      targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+      // Update active state
+      navLinks.forEach(a => a.classList.remove('active'));
+      this.classList.add('active');
+    });
+  });
+});
+
+// --- Star rating modal behaviour ---
+document.addEventListener('DOMContentLoaded', function () {
+  const container = document.getElementById('starRatingControl');
+  if (!container) return;
+
+  const stars = container.querySelectorAll('.star-btn');
+  const hiddenInput = document.getElementById('rating-stars-input');
+  const help = document.getElementById('rating-stars-help');
+  const form = document.getElementById('ratingForm');  ;
+
+  function applyVisual(value) {
+    stars.forEach(st => {
+      const v = Number(st.dataset.value);
+      st.classList.toggle('active', v <= value);
+    });
+    if (help) {
+      help.textContent = value
+        ? `You selected ${value} star${value > 1 ? 's' : ''}.`
+        : 'Click on a star to rate (1–5).';
+    }
+  }
+
+  function setRating(value) {
+    hiddenInput.value = value || '';
+    applyVisual(value || 0);
+  }
+
+  // click to select rating
+  stars.forEach(st => {
+    st.addEventListener('click', function () {
+      const value = Number(this.dataset.value);
+      setRating(value);
+    });
+
+    // preview on hover
+    st.addEventListener('mouseenter', function () {
+      const value = Number(this.dataset.value);
+      applyVisual(value);
+    });
+  });
+
+  // restore selection on mouse leave
+  container.addEventListener('mouseleave', function () {
+    const current = Number(hiddenInput.value || 0);
+    applyVisual(current);
+  });
+
+  // force user to pick at least 1 star
+  form?.addEventListener('submit', function (e) {
+    if (!hiddenInput.value) {
+      e.preventDefault();
+      alert('Please select a star rating before submitting.');
+    }
+  });
+
+  // when modal opens, reset stars
+  const ratingModalEl = document.getElementById('ratingModal');
+  if (ratingModalEl) {
+    ratingModalEl.addEventListener('show.bs.modal', () => {
+      setRating(0);
+      if (form) form.reset();
+    });
+  }
+});
+
 </script>
 
 </body>
 </html>
-

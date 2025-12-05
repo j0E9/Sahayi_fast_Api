@@ -29,6 +29,7 @@ RZP_TIMEOUT = 20  # seconds for SDK calls
 import os
 from urllib.parse import urlparse
 from fastapi import HTTPException, Request
+from decimal import Decimal
 
 ALLOWED_ORIGIN_HOSTS = {
     "yourdomain.com",
@@ -135,7 +136,9 @@ def pay_token_get(
             'window.location.replace("/welcome");</script>'
         )
 
-    total_tokens = int(booking.rate * booking.quantity)
+    rate = Decimal(str(booking.rate or 0))
+    qty = Decimal(str(booking.quantity or 0))
+    total_tokens = (rate * qty).quantize(Decimal("0.01"))  # e.g. 150.50
     remaining = max(0, int((booking.expires_at - datetime.utcnow()).total_seconds())) if booking.expires_at else 0
 
     resp = templates.TemplateResponse(
@@ -191,13 +194,14 @@ def pay_token_post(
             'window.location.replace("/welcome");</script>'
         )
 
-    total_tokens = int(booking.rate * booking.quantity)
+    rate = Decimal(str(booking.rate or 0))
+    qty = Decimal(str(booking.quantity or 0))
+    total_tokens = (rate * qty).quantize(Decimal("0.01"))
 
-    # Manual path uses wallet balance
-    balance = compute_balance(db, provider.id)
+    balance = compute_balance(db, provider.id)  # should be Decimal
     if balance < total_tokens:
         return HTMLResponse(
-            f'<script>alert("❌ Insufficient balance! You need {total_tokens}, but only have {int(balance)}.");'
+            f'<script>alert("❌ Insufficient balance! You need {total_tokens}, but only have {balance}.");'
             "window.history.back();</script>"
         )
 
@@ -327,8 +331,10 @@ def create_razorpay_order(
     if booking.rate is None or booking.quantity is None:
         raise HTTPException(status_code=400, detail="Missing rate/quantity")
 
-    total_rupees = int(booking.rate * booking.quantity)
-    amount_paise = total_rupees * 100
+    rate = Decimal(str(booking.rate or 0))
+    qty = Decimal(str(booking.quantity or 0))
+    total_rupees = (rate * qty).quantize(Decimal("0.01"))
+    amount_paise = int(total_rupees * 100)  # still integer, as Razorpay requires paise
 
     # Reuse existing order if amount matches
     if getattr(booking, "razor_order_id", None):
@@ -424,13 +430,18 @@ def verify_razorpay_payment(
     # 4) Amount/currency match against booking
     if booking.rate is None or booking.quantity is None:
         raise HTTPException(status_code=400, detail="Missing rate/quantity")
-    expected_amount = int(booking.rate * booking.quantity) * 100
+    rate = Decimal(str(booking.rate or 0))
+    qty  = Decimal(str(booking.quantity or 0))
+    total_rupees = (rate * qty).quantize(Decimal("0.01"))
+    expected_amount = int(total_rupees * 100)
+
     if int(order.get("amount", 0)) != expected_amount or order.get("currency") != "INR":
         raise HTTPException(status_code=400, detail="Amount/currency mismatch")
 
     provider = booking.provider
     worker   = booking.worker
-    total_tokens = expected_amount // 100
+    # keep as rupees with decimal
+    total_tokens = total_rupees
 
     # 5) Atomic credit + flags + notification
     # 5) Atomic credit + flags + notification
@@ -506,7 +517,7 @@ async def razorpay_webhook(
         pay = evt.get("payload", {}).get("payment", {}).get("entity", {}) or {}
         p_id = pay.get("id")
         o_id = pay.get("order_id")
-        amount = int(pay.get("amount", 0) or 0)
+        amount = int(pay.get("amount", 0) or 0)  # paise from Razorpay
 
         # Lock the booking row
         booking = (
@@ -517,11 +528,17 @@ async def razorpay_webhook(
         )
 
         if booking:
-            expected = int((booking.rate or 0) * (booking.quantity or 0)) * 100
+            # --- use Decimal, same logic as /razorpay/verify_payment ---
+            rate = Decimal(str(booking.rate or 0))
+            qty  = Decimal(str(booking.quantity or 0))
+            total_rupees = (rate * qty).quantize(Decimal("0.01"))  # e.g. 150.50
+            expected = int(total_rupees * 100)  # paise
+
             if expected == amount and not booking.payment_completed:
                 provider = booking.provider
                 worker   = booking.worker
-                total_tokens = expected // 100
+                total_tokens = total_rupees  # keep rupees with paise
+
                 with db.begin():
                     if not booking.payment_completed:
                         _mark_booking_paid(
@@ -530,25 +547,35 @@ async def razorpay_webhook(
                             provider=provider,
                             worker=worker,
                             total_tokens=total_tokens,
-                            payment_id=p_id, order_id=o_id, method="razorpay",
+                            payment_id=p_id,
+                            order_id=o_id,
+                            method="razorpay",
                         )
                         if provider and worker:
                             db.add(Notification(
                                 recipient_id=worker.id,
                                 sender_id=provider.id,
                                 booking_id=booking.id,
-                                message=f"✅ {provider.name} paid {total_tokens} tokens via Razorpay. You can now start chatting.",
+                                message=(
+                                    f"✅ {provider.name} paid {total_tokens} "
+                                    f"tokens via Razorpay. You can now start chatting."
+                                ),
                                 action_type="payment_completed",
                                 is_read=False,
                             ))
 
                             # --- NEW: surface next pending payment for this provider ---
                             try:
-                                _notify_next_pending_for_provider(db, provider_id=provider.id, exclude_booking_id=booking.id)
+                                _notify_next_pending_for_provider(
+                                    db,
+                                    provider_id=provider.id,
+                                    exclude_booking_id=booking.id,
+                                )
                             except Exception:
                                 pass
 
     return {"ok": True}
+
 
 
 # --- helpers ---------------------------------------------------------------
@@ -561,27 +588,49 @@ def _already_recorded(db: Session, *, user_id: int, kind: str, reference: str) -
     ).first() is not None
 
 
-def _credit_worker_only(db: Session, *, worker: User, amount: int, reference: str, booking: Booking, order_id: str | None, method: str):
+def _credit_worker_only(
+    db: Session,
+    *,
+    worker: User,
+    amount: float,  # can be Decimal or float
+    reference: str,
+    booking: Booking,
+    order_id: str | None,
+    method: str,
+):
     """Credit worker once (no giver debit)."""
     if _already_recorded(db, user_id=worker.id, kind="booking_payment_credit", reference=reference):
         return
+    amt = Decimal(str(amount)).quantize(Decimal("0.01"))
     add_ledger_row(
         db=db,
         user_id=worker.id,
-        amount_rupees=int(amount),
+        amount_rupees=amt,
         kind="booking_payment_credit",
         reference=reference,
         meta={"booking_id": booking.id, "order_id": order_id, "method": method},
     )
 
 
-def _debit_giver_and_credit_worker(db: Session, *, provider: User, worker: User, amount: int, reference: str, booking: Booking, order_id: str | None, method: str):
+def _debit_giver_and_credit_worker(
+    db: Session,
+    *,
+    provider: User,
+    worker: User,
+    amount: float,  # can be Decimal or float
+    reference: str,
+    booking: Booking,
+    order_id: str | None,
+    method: str,
+):
     """Manual flow: debit giver wallet and credit worker wallet (idempotent per side)."""
+    amt = Decimal(str(amount)).quantize(Decimal("0.01"))
+
     if not _already_recorded(db, user_id=provider.id, kind="booking_payment_debit", reference=reference):
         add_ledger_row(
             db=db,
             user_id=provider.id,
-            amount_rupees=-int(amount),
+            amount_rupees=-amt,
             kind="booking_payment_debit",
             reference=reference,
             meta={"booking_id": booking.id, "order_id": order_id, "method": method},
@@ -590,7 +639,7 @@ def _debit_giver_and_credit_worker(db: Session, *, provider: User, worker: User,
         add_ledger_row(
             db=db,
             user_id=worker.id,
-            amount_rupees=int(amount),
+            amount_rupees=amt,
             kind="booking_payment_credit",
             reference=reference,
             meta={"booking_id": booking.id, "order_id": order_id, "method": method},
@@ -602,7 +651,7 @@ def _mark_booking_paid(
     booking: Booking,
     provider: User,
     worker: User,
-    total_tokens: int,
+    total_tokens: float,
     *,
     payment_id: str,
     order_id: str | None,

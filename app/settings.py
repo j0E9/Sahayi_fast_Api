@@ -33,6 +33,10 @@ class Settings:
         "postgresql+psycopg://postgres:Joe72022%40@127.0.0.1:5432/sahayidb"
     )
 
+    # Razorpay (same keys you already use for the first payment)
+    RAZORPAY_KEY_ID: str = os.getenv("RAZORPAY_KEY_ID", "")
+    RAZORPAY_KEY_SECRET: str = os.getenv("RAZORPAY_KEY_SECRET", "")
+
     # --- Auth / token settings ---
     ACCESS_TOKEN_SECRET: str = os.getenv("ACCESS_TOKEN_SECRET", "dev_access_secret_change_me")
     ACCESS_TOKEN_ALGORITHM: str = os.getenv("ACCESS_TOKEN_ALGORITHM", "HS256")
