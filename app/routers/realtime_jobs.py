@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session, joinedload
 import razorpay
 from app.database import get_db
 from app.models import (
-    User, Booking, Notification, Message, WorkerProfile, WalletTransaction
+    User, Booking, Notification, Message, WorkerProfile, WalletTransaction,WorkerWarning
 )
 from app.services.wallet import add_ledger_row
 from decimal import Decimal
@@ -22,6 +22,10 @@ from razorpay.errors import SignatureVerificationError
 import logging
 from datetime import datetime, timedelta
 from app.settings import settings
+from sqlalchemy import and_
+from sqlalchemy.orm import Session
+from datetime import datetime
+from sqlalchemy import or_
 # If you use Twilio in this file, import your client/TWILIO_PHONE as needed.
 # from app.twilio import client, TWILIO_PHONE
 
@@ -63,6 +67,321 @@ def haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     a = math.sin(dLat/2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dLon/2)**2
     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
     return R * c
+
+
+def estimate_drive_seconds_for_booking(booking: Booking) -> Optional[int]:
+    """
+    Compute a conservative ETA (seconds) from worker to provider using stored lat/lon.
+    Returns None if we cannot compute.
+    """
+    w = booking.worker
+    p = booking.provider
+    if not (w and p and w.latitude and w.longitude and p.latitude and p.longitude):
+        return None
+
+    try:
+        meters = haversine(float(w.latitude), float(w.longitude),
+                           float(p.latitude), float(p.longitude))
+    except Exception:
+        return None
+
+    avg_speed_m_s = 12.0  # ~43 km/h, same as /get_estimated_drive_time_by_booking
+    if avg_speed_m_s <= 0:
+        return None
+
+    seconds = int(meters / avg_speed_m_s)
+    if seconds > 24 * 3600:
+        seconds = 24 * 3600
+    if seconds < 0:
+        seconds = 0
+    return seconds
+
+
+def _ensure_drive_timer_initialized(booking: Booking, db: Session) -> None:
+    """
+    Ensure drive_timer_started_at and drive_eta_seconds are set and persisted.
+    """
+    changed = False
+
+    if not booking.drive_timer_started_at:
+        booking.drive_timer_started_at = datetime.utcnow()
+        changed = True
+
+    # If you also use drive_eta_seconds, ensure it has a default:
+    if booking.drive_eta_seconds is None:
+        # For testing: treat ETA as "now" (0 seconds). Adjust as needed.
+        booking.drive_eta_seconds = 0
+        changed = True
+
+    if changed:
+        db.commit()
+        db.refresh(booking)
+
+from sqlalchemy import and_
+
+def auto_warn_and_cancel_if_due(booking: Booking, db: Session) -> None:
+    """
+    Server-side scheduler for automatic warnings + auto-cancel.
+
+    Uses WorkerWarning history to determine current stage:
+
+      stage 0: no WorkerWarning yet          -> first warning
+      stage 1: last warning.stage == 1       -> second warning
+      stage 2: last warning.stage == 2       -> third/final warning
+      stage 3: last warning.stage == 3       -> auto-cancel booking
+
+    Delays (for now, kept short for testing):
+      - Stage 0 -> 1 : 0.05 minutes after drive_timer_started_at
+      - Stage 1 -> 2 : 0.05 minutes after last warning
+      - Stage 2 -> 3 : 0.05 minutes after last warning
+      - Stage 3 -> cancel : 0.05 minutes after last warning
+    """
+
+    logger.info(
+        "warn_check booking=%s status=%s auto_cancelled=%s otp_verified=%s worker_arrived=%s",
+        booking.id,
+        booking.status,
+        booking.auto_cancelled,
+        getattr(booking, "otp_verified", None),
+        getattr(booking, "worker_arrived", None),
+    )
+
+    # ---- Guard conditions ----
+    if booking.status != "Token Paid":
+        logger.info("auto_warn: skip (status != 'Token Paid') booking=%s", booking.id)
+        return
+    if booking.auto_cancelled:
+        logger.info("auto_warn: skip (already auto_cancelled) booking=%s", booking.id)
+        return
+    if getattr(booking, "otp_verified", False) or getattr(booking, "worker_arrived", False):
+        logger.info("auto_warn: skip (otp_verified or worker_arrived) booking=%s", booking.id)
+        return
+
+    # Make sure timer fields exist
+    _ensure_drive_timer_initialized(booking, db)
+
+    now = datetime.utcnow()
+
+    # ---- Determine current stage from last WorkerWarning ----
+    last_warning: WorkerWarning | None = (
+        db.query(WorkerWarning)
+        .filter(
+            WorkerWarning.booking_id == booking.id,
+            WorkerWarning.worker_id == booking.worker_id,
+        )
+        .order_by(WorkerWarning.stage.desc(), WorkerWarning.id.desc())
+        .first()
+    )
+
+    if last_warning is None:
+        stage = 0
+        reference = booking.drive_timer_started_at or now
+    else:
+        stage = last_warning.stage  # 1..3 in your model
+        reference = last_warning.created_at or now
+
+    # Normalize stage to 0..3 internally
+    # stage 0: no warnings yet
+    # stage 1: first warning already sent
+    # stage 2: second warning already sent
+    # stage 3: third warning already sent -> auto-cancel next
+    logger.info(
+        "auto_warn: booking=%s current_stage=%s reference=%s",
+        booking.id, stage, reference.isoformat()
+    )
+
+    # ---- Delays (minutes) – keep short for testing ----
+    delays = {
+        0: 1,   # first warning after ETA start
+        1: 1,   # second warning after first
+        2: 1,   # third warning after second
+        3: 1,   # auto-cancel after third
+    }
+
+    delay_minutes = delays.get(stage)
+    if delay_minutes is None:
+        logger.info("auto_warn: invalid stage=%s booking=%s", stage, booking.id)
+        return
+
+    trigger_time = reference + timedelta(minutes=delay_minutes)
+    logger.info(
+        "auto_warn_timing booking=%s stage=%s now=%s trigger=%s",
+        booking.id, stage, now.isoformat(), trigger_time.isoformat()
+    )
+
+    # Not yet time
+    if now < trigger_time:
+        return
+
+    def _create_warning(next_stage: int, message: str, remaining: int) -> None:
+        warning = WorkerWarning(
+            booking_id=booking.id,
+            giver_id=booking.provider_id,
+            worker_id=booking.worker_id,
+            stage=next_stage,            # 1, 2, 3
+            remaining=remaining,
+            message=message,
+            acknowledged=False,          # explicitly unacknowledged
+        )
+        db.add(warning)
+
+        # Optional: still keep these on Booking if you want, but they are no longer required
+        booking.warn_stage = next_stage
+        booking.warn_last_at = now
+
+        try:
+            db.add(Notification(
+                recipient_id=booking.worker_id,
+                sender_id=booking.provider_id,
+                booking_id=booking.id,
+                message=message,
+                action_type="warn_worker",
+                is_read=False,
+            ))
+        except Exception:
+            logger.exception("auto_warn: failed to create Notification")
+
+    # ---- Execute action for the current stage ----
+    if stage == 0:
+        logger.info("auto_warn: stage 0 -> create first warning booking=%s", booking.id)
+        _create_warning(
+            next_stage=1,
+            message="⚠️ You are late to reach the job location. Please reach as soon as possible.",
+            remaining=2,
+        )
+        db.commit()
+        return
+
+    if stage == 1:
+        logger.info("auto_warn: stage 1 -> create second warning booking=%s", booking.id)
+        _create_warning(
+            next_stage=2,
+            message="⚠️ Second reminder: you are still late. Please reach immediately or the booking may be cancelled.",
+            remaining=1,
+        )
+        db.commit()
+        return
+
+    if stage == 2:
+        logger.info("auto_warn: stage 2 -> create third warning booking=%s", booking.id)
+        _create_warning(
+            next_stage=3,
+            message="⚠️ Final warning: this booking will be cancelled automatically in 5 minutes if you do not reach.",
+            remaining=0,
+        )
+        db.commit()
+        return
+
+    if stage == 3:
+        logger.info("auto_warn: stage 3 -> auto-cancel booking=%s", booking.id)
+        booking.auto_cancelled = True
+        booking.status = "Cancelled"
+        booking.expires_at = now
+
+        try:
+            db.add(Notification(
+                recipient_id=booking.worker_id,
+                sender_id=booking.provider_id,
+                booking_id=booking.id,
+                message="❌ Booking cancelled automatically due to delay in arriving.",
+                action_type="booking_auto_cancelled",
+                is_read=False,
+            ))
+        except Exception:
+            logger.exception("auto_warn: failed to create auto_cancel Notification")
+
+        db.commit()
+        return
+
+
+def get_next_warning_eta_seconds(booking: Booking, db: Session) -> Optional[int]:
+    """
+    Compute seconds until the next automatic warn/cancel event
+    for this booking, based on the same logic as auto_warn_and_cancel_if_due.
+    Returns:
+      - >= 0 : seconds until next stage (warning or cancel)
+      - None : no further warnings/cancellations scheduled
+    """
+
+    # Same guard conditions as auto_warn_and_cancel_if_due
+    if booking.status != "Token Paid":
+        return None
+    if booking.auto_cancelled:
+        return None
+    if getattr(booking, "otp_verified", False) or getattr(booking, "worker_arrived", False):
+        return None
+
+    _ensure_drive_timer_initialized(booking, db)
+
+    now = datetime.utcnow()
+
+    last_warning: WorkerWarning | None = (
+        db.query(WorkerWarning)
+        .filter(
+            WorkerWarning.booking_id == booking.id,
+            WorkerWarning.worker_id == booking.worker_id,
+        )
+        .order_by(WorkerWarning.stage.desc(), WorkerWarning.id.desc())
+        .first()
+    )
+
+    if last_warning is None:
+        stage = 0
+        reference = booking.drive_timer_started_at or now
+    else:
+        stage = last_warning.stage
+        reference = last_warning.created_at or now
+
+    # Same delays as in auto_warn_and_cancel_if_due
+    delays = {
+        0: 1,   # minutes until first warning
+        1: 1,   # minutes until second warning
+        2: 1,   # minutes until third warning
+        3: 1,   # minutes until auto-cancel
+    }
+
+    delay_minutes = delays.get(stage)
+    if delay_minutes is None:
+        return None
+
+    trigger_time = reference + timedelta(minutes=delay_minutes)
+    seconds = int((trigger_time - now).total_seconds())
+    return max(0, seconds)
+
+
+@router.get("/dev_list_warnings/{booking_id}")
+def dev_list_warnings(
+    booking_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    DEV: list all WorkerWarning rows for this booking so we can see
+    what worker_id / acknowledged values they have.
+    """
+    rows = (
+        db.query(WorkerWarning)
+        .filter(WorkerWarning.booking_id == booking_id)
+        .order_by(WorkerWarning.id.asc())
+        .all()
+    )
+
+    out = []
+    for w in rows:
+        out.append({
+            "id": w.id,
+            "booking_id": w.booking_id,
+            "giver_id": w.giver_id,
+            "worker_id": w.worker_id,
+            "stage": w.stage,
+            "remaining": w.remaining,
+            "acknowledged": w.acknowledged,
+            "created_at": w.created_at.isoformat() if w.created_at else None,
+        })
+    return out
+
+
+
 
 # ---------- Pydantic bodies ----------
 class LatLonIn(BaseModel):
@@ -884,3 +1203,82 @@ def update_worker_status(
     profile.is_online = is_online
     db.commit()
     return {"success": True, "is_online": is_online}
+
+
+
+
+@router.get("/worker_check_warning")
+def worker_check_warning(
+    booking_id: int = Query(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    booking = db.get(Booking, booking_id)
+    if not booking:
+        return {"warning": None, "next_warning_in_seconds": None}
+
+    # Only worker involved in this booking can see warnings
+    if current_user.id != booking.worker_id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    # Evaluate automatic warn / cancel schedule (may create new warning / cancel)
+    auto_warn_and_cancel_if_due(booking, db)
+
+    # Recompute next warning ETA *after* scheduler runs
+    next_eta = get_next_warning_eta_seconds(booking, db)
+
+    # Fetch latest, *unacknowledged* warning for this booking+worker
+    warning = (
+        db.query(WorkerWarning)
+        .filter(
+            WorkerWarning.booking_id == booking.id,
+            WorkerWarning.worker_id == current_user.id,
+            or_(
+                WorkerWarning.acknowledged == False,
+                WorkerWarning.acknowledged.is_(None),
+            ),
+        )
+        .order_by(WorkerWarning.id.desc())
+        .first()
+    )
+
+    if not warning:
+        return {
+            "warning": None,
+            "next_warning_in_seconds": next_eta,
+        }
+
+    return {
+        "warning": {
+            "id": warning.id,
+            "stage": warning.stage,
+            "remaining": warning.remaining,
+            "message": warning.message,
+            "created_at": warning.created_at.isoformat(),
+        },
+        "next_warning_in_seconds": next_eta,
+    }
+
+
+
+
+class AckWarningIn(BaseModel):
+    booking_id: int
+    warning_id: int
+
+@router.post("/ack_warning")
+def ack_warning(
+    payload: AckWarningIn,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    warning = db.get(WorkerWarning, payload.warning_id)
+    if not warning or warning.booking_id != payload.booking_id:
+        return {"success": False, "message": "Warning not found."}
+
+    if current_user.id != warning.worker_id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    warning.acknowledged = True
+    db.commit()
+    return {"success": True}

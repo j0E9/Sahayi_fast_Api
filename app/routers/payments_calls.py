@@ -41,6 +41,10 @@ ALLOWED_ORIGIN_HOSTS = {
 DEV_MODE = os.getenv("ENV", "dev").lower() in {"dev", "local", "debug"}
 DEV_HOSTS = {"localhost", "127.0.0.1"}
 DEV_TUNNEL_SUFFIXES = (".trycloudflare.com", ".ngrok-free.app", ".ngrok.io")
+COMMISSION_RATE_GIVER = Decimal("0.05")   # 5% from job giver
+COMMISSION_RATE_WORKER = Decimal("0.05")  # 5% from worker
+# Make sure there is a User row with this ID (e.g. admin/company account).
+PLATFORM_USER_ID = int(os.getenv("PLATFORM_USER_ID", "1"))
 
 def _host_allowed(host: str, request_host: str) -> bool:
     if not host:
@@ -138,7 +142,16 @@ def pay_token_get(
 
     rate = Decimal(str(booking.rate or 0))
     qty = Decimal(str(booking.quantity or 0))
-    total_tokens = (rate * qty).quantize(Decimal("0.01"))  # e.g. 150.50
+
+    # Base job value (what worker earns before worker 5% is subtracted)
+    base_amount = (rate * qty).quantize(Decimal("0.01"))
+
+    # 5% commission that *giver* pays extra
+    giver_commission = (base_amount * COMMISSION_RATE_GIVER).quantize(Decimal("0.01"))
+
+    # Total amount that job giver actually pays
+    total_payable = (base_amount + giver_commission).quantize(Decimal("0.01"))
+
     remaining = max(0, int((booking.expires_at - datetime.utcnow()).total_seconds())) if booking.expires_at else 0
 
     resp = templates.TemplateResponse(
@@ -147,10 +160,15 @@ def pay_token_get(
             "request": request,
             "booking": booking,
             "time_left": remaining,
-            "total_tokens": total_tokens,
+            # keep old name if you still need it anywhere
+            "total_tokens": base_amount,
+            "base_amount": base_amount,
+            "giver_commission": giver_commission,
+            "total_payable": total_payable,
             "current_user": current_user,
         },
     )
+
     resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     resp.headers["Pragma"] = "no-cache"
     resp.headers["Expires"] = "0"
@@ -196,23 +214,28 @@ def pay_token_post(
 
     rate = Decimal(str(booking.rate or 0))
     qty = Decimal(str(booking.quantity or 0))
-    total_tokens = (rate * qty).quantize(Decimal("0.01"))
+    base_amount = (rate * qty).quantize(Decimal("0.01"))  # base job value
+
+    # Commission: 5% extra debit from giver on main job
+    giver_commission = (base_amount * COMMISSION_RATE_GIVER).quantize(Decimal("0.01"))
+    total_debit_provider = (base_amount + giver_commission).quantize(Decimal("0.01"))
 
     balance = compute_balance(db, provider.id)  # should be Decimal
-    if balance < total_tokens:
+    if balance < total_debit_provider:
         return HTMLResponse(
-            f'<script>alert("❌ Insufficient balance! You need {total_tokens}, but only have {balance}.");'
+            f'<script>alert("❌ Insufficient balance! You need {total_debit_provider}, but only have {balance}.");'
             "window.history.back();</script>"
         )
 
     # Atomic debit/credit + flags + notify
     with db.begin():
+        # Pass BASE amount to helper; it will apply 5%+5% logic
         _mark_booking_paid(
             db=db,
             booking=booking,
             provider=provider,
             worker=worker,
-            total_tokens=total_tokens,
+            total_tokens=base_amount,
             payment_id=f"manual_{booking.id}",
             order_id=None,
             method="manual",
@@ -221,11 +244,10 @@ def pay_token_post(
             recipient_id=worker.id,
             sender_id=provider.id,
             booking_id=booking.id,
-            message=f"✅ {provider.name} paid {total_tokens} tokens. You can now start chatting.",
+            message=f"✅ {provider.name} paid {base_amount} tokens. You can now start chatting.",
             action_type="payment_completed",
             is_read=False,
         ))
-        # --- NEW: surface other pending payments for this provider so provider sees next pay page ---
         try:
             _notify_next_pending_for_provider(db, provider_id=provider.id, exclude_booking_id=booking.id)
         except Exception:
@@ -333,8 +355,12 @@ def create_razorpay_order(
 
     rate = Decimal(str(booking.rate or 0))
     qty = Decimal(str(booking.quantity or 0))
-    total_rupees = (rate * qty).quantize(Decimal("0.01"))
-    amount_paise = int(total_rupees * 100)  # still integer, as Razorpay requires paise
+    base_rupees = (rate * qty).quantize(Decimal("0.01"))  # base price
+
+    giver_commission = (base_rupees * COMMISSION_RATE_GIVER).quantize(Decimal("0.01"))
+    total_charge_rupees = (base_rupees + giver_commission).quantize(Decimal("0.01"))
+
+    amount_paise = int(total_charge_rupees * 100)
 
     # Reuse existing order if amount matches
     if getattr(booking, "razor_order_id", None):
@@ -346,7 +372,7 @@ def create_razorpay_order(
                     "order_id": existing["id"],
                     "amount": existing["amount"],
                     "currency": existing.get("currency", "INR"),
-                    "display_amount": total_rupees,
+                    "display_amount": total_charge_rupees,
                 }
         except Exception:
             pass
@@ -360,9 +386,9 @@ def create_razorpay_order(
     }, timeout=RZP_TIMEOUT)
 
     booking.razor_order_id = order["id"]
-    booking.payment_required = True            # flag for UI
+    booking.payment_required = True
     booking.payment_completed = False
-    booking.razorpay_status = "created"        # helpful for UI/debug
+    booking.razorpay_status = "created"
     db.add(booking)
     db.commit()
 
@@ -371,7 +397,7 @@ def create_razorpay_order(
         "order_id": order["id"],
         "amount": order["amount"],
         "currency": order["currency"],
-        "display_amount": total_rupees,
+        "display_amount": total_charge_rupees,
     }
 
 
@@ -392,11 +418,10 @@ def verify_razorpay_payment(
     if not all([p_id, o_id, sig, token]):
         raise HTTPException(status_code=400, detail="Missing payment params")
 
-    # Lock booking row to avoid concurrent double-marking
     booking = (
         db.query(Booking)
         .filter(Booking.token == token)
-        .with_for_update()  # write lock
+        .with_for_update()
         .first()
     )
 
@@ -411,40 +436,37 @@ def verify_razorpay_payment(
             "razorpay_status": "captured",
         }
 
-    # 1) HMAC signature check
     data = f"{o_id}|{p_id}".encode()
     expected = hmac.new((RAZORPAY_KEY_SECRET or "").encode(), data, hashlib.sha256).hexdigest()
     if not compare_digest(expected, sig):
         raise HTTPException(status_code=400, detail="Invalid Razorpay signature")
 
-    # 2) Fetch authoritative order + payment
     order = razor.order.fetch(o_id, timeout=RZP_TIMEOUT)
     pay   = razor.payment.fetch(p_id, timeout=RZP_TIMEOUT)
 
-    # 3) Linkage + captured status
     if pay.get("order_id") != o_id:
         raise HTTPException(status_code=400, detail="Payment/order mismatch")
     if pay.get("status") != "captured":
         raise HTTPException(status_code=400, detail="Payment not captured")
 
-    # 4) Amount/currency match against booking
     if booking.rate is None or booking.quantity is None:
         raise HTTPException(status_code=400, detail="Missing rate/quantity")
+
     rate = Decimal(str(booking.rate or 0))
     qty  = Decimal(str(booking.quantity or 0))
-    total_rupees = (rate * qty).quantize(Decimal("0.01"))
-    expected_amount = int(total_rupees * 100)
+    base_rupees = (rate * qty).quantize(Decimal("0.01"))
+    giver_commission = (base_rupees * COMMISSION_RATE_GIVER).quantize(Decimal("0.01"))
+    total_charge_rupees = (base_rupees + giver_commission).quantize(Decimal("0.01"))
+
+    expected_amount = int(total_charge_rupees * 100)
 
     if int(order.get("amount", 0)) != expected_amount or order.get("currency") != "INR":
         raise HTTPException(status_code=400, detail="Amount/currency mismatch")
 
     provider = booking.provider
     worker   = booking.worker
-    # keep as rupees with decimal
-    total_tokens = total_rupees
+    total_tokens = base_rupees  # BASE booking value
 
-    # 5) Atomic credit + flags + notification
-    # 5) Atomic credit + flags + notification
     try:
         if booking.payment_completed:
             return {
@@ -474,7 +496,6 @@ def verify_razorpay_payment(
             is_read=False,
         ))
 
-        # --- NEW: surface next pending payment for this provider so that provider sees next pay page ---
         try:
             _notify_next_pending_for_provider(db, provider_id=provider.id, exclude_booking_id=booking.id)
         except Exception:
@@ -492,6 +513,7 @@ def verify_razorpay_payment(
         "payment_required": False,
         "razorpay_status": "captured",
     }
+
 
 
 # -------- Razorpay: Webhook ----------
@@ -530,14 +552,16 @@ async def razorpay_webhook(
         if booking:
             # --- use Decimal, same logic as /razorpay/verify_payment ---
             rate = Decimal(str(booking.rate or 0))
-            qty  = Decimal(str(booking.quantity or 0))
-            total_rupees = (rate * qty).quantize(Decimal("0.01"))  # e.g. 150.50
-            expected = int(total_rupees * 100)  # paise
+            qty = Decimal(str(booking.quantity or 0))
+            base_rupees = (rate * qty).quantize(Decimal("0.01"))
+            giver_commission = (base_rupees * COMMISSION_RATE_GIVER).quantize(Decimal("0.01"))
+            total_charge_rupees = (base_rupees + giver_commission).quantize(Decimal("0.01"))
+            expected = int(total_charge_rupees * 100)
 
             if expected == amount and not booking.payment_completed:
                 provider = booking.provider
                 worker   = booking.worker
-                total_tokens = total_rupees  # keep rupees with paise
+                total_tokens = base_rupees  # BASE value for commission split
 
                 with db.begin():
                     if not booking.payment_completed:
@@ -592,24 +616,66 @@ def _credit_worker_only(
     db: Session,
     *,
     worker: User,
-    amount: float,  # can be Decimal or float
+    amount: float,  # BASE amount
     reference: str,
     booking: Booking,
     order_id: str | None,
     method: str,
 ):
-    """Credit worker once (no giver debit)."""
+    """
+    Razorpay main booking flow:
+      - Bank → company
+      - CREDIT worker wallet with (base - 5% worker commission)
+      - Giver 5% was already included in the Razorpay charge amount.
+      - Store total 10% (5% + 5%) as platform_commission for company.
+    """
+    # Guard: only do this once per payment per worker
     if _already_recorded(db, user_id=worker.id, kind="booking_payment_credit", reference=reference):
         return
-    amt = Decimal(str(amount)).quantize(Decimal("0.01"))
+
+    base = Decimal(str(amount)).quantize(Decimal("0.01"))
+    worker_commission = (base * COMMISSION_RATE_WORKER).quantize(Decimal("0.01"))
+    worker_net = (base - worker_commission).quantize(Decimal("0.01"))
+
+    # 1) Credit worker (base - 5%)
     add_ledger_row(
         db=db,
         user_id=worker.id,
-        amount_rupees=amt,
+        amount_rupees=worker_net,
         kind="booking_payment_credit",
         reference=reference,
-        meta={"booking_id": booking.id, "order_id": order_id, "method": method},
+        meta={
+            "booking_id": booking.id,
+            "order_id": order_id,
+            "method": method,
+            "base_amount": str(base),
+            "worker_commission": str(worker_commission),
+        },
     )
+
+    # 2) Record platform profit (5% from giver + 5% from worker)
+    platform_user = db.get(User, PLATFORM_USER_ID)
+    if platform_user and not _already_recorded(
+        db, user_id=platform_user.id, kind="platform_commission", reference=reference
+    ):
+        giver_commission = (base * COMMISSION_RATE_GIVER).quantize(Decimal("0.01"))
+        platform_profit = (giver_commission + worker_commission).quantize(Decimal("0.01"))
+
+        add_ledger_row(
+            db=db,
+            user_id=platform_user.id,
+            amount_rupees=platform_profit,
+            kind="platform_commission",
+            reference=reference,
+            meta={
+                "booking_id": booking.id,
+                "order_id": order_id,
+                "method": method,
+                "base_amount": str(base),
+                "giver_commission": str(giver_commission),
+                "worker_commission": str(worker_commission),
+            },
+        )
 
 
 def _debit_giver_and_credit_worker(
@@ -617,32 +683,79 @@ def _debit_giver_and_credit_worker(
     *,
     provider: User,
     worker: User,
-    amount: float,  # can be Decimal or float
+    amount: float,  # BASE amount
     reference: str,
     booking: Booking,
     order_id: str | None,
     method: str,
 ):
-    """Manual flow: debit giver wallet and credit worker wallet (idempotent per side)."""
-    amt = Decimal(str(amount)).quantize(Decimal("0.01"))
+    """
+    Manual wallet main booking flow:
+      - DEBIT giver with (base + 5%)
+      - CREDIT worker with (base - 5%)
+      - 10% difference (5% + 5%) is platform commission, stored in wallet_transaction.
+    """
+    base = Decimal(str(amount)).quantize(Decimal("0.01"))
+    giver_commission = (base * COMMISSION_RATE_GIVER).quantize(Decimal("0.01"))
+    worker_commission = (base * COMMISSION_RATE_WORKER).quantize(Decimal("0.01"))
 
+    provider_debit = (base + giver_commission).quantize(Decimal("0.01"))
+    worker_net = (base - worker_commission).quantize(Decimal("0.01"))
+    platform_profit = (giver_commission + worker_commission).quantize(Decimal("0.01"))
+
+    # 1) Debit giver
     if not _already_recorded(db, user_id=provider.id, kind="booking_payment_debit", reference=reference):
         add_ledger_row(
             db=db,
             user_id=provider.id,
-            amount_rupees=-amt,
+            amount_rupees=-provider_debit,
             kind="booking_payment_debit",
             reference=reference,
-            meta={"booking_id": booking.id, "order_id": order_id, "method": method},
+            meta={
+                "booking_id": booking.id,
+                "order_id": order_id,
+                "method": method,
+                "base_amount": str(base),
+                "giver_commission": str(giver_commission),
+            },
         )
+
+    # 2) Credit worker
     if not _already_recorded(db, user_id=worker.id, kind="booking_payment_credit", reference=reference):
         add_ledger_row(
             db=db,
             user_id=worker.id,
-            amount_rupees=amt,
+            amount_rupees=worker_net,
             kind="booking_payment_credit",
             reference=reference,
-            meta={"booking_id": booking.id, "order_id": order_id, "method": method},
+            meta={
+                "booking_id": booking.id,
+                "order_id": order_id,
+                "method": method,
+                "base_amount": str(base),
+                "worker_commission": str(worker_commission),
+            },
+        )
+
+    # 3) Record platform profit
+    platform_user = db.get(User, PLATFORM_USER_ID)
+    if platform_user and not _already_recorded(
+        db, user_id=platform_user.id, kind="platform_commission", reference=reference
+    ):
+        add_ledger_row(
+            db=db,
+            user_id=platform_user.id,
+            amount_rupees=platform_profit,
+            kind="platform_commission",
+            reference=reference,
+            meta={
+                "booking_id": booking.id,
+                "order_id": order_id,
+                "method": method,
+                "base_amount": str(base),
+                "giver_commission": str(giver_commission),
+                "worker_commission": str(worker_commission),
+            },
         )
 
 
@@ -651,36 +764,46 @@ def _mark_booking_paid(
     booking: Booking,
     provider: User,
     worker: User,
-    total_tokens: float,
+    total_tokens: float,  # BASE amount (rate * qty)
     *,
     payment_id: str,
     order_id: str | None,
     method: str,  # "razorpay" | "manual"
 ):
     """
-    Booking paid:
-      - razorpay: CREDIT ONLY worker wallet (bank → company; giver wallet stays untouched)
-      - manual: DEBIT giver wallet and CREDIT worker wallet
-      - set booking flags & references
+    Booking paid with 10% commission for main job:
+      - razorpay: CREDIT worker (base - 5%), giver 5% is in Razorpay charge
+      - manual : DEBIT giver (base + 5%) and CREDIT worker (base - 5%)
+
+    Extra-time commission is NOT handled here (no commission for extra time).
     """
     if method == "razorpay":
         _credit_worker_only(
-            db, worker=worker, amount=total_tokens,
-            reference=payment_id, booking=booking, order_id=order_id, method=method
+            db,
+            worker=worker,
+            amount=total_tokens,
+            reference=payment_id,
+            booking=booking,
+            order_id=order_id,
+            method=method,
         )
     else:
         _debit_giver_and_credit_worker(
-            db, provider=provider, worker=worker, amount=total_tokens,
-            reference=payment_id, booking=booking, order_id=order_id, method=method
+            db,
+            provider=provider,
+            worker=worker,
+            amount=total_tokens,
+            reference=payment_id,
+            booking=booking,
+            order_id=order_id,
+            method=method,
         )
 
-    # Flags your UI reads
     booking.status = "Token Paid"
     booking.payment_completed = True
     booking.payment_required = False
     booking.razorpay_status = "captured" if method == "razorpay" else "manual"
 
-    # References
     booking.razor_payment_id = payment_id
     if order_id:
         booking.razor_order_id = order_id

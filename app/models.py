@@ -249,12 +249,28 @@ class Booking(Base):
     main_timer_paused: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     worker_arrived: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
+    drive_eta_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    drive_timer_started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    warn_stage = Column(Integer, default=0, nullable=False)  # 0..3
+    warn_last_at = Column(DateTime, nullable=True)
+    auto_cancelled = Column(Boolean, default=False, nullable=False)
+
     # relations (reciprocal relationship for Job added here)
     job: Mapped["Job | None"] = relationship("Job", back_populates="bookings", foreign_keys=[job_id])
     provider: Mapped["User | None"] = relationship("User", foreign_keys=[provider_id])
     worker: Mapped["User | None"] = relationship("User", foreign_keys=[worker_id])
 
 
+class PlatformProfit(Base):
+    __tablename__ = "platform_profit"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    booking_id: Mapped[int] = mapped_column(ForeignKey("booking.id"), nullable=False)
+    amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    giver_commission: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    worker_commission: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
 class Notification(Base):

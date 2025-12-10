@@ -1576,6 +1576,30 @@
         <div id="final-otp-status" class="mt-2" style="font-weight: bold;"></div>
       </div>
 
+      <div class="chat-header-extra" id="chat-header-extra"
+          style="display:flex; gap:8px; align-items:center; margin-top:8px;">
+          <div id="giver-arrival-wrap" style="display:none;">
+              <span>Estimated arrival in </span>
+              <span id="giver-arrival-timer" style="font-weight:600;">--:--:--</span>
+          </div>
+          <div id="worker-arrival-wrap" style="display:none;">
+              <span>Arrival time </span>
+              <span id="worker-arrival-timer" style="font-weight:600;">--:--:--</span>
+          </div>
+
+          <!-- Giver side timer -->
+          <div id="warn-timer-wrap" style="display:none;">
+              <span>Warning timer </span>
+              <span id="warn-timer-label" style="font-weight:600;">--:--:--</span>
+          </div>
+
+          <!-- Worker side timer -->
+          <div id="worker-warn-timer-wrap" style="display:none;">
+              <span>Estimated reach time: </span>
+              <span id="worker-warn-timer-label" style="font-weight:600;">--:--</span>
+          </div>
+      </div>
+
 
 
 
@@ -1692,8 +1716,6 @@
 
 
       </script>
-           <!-- 🚨 Warn Sahayi Button -->
-      <button id="warn-sahayi-btn" class="btn btn-danger mt-3" style="display:none;">⚠ Warn Sahayi</button>
     </div>
 
   </div>
@@ -2216,24 +2238,6 @@ document.addEventListener('DOMContentLoaded', wireRatingStars);
 
   window.__ensureWarnUnlocked = ensureUnlocked;
 })();
-
-async function playWarnLoop() {
-  const el = document.getElementById('warn-sound');
-  if (!el) return;
-  try {
-    if (typeof window.__ensureWarnUnlocked === 'function') await window.__ensureWarnUnlocked();
-    el.loop = true;
-    el.volume = 1.0;
-    el.currentTime = 0;
-    await el.play();
-  } catch { /* autoplay still blocked: ignore */ }
-}
-
-function stopWarnLoop() {
-  const el = document.getElementById('warn-sound');
-  if (!el) return;
-  try { el.pause(); el.currentTime = 0; } catch {}
-}
 
 
 (function(){
@@ -4902,6 +4906,8 @@ function restoreWarnTimerForBooking(bookingId, serverAllowsWarn = false) {
 
   const remaining = expiryTs - Date.now();
 
+  startWarnTimerForBooking(bookingId);
+
   if (remaining <= 0) {
     if (warnBtn) warnBtn.style.display = 'inline-block';
     localStorage.setItem(`warn_shown_${bookingId}`, '1');
@@ -5024,6 +5030,192 @@ function handleBookingCancelledUI() {
 
 }
 
+// --- Global timer handles so we can clear them when booking changes ---
+let workerArrivalInterval = null;
+let giverArrivalInterval = null;
+
+// format seconds -> "HH:MM:SS"
+function formatHMS(totalSeconds) {
+    totalSeconds = Math.max(0, Math.floor(totalSeconds || 0));
+    const h = Math.floor(totalSeconds / 3600);
+    const m = Math.floor((totalSeconds % 3600) / 60);
+    const s = totalSeconds % 60;
+    return [
+        h.toString().padStart(2, "0"),
+        m.toString().padStart(2, "0"),
+        s.toString().padStart(2, "0"),
+    ].join(":");
+}
+
+// ---- Worker: count-up timer ("Arrival time") ----
+function startWorkerArrivalTimer(startIso) {
+    const wrap = document.getElementById("worker-arrival-wrap");
+    const label = document.getElementById("worker-arrival-timer");
+
+    if (!wrap || !label) return;
+
+    // stop previous timer
+    if (workerArrivalInterval) {
+        clearInterval(workerArrivalInterval);
+        workerArrivalInterval = null;
+    }
+
+    // if we know drive_timer_started_at from backend, use it.
+    // otherwise fall back to "now"
+    const startMs = startIso ? Date.parse(startIso) : Date.now();
+
+    wrap.style.display = "inline";
+
+    function tick() {
+        const elapsed = (Date.now() - startMs) / 1000;
+        label.textContent = formatHMS(elapsed);
+    }
+    tick();
+    workerArrivalInterval = setInterval(tick, 1000);
+}
+
+let warnCountdownInterval = null;
+
+function resetWarnTimerUI() {
+  const wrap = document.getElementById("warn-timer-wrap");
+  const label = document.getElementById("warn-timer-label");
+
+  if (warnCountdownInterval) {
+    clearInterval(warnCountdownInterval);
+    warnCountdownInterval = null;
+  }
+  if (wrap) wrap.style.display = "none";
+  if (label) label.textContent = "--:--:--";
+}
+
+/**
+ * Decide what timestamp we should count down to:
+ * - Stage 0 (no warn pressed yet): use warn_expiry_<bookingId>  => ETA + extra delay
+ * - Stage 1/2/3: use warn_hidden_until_<bookingId> => cooldown after each warn
+ */
+function startWarnTimerForBooking(bookingId) {
+  const wrap = document.getElementById("warn-timer-wrap");
+  const label = document.getElementById("warn-timer-label");
+
+  if (!wrap || !label || !bookingId) return;
+  if (CURRENT_USER_ROLE !== "giver") {
+    // Only giver sees this timer
+    resetWarnTimerUI();
+    return;
+  }
+
+  if (warnCountdownInterval) {
+    clearInterval(warnCountdownInterval);
+    warnCountdownInterval = null;
+  }
+
+  // Current warn stage: 0 = no warn pressed yet, 1/2/3 = after each warn
+  const stageKey = `warn_stage_${bookingId}`;
+  const currentStage = parseInt(localStorage.getItem(stageKey) || "0", 10);
+
+  let targetTs = null;
+
+  // Before first warning: timer = ETA + given time => we already persisted as warn_expiry_<bookingId>
+  if (currentStage === 0) {
+    const expiryRaw = localStorage.getItem(`warn_expiry_${bookingId}`);
+    if (expiryRaw) {
+      const ts = parseInt(expiryRaw, 10);
+      if (!isNaN(ts)) targetTs = ts;
+    }
+  } else if (currentStage >= 1 && currentStage <= 3) {
+    // After each warn, we stored next allowed time in warn_hidden_until_<bookingId>
+    const hiddenRaw = localStorage.getItem(`warn_hidden_until_${bookingId}`);
+    if (hiddenRaw) {
+      const ts = parseInt(hiddenRaw, 10);
+      if (!isNaN(ts)) targetTs = ts;
+    }
+  }
+
+  if (!targetTs) {
+    // No timer to show
+    wrap.style.display = "none";
+    label.textContent = "--:--:--";
+    return;
+  }
+
+  function tick() {
+    const diffMs = targetTs - Date.now();
+    const remaining = Math.floor(diffMs / 1000);
+
+    if (remaining <= 0) {
+      label.textContent = "00:00:00";
+      clearInterval(warnCountdownInterval);
+      warnCountdownInterval = null;
+      // You can choose to hide it here, or keep it as 00:00:00 until next stage starts.
+      // wrap.style.display = "none";
+      return;
+    }
+
+    label.textContent = formatHMS(remaining);
+  }
+
+  wrap.style.display = "block";
+  tick();
+  warnCountdownInterval = setInterval(tick, 1000);
+}
+
+
+
+// ---- Giver: countdown ("Estimated arrival in") ----
+async function startGiverArrivalTimer(bookingId) {
+    const wrap = document.getElementById("giver-arrival-wrap");
+    const label = document.getElementById("giver-arrival-timer");
+
+    if (!wrap || !label || !bookingId) return;
+
+    // stop previous timer
+    if (giverArrivalInterval) {
+        clearInterval(giverArrivalInterval);
+        giverArrivalInterval = null;
+    }
+
+    try {
+        const res = await fetch(`/get_estimated_drive_time_by_booking?booking_id=${bookingId}`);
+        const data = await res.json();
+        let remaining = data && typeof data.seconds === "number" ? data.seconds : null;
+
+        if (remaining == null || remaining <= 0) {
+            wrap.style.display = "none";
+            return;
+        }
+
+        wrap.style.display = "inline";
+
+        function tick() {
+            if (remaining <= 0) {
+                label.textContent = "00:00:00";
+                clearInterval(giverArrivalInterval);
+                giverArrivalInterval = null;
+                return;
+            }
+            label.textContent = formatHMS(remaining);
+            remaining -= 1;
+        }
+        tick();
+        giverArrivalInterval = setInterval(tick, 1000);
+    } catch (e) {
+        console.error("startGiverArrivalTimer failed", e);
+        wrap.style.display = "none";
+    }
+}
+
+// Reset both when no active booking
+function resetArrivalTimers() {
+    const wa = document.getElementById("worker-arrival-wrap");
+    const ga = document.getElementById("giver-arrival-wrap");
+    if (workerArrivalInterval) clearInterval(workerArrivalInterval);
+    if (giverArrivalInterval) clearInterval(giverArrivalInterval);
+    workerArrivalInterval = null;
+    giverArrivalInterval = null;
+    if (wa) wa.style.display = "none";
+    if (ga) ga.style.display = "none";
+}
+
 
 /* ---------- GIVER SIDE (delegated handler) ---------- */
 document.addEventListener('click', async (ev) => {
@@ -5140,29 +5332,82 @@ const warnSound = document.getElementById('warn-sound');
 let lastShownWarningId = null;
 
 async function pollForWarnings() {
-  const bookingId = getBookingId();
-  if (!bookingId) {
-    setTimeout(pollForWarnings, 3000);
-    return;
-  }
-
-  try {
-    const res = await fetch(`/worker_check_warning?booking_id=${encodeURIComponent(bookingId)}`);
-    if (!res.ok) throw new Error('network');
-    const j = await res.json();
-    if (j && j.warning) {
-      const w = j.warning;
-      if (w.id !== lastShownWarningId) {
-        lastShownWarningId = w.id;
-        showWorkerWarningPopup(w);
-      }
+    const role = (window.CURRENT_USER_ROLE || document.body.dataset.role || '').toLowerCase();
+    if (role !== 'worker') {
+        setTimeout(pollForWarnings, 3000);
+        return;
     }
-  } catch (err) {
-    console.warn('Warning poll error', err);
-  } finally {
-    setTimeout(pollForWarnings, 3000); // keep polling every 3s
+
+    const bookingId = getBookingId();
+    if (!bookingId) {
+        setTimeout(pollForWarnings, 3000);
+        return;
+    }
+
+    try {
+        const response = await fetch(`/worker_check_warning?booking_id=${encodeURIComponent(bookingId)}`);
+
+        if (!response.ok) {
+            console.warn('worker_check_warning failed', response.status);
+            setTimeout(pollForWarnings, 3000);
+            return;
+        }
+
+        const data = await response.json();
+        console.log("worker_check_warning result:", data);
+
+        // New warning popup
+        if (data.warning && data.warning.id !== lastShownWarningId) {
+            lastShownWarningId = data.warning.id;
+            showWorkerWarningPopup(data.warning);
+        }
+
+        // Next warning ETA in header
+        if (typeof data.next_warning_in_seconds === "number" && data.next_warning_in_seconds >= 0) {
+            startWorkerWarnTimer(data.next_warning_in_seconds);
+        } else {
+            resetWorkerWarnTimerUI();
+        }
+
+    } catch (err) {
+        console.error("pollForWarnings error:", err);
+        resetWorkerWarnTimerUI();
+    }
+
+    setTimeout(pollForWarnings, 3000);
+}
+
+
+// Start worker warning polling when the page is ready
+document.addEventListener('DOMContentLoaded', () => {
+  try {
+    pollForWarnings();
+  } catch (e) {
+    console.error('Failed to start warning polling', e);
+  }
+});
+function playWarnLoop() {
+  if (!warnSound) return;
+  try {
+    warnSound.loop = true;
+    warnSound.currentTime = 0;
+    warnSound.play();
+  } catch (e) {
+    console.warn('warnSound play failed', e);
   }
 }
+
+function stopWarnLoop() {
+  if (!warnSound) return;
+  try {
+    warnSound.pause();
+    warnSound.currentTime = 0;
+    warnSound.loop = false;
+  } catch (e) {
+    console.warn('warnSound stop failed', e);
+  }
+}
+
 
 function showWorkerWarningPopup(warning) {
   workerWarnMsg.textContent = warning.message || 'Your partner warned you for delay in arriving.';
@@ -5699,8 +5944,68 @@ window.addEventListener('DOMContentLoaded', () => {
 
   refreshCurrentChat();
   setInterval(refreshCurrentChat, 5000);     // keep current chat fresh
+
+  // 🔔 start auto-warning polling for workers
+  if (typeof pollForWarnings === 'function') {
+    pollForWarnings();
+  }
 });
-    
+
+
+// --- Worker "next warning" countdown ---
+let workerWarnCountdownInterval = null;
+
+function resetWorkerWarnTimerUI() {
+  const wrap = document.getElementById("worker-warn-timer-wrap");
+  const label = document.getElementById("worker-warn-timer-label");
+  if (workerWarnCountdownInterval) {
+    clearInterval(workerWarnCountdownInterval);
+    workerWarnCountdownInterval = null;
+  }
+  if (wrap) wrap.style.display = "none";
+  if (label) label.textContent = "--:--";
+}
+
+function startWorkerWarnTimer(seconds) {
+  const wrap = document.getElementById("worker-warn-timer-wrap");
+  const label = document.getElementById("worker-warn-timer-label");
+
+  if (!wrap || !label) return;
+  if (CURRENT_USER_ROLE !== "worker") {
+    resetWorkerWarnTimerUI();
+    return;
+  }
+
+  if (workerWarnCountdownInterval) {
+    clearInterval(workerWarnCountdownInterval);
+    workerWarnCountdownInterval = null;
+  }
+
+  let remaining = Number(seconds) || 0;
+  if (remaining <= 0) {
+    // Nothing to show
+    wrap.style.display = "none";
+    label.textContent = "--:--";
+    return;
+  }
+
+  function tick() {
+    if (remaining <= 0) {
+      clearInterval(workerWarnCountdownInterval);
+      workerWarnCountdownInterval = null;
+      label.textContent = "00:00";
+      return;
+    }
+    const m = Math.floor(remaining / 60);
+    const s = remaining % 60;
+    label.textContent = `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+    remaining -= 1;
+  }
+
+  wrap.style.display = "inline-flex";
+  tick();
+  workerWarnCountdownInterval = setInterval(tick, 1000);
+}
 
 </script>
 </body>

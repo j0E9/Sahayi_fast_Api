@@ -144,29 +144,11 @@ def _payload_for_booking(booking: Booking, viewer: User, db: Session) -> dict:
     is_giver = (booking.provider_id == user_id)
     is_worker = (booking.worker_id == user_id)
 
-    # Warnings throttle
-    allowed, remaining = _next_warning_allowed(db, booking)
+    # Warnings are now fully automatic from the backend.
+    # We do NOT allow manual warn from the UI anymore.
+    allowed, remaining = _next_warning_allowed(db, booking)  # kept only for info/logs
+    can_warn_now = False
 
-    # stricter can_warn_now: only before arrival OTP verification, worker not arrived,
-    # no extra-time negotiation ongoing, and booking is in normal active state.
-    worker_arrived = bool(getattr(booking, "worker_arrived", False))
-    extra_requested = bool(getattr(booking, "extra_timer_requested", False))
-    otp_verified = bool(getattr(booking, "otp_verified", False))
-
-    # Only allow warnings when booking is in the main session (not 'Extra Time'),
-    # and OTP hasn't been verified yet, worker hasn't marked arrived, and no extra negotiation.
-    is_active_main_session = booking.status in ["Token Paid", "In Progress"]
-    can_warn_now = (
-            is_giver
-            and allowed
-            and is_active_main_session
-            and (not worker_arrived)
-            and (not extra_requested)
-            and (not otp_verified)
-    )
-
-    if is_worker:
-        can_warn_now = False
 
     # Counterpart info
     name = booking.provider.name if is_worker else booking.worker.name
@@ -275,8 +257,9 @@ def _payload_for_booking(booking: Booking, viewer: User, db: Session) -> dict:
             "quantity": booking.quantity,
             "completed_quantity": booking.completed_quantity,
             "chat_active": True,
-            "can_issue_warning": can_warn_now,
-            "warnings_remaining": remaining if can_warn_now else None,
+            "can_issue_warning": False,
+            "warnings_remaining": None,
+
         }
 
     # Hourly flow
@@ -331,8 +314,9 @@ def _payload_for_booking(booking: Booking, viewer: User, db: Session) -> dict:
                     "map_url": map_url,
                     "stop_confirmed": getattr(booking, "extra_timer_confirmed_stop", False),
                     "show_stop_button": is_worker,
-                    "can_issue_warning": can_warn_now,
-                    "warnings_remaining": remaining if can_warn_now else None,
+                    "can_issue_warning": False,
+                    "warnings_remaining": None,
+
                 }
 
             # If worker recently requested or request still flagged -> show provider input/payment flow
@@ -357,8 +341,9 @@ def _payload_for_booking(booking: Booking, viewer: User, db: Session) -> dict:
                         "message": "Worker requested extra time — enter minutes and confirm to pay.",
                         **extra,
                         "role": {"self": "giver" if is_giver else "worker"},
-                        "can_issue_warning": can_warn_now,
-                        "warnings_remaining": remaining if can_warn_now else None,
+                        "can_issue_warning": False,
+                        "warnings_remaining": None,
+
                     }
 
                 # If order created but payment not done -> show waiting-for-payment UI
@@ -372,8 +357,9 @@ def _payload_for_booking(booking: Booking, viewer: User, db: Session) -> dict:
                         "proposed_minutes": getattr(booking, "proposed_extra_minutes", None),
                         "chat_active": True,
                         "message": "Waiting for extra-time payment to be completed by provider.",
-                        "can_issue_warning": can_warn_now,
-                        "warnings_remaining": remaining if can_warn_now else None,
+                        "can_issue_warning": False,
+                        "warnings_remaining": None,
+
                     }
 
                 # Payment done case handled earlier; proceed to other extra checks...
@@ -393,8 +379,9 @@ def _payload_for_booking(booking: Booking, viewer: User, db: Session) -> dict:
                         "map_url": map_url,
                         "stop_confirmed": getattr(booking, "extra_timer_confirmed_stop", False),
                         "show_stop_button": is_worker,
-                        "can_issue_warning": can_warn_now,
-                        "warnings_remaining": remaining if can_warn_now else None,
+                        "can_issue_warning": False,
+                        "warnings_remaining": None,
+
                     }
 
                 # If extra timer stopped & confirmed -> complete booking
@@ -448,8 +435,9 @@ def _payload_for_booking(booking: Booking, viewer: User, db: Session) -> dict:
                 "otp_verified": getattr(booking, "otp_verified", False),
                 "chat_active": True,
                 "time_left": time_left,
-                "can_issue_warning": can_warn_now,
-                "warnings_remaining": remaining if can_warn_now else None,
+                "can_issue_warning": False,
+                "warnings_remaining": None,
+
             }
 
     # Final fallback (active chat)
@@ -470,8 +458,8 @@ def _payload_for_booking(booking: Booking, viewer: User, db: Session) -> dict:
         "quantity": booking.quantity or 0,
         "completed_quantity": booking.completed_quantity or 0,
         "debug": {"is_worker": is_worker, "is_giver": is_giver},
-        "can_issue_warning": can_warn_now,
-        "warnings_remaining": remaining if can_warn_now else None,
+        "can_issue_warning": False,
+        "warnings_remaining": None,
         "completed": booking.status == "Completed",
         "rating_pending": (booking.status == "Completed") and (is_giver and not has_giver_rated(db, booking)),
         "role": {"self": "giver" if is_giver else "worker"},

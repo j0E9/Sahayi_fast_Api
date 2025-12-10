@@ -200,54 +200,54 @@ def issue_warning(
         "cancelled": cancelled
     }
 
-# ---------------------------
-# GET /worker_check_warning?booking_id=...
-# ---------------------------
-@router.get("/worker_check_warning")
-def worker_check_warning(
-    booking_id: int = Query(...),
-    db: Session = Depends(get_db),
-    me: User = Depends(get_current_user),
-):
-    booking = db.get(Booking, booking_id)
-    if not booking or me.id != booking.worker_id:
-        return {"warning": None}
+# # ---------------------------
+# # GET /worker_check_warning?booking_id=...
+# # ---------------------------
+# @router.get("/worker_check_warning")
+# def worker_check_warning(
+#     booking_id: int = Query(...),
+#     db: Session = Depends(get_db),
+#     me: User = Depends(get_current_user),
+# ):
+#     booking = db.get(Booking, booking_id)
+#     if not booking or me.id != booking.worker_id:
+#         return {"warning": None}
+#
+#     warning = (
+#         db.query(WorkerWarning)
+#         .filter(
+#             WorkerWarning.booking_id == booking.id,
+#             WorkerWarning.worker_id == me.id,
+#             WorkerWarning.acknowledged == False,  # noqa: E712
+#         )
+#         .order_by(WorkerWarning.created_at.desc())
+#         .first()
+#     )
+#
+#     if warning:
+#         return {
+#             "warning": {
+#                 "id": warning.id,
+#                 "message": getattr(warning, "message", f"⚠️ Warning {warning.stage}/3"),
+#                 "remaining": warning.remaining,
+#             }
+#         }
+#
+#     return {"warning": None}
 
-    warning = (
-        db.query(WorkerWarning)
-        .filter(
-            WorkerWarning.booking_id == booking.id,
-            WorkerWarning.worker_id == me.id,
-            WorkerWarning.acknowledged == False,  # noqa: E712
-        )
-        .order_by(WorkerWarning.created_at.desc())
-        .first()
-    )
-
-    if warning:
-        return {
-            "warning": {
-                "id": warning.id,
-                "message": getattr(warning, "message", f"⚠️ Warning {warning.stage}/3"),
-                "remaining": warning.remaining,
-            }
-        }
-
-    return {"warning": None}
-
-# ---------------------------
-# POST /ack_warning
-# ---------------------------
-@router.post("/ack_warning")
-def ack_warning(
-    body: AckWarningIn,
-    db: Session = Depends(get_db),
-    me: User = Depends(get_current_user),
-):
-    warning = db.get(WorkerWarning, body.warning_id)
-    if not warning or me.id != warning.worker_id:
-        raise HTTPException(status_code=403, detail="Unauthorized")
-
-    warning.acknowledged = True
-    db.commit()
-    return {"success": True}
+# # ---------------------------
+# # POST /ack_warning
+# # ---------------------------
+# @router.post("/ack_warning")
+# def ack_warning(
+#     body: AckWarningIn,
+#     db: Session = Depends(get_db),
+#     me: User = Depends(get_current_user),
+# ):
+#     warning = db.get(WorkerWarning, body.warning_id)
+#     if not warning or me.id != warning.worker_id:
+#         raise HTTPException(status_code=403, detail="Unauthorized")
+#
+#     warning.acknowledged = True
+#     db.commit()
+#     return {"success": True}

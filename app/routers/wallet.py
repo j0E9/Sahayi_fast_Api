@@ -12,6 +12,7 @@ from app.services.wallet import compute_balance, verify_chain, add_ledger_row, o
 from app.razor_client import client as razor   # shared client
 from urllib.parse import urlparse
 from decimal import Decimal
+import json
 
 templates = Jinja2Templates(directory="app/templates")
 router = APIRouter(prefix="", tags=["wallet"])
@@ -74,23 +75,62 @@ def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
     return user
 
 @router.get("/wallet", response_class=HTMLResponse)
-def wallet_home(request: Request, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def wallet_home(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     bal = compute_balance(db, current_user.id)
     ok = verify_chain(db, current_user.id)
-    txns = (
+
+    raw_txns = (
         db.query(WalletTransaction)
           .filter(WalletTransaction.user_id == current_user.id)
           .order_by(WalletTransaction.id.desc())
-          .limit(20).all()
+          .limit(50)
+          .all()
     )
-    return templates.TemplateResponse("wallet.html", {
-        "request": request,
-        "balance": str(bal),
-        "integrity_ok": ok,
-        "txns": txns,
-        "current_user": current_user,
-        "has_razor": True,  # shared client exists if app booted correctly
-    })
+
+    txns = []
+    for t in raw_txns:
+        # metadata is stored in WalletTransaction.meta_json ("metadata" column)
+        meta = {}
+        if getattr(t, "meta_json", None):
+            try:
+                meta = json.loads(t.meta_json)
+            except Exception:
+                meta = {}
+
+        def _dec(key):
+            v = meta.get(key)
+            if v is None:
+                return None
+            try:
+                return Decimal(str(v))
+            except Exception:
+                return None
+
+        txns.append({
+            "created_at": t.created_at,
+            "kind": t.kind,
+            "amount": t.amount,                  # net amount (after commission)
+            "reference": t.reference,
+            "base_amount": _dec("base_amount"),  # total paid by job giver
+            "giver_commission": _dec("giver_commission"),
+            "worker_commission": _dec("worker_commission"),
+        })
+
+    return templates.TemplateResponse(
+        "wallet.html",
+        {
+            "request": request,
+            "balance": str(bal),
+            "integrity_ok": ok,
+            "txns": txns,
+            "current_user": current_user,
+            "has_razor": True,  # shared client exists if app booted correctly
+        },
+    )
 
 @router.get("/payment_history", response_class=HTMLResponse)
 def wallet_history(request: Request, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
