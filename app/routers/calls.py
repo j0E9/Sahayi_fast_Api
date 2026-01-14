@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from twilio.rest import Client
 from twilio.base.exceptions import TwilioRestException
-
+from app.security.tokens import decode_worker_link
 from app.database import get_db
 from app.models import User, WorkerProfile
 from app.settings import settings  # ensure you expose TWILIO_* & SECRET_KEY here
@@ -61,26 +61,34 @@ def normalize_indian_number(number: str) -> str:
 # ======================================================================
 # POST /call_worker/{worker_id}
 # ======================================================================
-@router.post("/call_worker/{worker_id}")
+@router.post("/call_worker/{token}")
 def call_worker(
-    worker_id: int,
+    token: str,
     request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+
     twilio = get_twilio()
 
     # Your Flask used WorkerProfile.query.get_or_404(worker_id).
     # In your schema WorkerProfile has user_id -> User.id, so fetch by user_id.
-    worker_profile: Optional[WorkerProfile] = (
-        db.query(WorkerProfile).filter(WorkerProfile.user_id == worker_id).first()
-    )
-    if not worker_profile:
-        return JSONResponse({"status": "error", "message": "Worker profile not found."}, status_code=404)
+    try:
+        payload = decode_worker_link(token)
+    except Exception:
+        return JSONResponse(
+            {"status": "error", "message": "Invalid or expired worker link"},
+            status_code=400,
+        )
 
-    worker = worker_profile.user
+    worker_id = payload["w"]
+
+    worker = db.get(User, worker_id)
     if not worker or not worker.phone:
-        return JSONResponse({"status": "error", "message": "Worker has no phone number."}, status_code=400)
+        return JSONResponse(
+            {"status": "error", "message": "Worker not found or has no phone number."},
+            status_code=404,
+        )
 
     if not getattr(current_user, "phone", None):
         return JSONResponse({"status": "error", "message": "Your phone number is not set."}, status_code=400)

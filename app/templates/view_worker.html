@@ -276,7 +276,11 @@
             <div>Primary skill</div>
             <div style="font-weight:600;">
               {{ selected_skill.name.title() }} –
-              ₹{{ selected_skill.rate }} / {{ selected_skill.rate_type }}
+              {% if selected_skill.category|lower in ['sahayi from home', 'work from home', 'wfh'] %}
+                Price to be confirmed
+              {% else %}
+                ₹{{ selected_skill.rate }} / {{ selected_skill.rate_type }}
+              {% endif %}
             </div>
           </div>
         {% endif %}
@@ -317,7 +321,14 @@
           <strong>Skills:</strong><br>
           {% for s in skills %}
             <span class="badge bg-primary skill-badge">
-              {{ s.name.title() }} (₹{{ s.rate }} / {{ s.rate_type }})
+              {{ s.name.title() }}
+              (
+              {% if s.category|lower in ['sahayi from home', 'work from home', 'wfh'] %}
+                Price to be confirmed
+              {% else %}
+                ₹{{ s.rate }} / {{ s.rate_type }}
+              {% endif %}
+              )
             </span>
           {% endfor %}
         </div>

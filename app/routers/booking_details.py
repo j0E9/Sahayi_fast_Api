@@ -104,6 +104,8 @@ def _payload_for_booking(booking: Booking, viewer: User, db: Session) -> dict:
     if booking.status in ["Rejected", "Cancelled"]:
         if booking.worker:
             booking.worker.busy = False
+        if booking.provider:
+            booking.provider.busy = False
         db.commit()
         return {"show": False, "message": "No active chat. Job ended or rejected."}
 
@@ -111,6 +113,8 @@ def _payload_for_booking(booking: Booking, viewer: User, db: Session) -> dict:
     if booking.status == "Completed":
         if booking.worker:
             booking.worker.busy = False
+        if booking.provider:
+            booking.provider.busy = False
         db.commit()
 
         is_giver = (booking.provider_id == user_id)
@@ -190,6 +194,8 @@ def _payload_for_booking(booking: Booking, viewer: User, db: Session) -> dict:
             booking.status = "Completed"
             if booking.worker:
                 booking.worker.busy = False
+            if booking.provider:
+                booking.provider.busy = False
             db.commit()
 
             if is_giver and not has_giver_rated(db, booking):
@@ -237,6 +243,8 @@ def _payload_for_booking(booking: Booking, viewer: User, db: Session) -> dict:
             booking.status = "Completed"
             if booking.worker:
                 booking.worker.busy = False
+            if booking.provider:
+                booking.provider.busy = False
             db.commit()
             if is_giver and not has_giver_rated(db, booking):
                 return _rating_payload(booking, is_giver, name, map_url)
@@ -389,6 +397,8 @@ def _payload_for_booking(booking: Booking, viewer: User, db: Session) -> dict:
                     booking.status = "Completed"
                     if booking.worker:
                         booking.worker.busy = False
+                    if booking.provider:
+                        booking.provider.busy = False
                     db.commit()
                     if is_giver and not has_giver_rated(db, booking):
                         return _rating_payload(booking, is_giver, name, map_url)
@@ -411,6 +421,8 @@ def _payload_for_booking(booking: Booking, viewer: User, db: Session) -> dict:
             booking.status = "Completed"
             if booking.worker:
                 booking.worker.busy = False
+            if booking.provider:
+                booking.provider.busy = False
             db.commit()
             if is_giver and not has_giver_rated(db, booking):
                 return _rating_payload(booking, is_giver, name, map_url)

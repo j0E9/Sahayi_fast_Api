@@ -331,12 +331,21 @@
 
             <div class="skill-chip mt-1">
                 💼 <strong>{{ selected_skill.name.title() }}</strong>
-                <small>₹{{ selected_skill.rate }} / {{ selected_skill.rate_type }}</small>
+                <small>
+                  {% if selected_skill.category|lower in ['sahayi from home', 'work from home', 'wfh'] %}
+                    Price to be confirmed
+                  {% else %}
+                    ₹{{ selected_skill.rate }} / {{ selected_skill.rate_type }}
+                  {% endif %}
+                </small>
             </div>
 
             <!-- Hidden fields -->
             <input type="hidden" name="skill_id" value="{{ selected_skill.id }}">
-            <input type="hidden" name="rate_type" id="rate_type" value="{{ selected_skill.rate_type }}">
+            <input type="hidden"
+               name="rate_type"
+               id="rate_type"
+               value="{{ selected_skill.rate_type }}">
             <input type="hidden" name="skill_name" id="skill_name" value="{{ selected_skill.name }}">
         </div>
 
@@ -351,8 +360,43 @@
                       required></textarea>
         </div>
 
+
+        {% if selected_skill.category|lower in ['sahayi from home', 'work from home', 'wfh'] %}
+
+        <div class="metric-section mb-4">
+          <div class="metric-chip"><span>💰</span> Expected Price</div>
+          <input
+            type="number"
+            name="expected_price"
+            min="1"
+            class="form-control mt-2"
+            placeholder="Your expected price (₹)"
+            required
+          >
+          <small class="text-muted">
+            Final price will be confirmed after discussion
+          </small>
+        </div>
+
+        <div class="metric-section mb-4">
+          <div class="metric-chip"><span>📅</span> Completion Deadline</div>
+          <input
+            type="datetime-local"
+            name="deadline"
+            class="form-control mt-2"
+            required
+          >
+          <small class="text-muted">
+            Select both date and time (e.g. 02 Dec 2025, 2:15 PM)
+          </small>
+        </div>
+
+
+        {% endif %}
+
         <!-- Quantity / Duration Field (Dynamic) -->
         <div id="dynamicInput" class="mb-4"></div>
+
 
         <!-- Submit -->
         <button type="submit" class="btn btn-success w-100">✅ Confirm &amp; Book</button>
@@ -401,6 +445,9 @@
   window.__AGREED_PRICE__ = {{ agreed_price if agreed_price is not none else 'null' }};
 </script>
 
+<script>
+  window.__IS_WFH__ = {{ 'true' if selected_skill.category|lower in ['sahayi from home', 'work from home', 'wfh'] else 'false' }};
+</script>
 
 <!-- JS Logic -->
 <script>
@@ -431,214 +478,157 @@ function showPopup(message, type = "error") {
     setTimeout(() => hidePopup(), 3000);
 }
 
+
+
 document.addEventListener("DOMContentLoaded", function () {
   const form         = document.getElementById("bookingForm");
   const rateType     = (document.getElementById("rate_type").value || "").toLowerCase();
   const dynamicInput = document.getElementById("dynamicInput");
 
-  const isCustom    = String(window.__CUSTOM_JOB__) === "true";
   const agreedPrice = window.__AGREED_PRICE__;
+  const isWFH       = String(window.__IS_WFH__) === "true";
 
-  // ----- Build the dynamic section -----
-  const treatAsCustom =
-    isCustom || rateType === "per custom" || rateType === "custom";
+  /* ============================
+     1️⃣ WFH → NO quantity UI
+     ============================ */
+  if (isWFH) {
+    dynamicInput.innerHTML = "";
+    return;
+  }
 
-  if (treatAsCustom) {
-    // Custom job -> show fixed price only (no quantity inputs)
+  /* ============================
+     2️⃣ CUSTOM (non-WFH)
+     ============================ */
+  if (rateType === "custom" || rateType === "per custom") {
     if (agreedPrice == null) {
       dynamicInput.innerHTML = `
         <div class="alert alert-danger mb-0">
-          Agreed price is missing. Please go back and complete the negotiation.
+          Agreed price is missing. Please complete negotiation.
         </div>`;
       document.querySelector('#bookingForm button[type="submit"]').disabled = true;
     } else {
       dynamicInput.innerHTML = `
         <div class="metric-section">
-          <div class="d-flex justify-content-between align-items-center mb-1">
-            <div class="metric-chip"><span>💰</span> Agreed price</div>
-          </div>
+          <div class="metric-chip"><span>💰</span> Agreed price</div>
           <input type="text" class="form-control mt-2" value="₹${agreedPrice}" disabled>
           <input type="hidden" name="agreed_price" value="${agreedPrice}">
-        </div>
-      `;
-    }
-  } else {
-    // Regular job -> show inputs based on rate_type
-    let html = "";
-
-    if (rateType === "per hour") {
-      // 🔁 modern, interactive duration section
-      html = `
-        <div class="metric-section">
-          <div class="d-flex justify-content-between align-items-center">
-            <div class="duration-pill">
-              <span>⏱</span> DURATION
-            </div>
-            <div class="metric-sub">Charged per hour</div>
-          </div>
-
-          <div class="time-input-group">
-            <div class="modern-input">
-              <label for="hours-input">Hours</label>
-              <div class="step-group">
-                <button type="button"
-                        class="step-btn"
-                        data-target="hours-input"
-                        data-step="-1">−</button>
-                <input  type="number"
-                        id="hours-input"
-                        name="hours"
-                        min="0"
-                        max="24"
-                        value="0"
-                        class="form-control step-input"
-                        required>
-                <button type="button"
-                        class="step-btn"
-                        data-target="hours-input"
-                        data-step="1">+</button>
-              </div>
-            </div>
-
-            <div class="modern-input">
-              <label for="minutes-input">Minutes</label>
-              <div class="step-group">
-                <button type="button"
-                        class="step-btn"
-                        data-target="minutes-input"
-                        data-step="-5">−</button>
-                <input  type="number"
-                        id="minutes-input"
-                        name="minutes"
-                        min="0"
-                        max="59"
-                        value="0"
-                        class="form-control step-input"
-                        required>
-                <button type="button"
-                        class="step-btn"
-                        data-target="minutes-input"
-                        data-step="5">+</button>
-              </div>
-            </div>
-          </div>
-
-          <div id="duration-total" class="duration-total">
-            Total: <span>0h 0m</span>
-          </div>
-        </div>`;
-    } else if (rateType === "per job") {
-      html = `
-        <div class="metric-section">
-          <div class="metric-chip"><span>📦</span> Jobs</div>
-          <input type="number" name="quantity" min="1" class="form-control mt-2"
-                 placeholder="Number of jobs (e.g. 2)" required>
-        </div>`;
-    } else if (rateType === "per kilogram") {
-      html = `
-        <div class="metric-section">
-          <div class="metric-chip"><span>⚖️</span> Kilogram</div>
-          <input type="number" name="quantity" step="0.1" min="1" class="form-control mt-2"
-                 placeholder="Total weight in kg (e.g. 3.5)" required>
-        </div>`;
-    } else {
-      html = `
-        <div class="metric-section">
-          <div class="metric-chip"><span>📊</span> Quantity</div>
-          <input type="number" name="quantity" min="1" class="form-control mt-2"
-                 placeholder="Enter quantity" required>
         </div>`;
     }
-
-    dynamicInput.innerHTML = html;
-
-    // ✅ extra interactivity only for per-hour UI
-    if (rateType === "per hour") {
-      const hoursInput   = document.getElementById("hours-input");
-      const minutesInput = document.getElementById("minutes-input");
-      const totalLabel   = document.getElementById("duration-total")?.querySelector("span");
-
-      function clampAndFix() {
-        let h = parseInt(hoursInput.value || "0", 10);
-        let m = parseInt(minutesInput.value || "0", 10);
-
-        if (isNaN(h) || h < 0) h = 0;
-        if (h > 24) h = 24;
-
-        if (isNaN(m) || m < 0) m = 0;
-        if (m > 59) m = 59;
-
-        // normalize: 60m => +1h
-        h += Math.floor(m / 60);
-        if (h > 24) h = 24;
-        m = m % 60;
-
-        hoursInput.value = h;
-        minutesInput.value = m;
-
-        if (totalLabel) {
-          totalLabel.textContent = `${h}h ${m}m`;
-        }
-      }
-
-      // +/- buttons
-      document.querySelectorAll(".step-btn").forEach(btn => {
-        btn.addEventListener("click", () => {
-          const targetId = btn.getAttribute("data-target");
-          const step     = Number(btn.getAttribute("data-step") || "0");
-          const input    = document.getElementById(targetId);
-          if (!input) return;
-
-          const current = parseInt(input.value || "0", 10) || 0;
-          input.value = current + step;
-          clampAndFix();
-        });
-      });
-
-      // Manual typing
-      [hoursInput, minutesInput].forEach(el => {
-        el.addEventListener("input", clampAndFix);
-        el.addEventListener("blur", clampAndFix);
-      });
-
-      // initialize
-      clampAndFix();
-    }
+    return;
   }
 
+  /* ============================
+     3️⃣ REGULAR JOB TYPES
+     ============================ */
+  let html = "";
 
-  // ----- Submit (AJAX) -----
+  if (rateType === "per hour") {
+    html = `
+      <div class="metric-section">
+        <div class="duration-pill"><span>⏱</span> Duration</div>
+
+        <div class="time-input-group">
+          <div class="modern-input">
+            <label>Hours</label>
+            <input type="number" id="hours-input" name="hours"
+                   min="0" max="24" value="0"
+                   class="form-control step-input" required>
+          </div>
+
+          <div class="modern-input">
+            <label>Minutes</label>
+            <input type="number" id="minutes-input" name="minutes"
+                   min="0" max="59" value="0"
+                   class="form-control step-input" required>
+          </div>
+        </div>
+
+        <div id="duration-total" class="duration-total">
+          Total: <span>0h 0m</span>
+        </div>
+      </div>`;
+  }
+  else if (rateType === "per job") {
+    html = `
+      <div class="metric-section">
+        <div class="metric-chip"><span>📦</span> Jobs</div>
+        <input type="number" name="quantity" min="1"
+               class="form-control mt-2"
+               placeholder="Number of jobs" required>
+      </div>`;
+  }
+  else if (rateType === "per kilogram") {
+    html = `
+      <div class="metric-section">
+        <div class="metric-chip"><span>⚖️</span> Weight</div>
+        <input type="number" name="quantity" step="0.1" min="1"
+               class="form-control mt-2"
+               placeholder="Weight in kg" required>
+      </div>`;
+  }
+  else {
+    html = `
+      <div class="metric-section">
+        <div class="metric-chip"><span>📊</span> Quantity</div>
+        <input type="number" name="quantity" min="1"
+               class="form-control mt-2"
+               placeholder="Enter quantity" required>
+      </div>`;
+  }
+
+  dynamicInput.innerHTML = html;
+
+  /* ============================
+     4️⃣ Per-hour live total
+     ============================ */
+  if (rateType === "per hour") {
+    const h = document.getElementById("hours-input");
+    const m = document.getElementById("minutes-input");
+    const t = document.querySelector("#duration-total span");
+
+    function update() {
+      let hh = Math.max(0, Math.min(24, parseInt(h.value || 0)));
+      let mm = Math.max(0, Math.min(59, parseInt(m.value || 0)));
+      h.value = hh;
+      m.value = mm;
+      t.textContent = `${hh}h ${mm}m`;
+    }
+
+    h.addEventListener("input", update);
+    m.addEventListener("input", update);
+    update();
+  }
+
+  /* ============================
+     5️⃣ Submit handler
+     ============================ */
   form.addEventListener("submit", async function (e) {
     e.preventDefault();
-    const formData = new FormData(form);
+    const btn = form.querySelector('button[type="submit"]');
+    btn.disabled = true;
+    btn.textContent = "Booking…";
+
     try {
-      const response = await fetch(window.location.href, {
+      const res = await fetch(window.location.href, {
         method: "POST",
-        body: formData
+        body: new FormData(form)
       });
-      const result = await response.json();
 
-      if (result.error === "offline") {
-        showPopup(result.message || "⚠️ Worker is currently offline.");
-        return;
-      }
-      if (result.error === "giver_busy") {
-        showPopup(result.message || "⚠️ You already have an active booking.");
-        return;
-      }
-      if (result.redirect) {
-        location.replace(result.redirect);
+      if (!res.headers.get("content-type")?.includes("json")) {
+        window.location.href = res.url;
         return;
       }
 
-      // Fallback
-      showPopup("Unexpected response. Please try again.", "warning");
-    } catch (err) {
-      showPopup("❌ Error submitting booking. Please try again.");
+      const data = await res.json();
+      if (data.redirect) window.location.href = data.redirect;
+    } catch {
+      alert("Booking failed");
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "✅ Confirm & Book";
     }
   });
 });
-
 
 // === Negotiation polling (unchanged, just copied) ===
 (function(){
@@ -762,7 +752,7 @@ document.addEventListener("DOMContentLoaded", function () {
   setInterval(checkInbox, 3000);
   checkInbox();
 })();
-</script>
 
+</script>
 </body>
 </html>

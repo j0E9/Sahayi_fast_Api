@@ -1,7 +1,7 @@
 # app/routers/payments_calls.py
 from __future__ import annotations
 
-from datetime import datetime
+
 import os, hmac, hashlib
 from hmac import compare_digest
 from fastapi import APIRouter, Depends, HTTPException, Request, status, Body, Header
@@ -9,26 +9,26 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-import math
+from datetime import datetime, timedelta
 from app.database import get_db
-from app.models import Booking, Notification, User, WalletTransaction
+from app.models import (
+    Booking,
+    Notification,
+    User,
+    WalletTransaction,
+    PlatformProfit,
+)
+from app.services.platform_balance import increment_platform_balance
 from app.razor_client import client as razor  # single shared Razorpay client
-from urllib.parse import urlparse
 # Wallet services
 from app.services.wallet import add_ledger_row, compute_balance
-
+from app.utils.IST_Time import ist_now
 # --- Config / constants ---
 RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID", "")
 RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET", "")
 RAZORPAY_WEBHOOK_SECRET = os.getenv("RAZORPAY_WEBHOOK_SECRET", "")
 RZP_TIMEOUT = 20  # seconds for SDK calls
-
-
-
-
-import os
 from urllib.parse import urlparse
-from fastapi import HTTPException, Request
 from decimal import Decimal
 
 ALLOWED_ORIGIN_HOSTS = {
@@ -44,7 +44,18 @@ DEV_TUNNEL_SUFFIXES = (".trycloudflare.com", ".ngrok-free.app", ".ngrok.io")
 COMMISSION_RATE_GIVER = Decimal("0.05")   # 5% from job giver
 COMMISSION_RATE_WORKER = Decimal("0.05")  # 5% from worker
 # Make sure there is a User row with this ID (e.g. admin/company account).
-PLATFORM_USER_ID = int(os.getenv("PLATFORM_USER_ID", "1"))
+def _get_platform_user(db: Session) -> User:
+    platform_user = (
+        db.query(User)
+        .filter(User.is_platform == True)
+        .with_for_update()
+        .first()
+    )
+    if not platform_user:
+        raise RuntimeError("Platform user not configured")
+    return platform_user
+
+
 
 def _host_allowed(host: str, request_host: str) -> bool:
     if not host:
@@ -72,6 +83,21 @@ def _enforce_same_origin(request: Request):
         return
     raise HTTPException(status_code=403, detail="Bad origin")
 
+def _get_base_amount(booking: Booking) -> Decimal:
+    """
+    Returns the BASE job value (before commission)
+    - normal jobs: rate * quantity
+    - WFH jobs: agreed rate only
+    """
+    if booking.booking_type == "wfh":
+        if booking.rate is None:
+            raise HTTPException(400, "WFH price not confirmed")
+        return Decimal(str(booking.rate)).quantize(Decimal("0.01"))
+
+    # non-WFH
+    if booking.rate is None or booking.quantity is None:
+        raise HTTPException(400, "Missing rate or quantity")
+    return (Decimal(str(booking.rate)) * Decimal(str(booking.quantity))).quantize(Decimal("0.01"))
 
 
 templates = Jinja2Templates(directory="app/templates")
@@ -108,6 +134,8 @@ def check_token_status(
     return {"paid": booking.status == "Token Paid"}
 
 
+
+
 # -------- /pay_token/<token> (GET) ----------
 @router.get("/pay_token/{token}", response_class=HTMLResponse)
 def pay_token_get(
@@ -120,6 +148,12 @@ def pay_token_get(
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found")
 
+    if booking.booking_type == "wfh":
+        raise HTTPException(
+            status_code=400,
+            detail="WFH payments are handled via Razorpay after price confirmation"
+        )
+
     if current_user.id != booking.provider_id:
         return HTMLResponse("Unauthorized", status_code=403)
 
@@ -128,7 +162,17 @@ def pay_token_get(
 
     if booking.expires_at and booking.expires_at < datetime.utcnow():
         booking.status = "Cancelled"
+        booking.payment_required = False
+        booking.payment_completed = False
+
+        if booking.provider:
+            booking.provider.busy = False
+
+        if booking.worker:
+            booking.worker.busy = False
+
         db.commit()
+
         return HTMLResponse(
             '<script>alert("⛔ Token payment time expired. Booking cancelled.");'
             'window.location.replace("/welcome");</script>'
@@ -188,6 +232,12 @@ def pay_token_post(
     booking = db.query(Booking).filter_by(token=token).first()
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found")
+
+    if booking.booking_type == "wfh":
+        raise HTTPException(
+            status_code=400,
+            detail="WFH payments are handled via Razorpay after price confirmation"
+        )
 
     if current_user.id != booking.provider_id:
         return HTMLResponse("Unauthorized", status_code=403)
@@ -350,12 +400,8 @@ def create_razorpay_order(
         db.commit()
         raise HTTPException(status_code=400, detail="Payment time expired. Booking cancelled")
 
-    if booking.rate is None or booking.quantity is None:
-        raise HTTPException(status_code=400, detail="Missing rate/quantity")
+    base_rupees = _get_base_amount(booking)
 
-    rate = Decimal(str(booking.rate or 0))
-    qty = Decimal(str(booking.quantity or 0))
-    base_rupees = (rate * qty).quantize(Decimal("0.01"))  # base price
 
     giver_commission = (base_rupees * COMMISSION_RATE_GIVER).quantize(Decimal("0.01"))
     total_charge_rupees = (base_rupees + giver_commission).quantize(Decimal("0.01"))
@@ -449,12 +495,8 @@ def verify_razorpay_payment(
     if pay.get("status") != "captured":
         raise HTTPException(status_code=400, detail="Payment not captured")
 
-    if booking.rate is None or booking.quantity is None:
-        raise HTTPException(status_code=400, detail="Missing rate/quantity")
+    base_rupees = _get_base_amount(booking)
 
-    rate = Decimal(str(booking.rate or 0))
-    qty  = Decimal(str(booking.quantity or 0))
-    base_rupees = (rate * qty).quantize(Decimal("0.01"))
     giver_commission = (base_rupees * COMMISSION_RATE_GIVER).quantize(Decimal("0.01"))
     total_charge_rupees = (base_rupees + giver_commission).quantize(Decimal("0.01"))
 
@@ -551,9 +593,7 @@ async def razorpay_webhook(
 
         if booking:
             # --- use Decimal, same logic as /razorpay/verify_payment ---
-            rate = Decimal(str(booking.rate or 0))
-            qty = Decimal(str(booking.quantity or 0))
-            base_rupees = (rate * qty).quantize(Decimal("0.01"))
+            base_rupees = _get_base_amount(booking)
             giver_commission = (base_rupees * COMMISSION_RATE_GIVER).quantize(Decimal("0.01"))
             total_charge_rupees = (base_rupees + giver_commission).quantize(Decimal("0.01"))
             expected = int(total_charge_rupees * 100)
@@ -611,6 +651,11 @@ def _already_recorded(db: Session, *, user_id: int, kind: str, reference: str) -
         WalletTransaction.reference == reference,
     ).first() is not None
 
+def _platform_profit_exists(db: Session, reference: str) -> bool:
+    return db.query(PlatformProfit).filter(
+        PlatformProfit.reference == reference
+    ).first() is not None
+
 
 def _credit_worker_only(
     db: Session,
@@ -654,12 +699,33 @@ def _credit_worker_only(
     )
 
     # 2) Record platform profit (5% from giver + 5% from worker)
-    platform_user = db.get(User, PLATFORM_USER_ID)
+    platform_user = _get_platform_user(db)
     if platform_user and not _already_recorded(
         db, user_id=platform_user.id, kind="platform_commission", reference=reference
     ):
         giver_commission = (base * COMMISSION_RATE_GIVER).quantize(Decimal("0.01"))
         platform_profit = (giver_commission + worker_commission).quantize(Decimal("0.01"))
+        # --- Platform profit record (NON-WFH, Razorpay) ---
+        ref = f"commission_{booking.id}_{reference}"
+        db.add(
+            PlatformProfit(
+                booking_id=booking.id,
+                type="commission",
+                direction="credit",
+                amount=platform_profit,
+                giver_commission=giver_commission,
+                worker_commission=worker_commission,
+                on_hold=False,
+                reference=ref,
+                meta={
+                    "method": method,
+                    "order_id": order_id,
+                    "payment_ref": reference,
+                },
+            )
+        )
+
+        increment_platform_balance(db, platform_profit)
 
         add_ledger_row(
             db=db,
@@ -702,6 +768,8 @@ def _debit_giver_and_credit_worker(
     provider_debit = (base + giver_commission).quantize(Decimal("0.01"))
     worker_net = (base - worker_commission).quantize(Decimal("0.01"))
     platform_profit = (giver_commission + worker_commission).quantize(Decimal("0.01"))
+    # --- Platform profit record (NON-WFH, manual) ---
+
 
     # 1) Debit giver
     if not _already_recorded(db, user_id=provider.id, kind="booking_payment_debit", reference=reference):
@@ -738,7 +806,7 @@ def _debit_giver_and_credit_worker(
         )
 
     # 3) Record platform profit
-    platform_user = db.get(User, PLATFORM_USER_ID)
+    platform_user = _get_platform_user(db)
     if platform_user and not _already_recorded(
         db, user_id=platform_user.id, kind="platform_commission", reference=reference
     ):
@@ -758,25 +826,98 @@ def _debit_giver_and_credit_worker(
             },
         )
 
+        # 2️⃣ Reporting table
+        ref = f"commission_{booking.id}_{reference}"
+        if not _platform_profit_exists(db, ref):
+            db.add(
+                PlatformProfit(
+                    booking_id=booking.id,
+                    type="commission",
+                    direction="credit",
+                    amount=platform_profit,
+                    giver_commission=giver_commission,
+                    worker_commission=worker_commission,
+                    on_hold=False,
+                    reference=ref,
+                    meta={"method": method},
+                )
+            )
+            increment_platform_balance(db, platform_profit)
+
 
 def _mark_booking_paid(
     db: Session,
     booking: Booking,
     provider: User,
     worker: User,
-    total_tokens: float,  # BASE amount (rate * qty)
+    total_tokens: float,
     *,
     payment_id: str,
     order_id: str | None,
-    method: str,  # "razorpay" | "manual"
+    method: str,
 ):
     """
-    Booking paid with 10% commission for main job:
-      - razorpay: CREDIT worker (base - 5%), giver 5% is in Razorpay charge
-      - manual : DEBIT giver (base + 5%) and CREDIT worker (base - 5%)
-
-    Extra-time commission is NOT handled here (no commission for extra time).
+    For WFH:
+      - DO NOT credit worker
+      - Lock funds in escrow
+    For non-WFH:
+      - Existing behaviour unchanged
     """
+
+    # ---------- WFH SPECIAL HANDLING ----------
+    if booking.booking_type == "wfh":
+        now = ist_now()
+
+        booking.status = "WFH_IN_PROGRESS"
+
+        if not booking.started_at:
+            booking.started_at = now
+            booking.start_date = now
+
+        if not booking.end_date:
+            if booking.deadline and booking.deadline > now:
+                booking.end_date = booking.deadline
+            else:
+                booking.end_date = now + timedelta(days=1)
+
+        booking.payment_completed = True
+        booking.payment_required = False
+
+        # ✅ SET ESCROW FIRST
+        booking.escrow_amount = Decimal(str(total_tokens))
+        booking.escrow_locked = True
+        booking.escrow_released = False
+
+        db.flush()  # 🔥 REQUIRED
+
+        # ✅ THEN RECORD ESCROW
+        ref = f"escrow_hold_{booking.id}"
+        if not _platform_profit_exists(db, ref):
+            db.add(
+                PlatformProfit(
+                    booking_id=booking.id,
+                    type="escrow_hold",
+                    direction="credit",
+                    amount=booking.escrow_amount,
+
+                    # ✅ REQUIRED — escrow has NO commission yet
+                    giver_commission=Decimal("0.00"),
+                    worker_commission=Decimal("0.00"),
+
+                    on_hold=True,
+                    hold_for_user_id=booking.worker_id,
+                    release_at=booking.end_date,
+                    reference=ref,
+                    meta={
+                        "booking_type": "wfh",
+                        "deadline": booking.deadline.isoformat() if booking.deadline else None,
+                    },
+                )
+            )
+
+        return
+
+    # ---------- NON-WFH (UNCHANGED) ----------
     if method == "razorpay":
         _credit_worker_only(
             db,
@@ -807,6 +948,7 @@ def _mark_booking_paid(
     booking.razor_payment_id = payment_id
     if order_id:
         booking.razor_order_id = order_id
+
 
 
 # --- NEW helper: surface next pending payment for provider ------------------

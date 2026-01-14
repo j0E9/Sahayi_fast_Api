@@ -9,7 +9,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, desc
 from sqlalchemy.orm import Session
-
+from app.security.tokens import decode_worker_link
 from app.database import get_db
 from app.models import (
     User, WorkerProfile, ShowcaseImage, Skill, Rating,
@@ -35,16 +35,25 @@ def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
 # ==========================================================
 # GET/POST /worker/{worker_id}  (renders view_worker.html)
 # ==========================================================
-@router.api_route("/worker/{worker_id}", methods=["GET", "POST"], response_class=HTMLResponse)
+@router.api_route("/worker/{token}", methods=["GET", "POST"], response_class=HTMLResponse)
 def view_worker(
     request: Request,
-    worker_id: int,
+    token: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     # POST form fields for rating (only read on POST)
     stars: Optional[float] = Form(default=None),
     comment: Optional[str] = Form(default=None),
 ):
+    try:
+        payload = decode_worker_link(token)
+    except Exception:
+        raise HTTPException(status_code=404, detail="Invalid or expired link")
+
+    worker_id = payload["w"]
+    job_id = payload.get("j")
+    skill_id = payload.get("s")
+
     user = db.get(User, worker_id)
     if not user:
         raise HTTPException(status_code=404, detail="Worker not found")
@@ -60,12 +69,6 @@ def view_worker(
     profile = db.query(WorkerProfile).filter(WorkerProfile.user_id == user.id).first()
 
     # Query params (typed)
-    job_id = request.query_params.get("job_id")
-    job_id = int(job_id) if job_id is not None and str(job_id).isdigit() else None
-
-    skill_id = request.query_params.get("skill_id")
-    skill_id = int(skill_id) if skill_id is not None and str(skill_id).isdigit() else None
-
     job = db.get(Job, job_id) if job_id else None
     job_title = (job.title.strip().lower() if (job and job.title) else None)
 
@@ -73,8 +76,11 @@ def view_worker(
     selected_skill = None
     if skill_id:
         s = db.get(Skill, skill_id)
-        if s and s.user_id == user.id:
+        if not s or s.user_id != user.id:
+            skill_id = None
+        else:
             selected_skill = s
+
     if not selected_skill:
         selected_skill = db.query(Skill).filter(Skill.user_id == user.id).first()
 
@@ -106,11 +112,10 @@ def view_worker(
 
         # mimic Flask redirect(url_for(...))
         r = RedirectResponse(
-            url=f"/worker/{user.id}" + (
-                f"?job_id={job_id}&skill_id={skill_id}" if job_id or skill_id else ""
-            ),
+            url=f"/worker/{token}",
             status_code=303,
         )
+
         return r
 
     return templates.TemplateResponse(
@@ -159,8 +164,13 @@ def negotiation_open(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    worker_user_id = int(data["worker_user_id"])
-    job_id = data.get("job_id")
+    try:
+        payload = decode_worker_link(data["worker_token"])
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid worker link")
+
+    worker_user_id = payload["w"]
+    job_id = payload.get("j")
 
     neg = _get_or_create_neg(db, current_user.id, worker_user_id, job_id)
 
@@ -314,16 +324,28 @@ def negotiation_pending(
 @router.get("/negotiation/check")
 def negotiation_check(
     request: Request,
-    worker_id: int,
-    job_id: int,
+    worker_token: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    try:
+        payload = decode_worker_link(worker_token)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid worker link")
+
+    worker_id = payload["w"]
+    job_id = payload.get("j")
+
     neg = (
         db.query(PriceNegotiation)
-        .filter_by(provider_id=current_user.id, worker_id=worker_id, job_id=job_id)
+        .filter_by(
+            provider_id=current_user.id,
+            worker_id=worker_id,
+            job_id=job_id,
+        )
         .first()
     )
+
     if not neg:
         return {"ok": True, "found": False}
 

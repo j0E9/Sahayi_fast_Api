@@ -13,6 +13,9 @@ from pathlib import Path
 from dotenv import load_dotenv
 from app import actions
 from app import dev_auth
+from app.routers import wfh_bookings
+import asyncio
+from app.database import SessionLocal
 
 
 ENV_PATH = Path(__file__).resolve().parents[1] / ".env"
@@ -37,33 +40,51 @@ settings.UPLOAD_FOLDER.mkdir(parents=True, exist_ok=True)
 def _startup():
     ensure_db_and_tables()
 
-# Routers
+# -----------------------------
+# Routers (ORDER MATTERS)
+# -----------------------------
+
+# ✅ Pages & auth
 app.include_router(pages.router)
 app.include_router(auth.router)
-app.include_router(otp.router)
-app.include_router(warnings.router)
-app.include_router(payment_history.router)
-app.include_router(wallet.router)
-app.include_router(wallet_pages.router)
-app.include_router(warnings_check.router)
 app.include_router(auth_pages.router)
-app.include_router(location.router)
+
+# ✅ Static / specific worker routes FIRST
+app.include_router(wfh_bookings.router)
+app.include_router(bookings.router)
+app.include_router(booking_details.router)
+app.include_router(booking_actions.router)
+
+# ✅ Notifications & realtime
 app.include_router(notifications.router)
 app.include_router(welcome.router)
-app.include_router(otp.legacy_router)
-app.include_router(jobs.router)
-app.include_router(bookings.router)
+app.include_router(realtime_jobs.router)
+
+# ✅ Payments & wallet
+app.include_router(wallet.router)
+app.include_router(wallet_pages.router)
+app.include_router(payment_history.router)
+app.include_router(payments_calls.router)
+
+# ✅ Misc
+app.include_router(location.router)
 app.include_router(calls.router)
 app.include_router(worker_and_negotiation.router)
-app.include_router(booking_actions.router)
-app.include_router(payments_calls.router)
-app.include_router(booking_details.router)
-app.include_router(realtime_jobs.router)
+app.include_router(warnings.router)
+app.include_router(warnings_check.router)
+app.include_router(otp.router)
+app.include_router(otp.legacy_router)
+app.include_router(jobs.router)
+
+
 app.include_router(worker_profile.router)
 
-# include the actions router so /action endpoints are active
+# Actions
 app.include_router(actions.router)
 
-# include dev token router only in dev (remove in production)
 if settings.ALLOW_DEV_TOKENS:
     app.include_router(dev_auth.router)
+
+@app.on_event("startup")
+def _startup():
+    ensure_db_and_tables()

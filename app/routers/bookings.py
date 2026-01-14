@@ -7,15 +7,15 @@ from sqlalchemy import desc, func
 from geopy.distance import geodesic
 
 from app.models import (
-    User, Skill, WorkerProfile, Job,
+    User, Skill, Job,
     Booking, Notification, PriceNegotiation
 )
 
-from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Request, Form, status
 from fastapi.responses import JSONResponse, RedirectResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
+from datetime import datetime, time, timedelta
 
 from app.database import get_db
 
@@ -97,7 +97,21 @@ async def confirm_booking_get(
     job_id_val = request.query_params.get("job_id")
     job_id = int(job_id_val) if job_id_val is not None and str(job_id_val).isdigit() else None
     rate_type_norm = ((selected_skill.rate_type or "") if selected_skill else "").strip().lower()
-    is_custom = rate_type_norm in ("custom", "per custom")
+
+    # detect WFH in GET route
+    is_wfh = bool(
+        selected_skill
+        and selected_skill.category
+        and selected_skill.category.strip().lower() in (
+            "sahayi from home",
+            "work from home",
+            "remote",
+            "wfh",
+        )
+    )
+
+    # custom ONLY if NOT WFH
+    is_custom = (rate_type_norm in ("custom", "per custom")) and not is_wfh
 
     # ---- agreed price if custom ----
     agreed_price: Optional[float] = None
@@ -131,7 +145,6 @@ async def confirm_booking_get(
         },
     )
 
-
 @router.post("/confirm_booking/{worker_id}")
 async def confirm_booking_post(
     worker_id: int,
@@ -155,6 +168,8 @@ async def confirm_booking_post(
     form = await request.form()
     description = (form.get("description") or "").strip()
     form_skill_id = form.get("skill_id")
+    expected_price_raw = form.get("expected_price")
+    deadline_raw = form.get("deadline")
     job_id_qs = request.query_params.get("job_id")
     job_id = int(job_id_qs) if job_id_qs is not None and job_id_qs.isdigit() else None
 
@@ -185,9 +200,56 @@ async def confirm_booking_post(
 
     # ----- quantity / pricing handling -----
     rate_type_norm = (skill.rate_type or "").strip().lower()
-    # agreed price if custom
+    # initialize pricing variables (IMPORTANT)
+    quantity: float = 0.0
+    effective_rate: Optional[float] = None
+    effective_rate_type: Optional[str] = None
     agreed_price: Optional[float] = None
-    if rate_type_norm in ("custom", "per custom"):
+
+    # detect WFH from skill category
+    is_wfh = False
+    if skill.category:
+        is_wfh = skill.category.strip().lower() in (
+            "sahayi from home",
+            "work from home",
+            "remote",
+            "wfh",
+        )
+
+
+    # 🔹 CASE 1: WFH → price AFTER booking
+    if is_wfh:
+        # WFH requires expected price + deadline
+        if not expected_price_raw or not deadline_raw:
+            return JSONResponse(
+                {"error": "invalid", "message": "Expected price and deadline are required for WFH jobs."},
+                status_code=400,
+            )
+
+        try:
+            expected_price = float(expected_price_raw)
+        except ValueError:
+            return JSONResponse(
+                {"error": "invalid", "message": "Invalid expected price."},
+                status_code=400,
+            )
+
+        try:
+            # datetime-local → "YYYY-MM-DDTHH:MM"
+            deadline = datetime.strptime(deadline_raw, "%Y-%m-%dT%H:%M")
+        except ValueError:
+            return JSONResponse(
+                {"error": "invalid", "message": "Invalid deadline date & time."},
+                status_code=400,
+            )
+
+        quantity = 1.0
+        effective_rate = expected_price
+        effective_rate_type = "expected"
+
+
+    # 🔹 CASE 2: Non-WFH custom → price BEFORE booking
+    elif rate_type_norm in ("custom", "per custom"):
         neg = (
             db.query(PriceNegotiation)
             .filter(
@@ -198,19 +260,23 @@ async def confirm_booking_post(
             .order_by(desc(PriceNegotiation.updated_at))
             .first()
         )
+
         if neg and neg.status == "confirmed":
             val = neg.giver_price or neg.worker_price
             if isinstance(val, Decimal):
                 val = float(val)
             agreed_price = float(val) if val is not None else None
+
         if agreed_price is None:
             return JSONResponse(
                 {"error": "no_agreed_price", "message": "Please complete the negotiation first."},
                 status_code=400,
             )
+
         quantity = 1.0
-        effective_rate = float(agreed_price)
+        effective_rate = agreed_price
         effective_rate_type = "custom"
+
 
     elif rate_type_norm == "per hour":
         # hours + minutes from form
@@ -234,19 +300,47 @@ async def confirm_booking_post(
     if quantity <= 0:
         return JSONResponse({"error": "Invalid quantity"}, status_code=400)
 
-    # create booking
-    booking = Booking(
-        token=generate_unique_token(db),
-        worker_id=worker.id,
-        provider_id=current_user.id,
-        job_id=job_id,
-        status="Pending",
-        rate=effective_rate,
-        rate_type=effective_rate_type,
-        quantity=quantity,
-        skill_name=skill.name,
-        expires_at=datetime.utcnow() + timedelta(minutes=1),
-    )
+    if is_wfh:
+        booking = Booking(
+            token=generate_unique_token(db),
+            worker_id=worker.id,
+            provider_id=current_user.id,
+            job_id=job_id,
+            booking_type="wfh",
+            status="WFH_PENDING_PRICE",
+
+            # ✅ FIX
+            description=description,
+
+            rate=None,
+            rate_type=None,
+            quantity=1,
+            skill_name=skill.name,
+
+            # WFH-specific fields
+            expected_price=expected_price,
+            deadline=deadline,
+            price_status="pending",
+        )
+
+
+
+
+
+    else:
+        booking = Booking(
+            token=generate_unique_token(db),
+            worker_id=worker.id,
+            provider_id=current_user.id,
+            job_id=job_id,
+            booking_type="onsite",
+            status="Pending",
+            rate=effective_rate,
+            rate_type=effective_rate_type,
+            quantity=quantity,
+            skill_name=skill.name,
+            expires_at=datetime.utcnow() + timedelta(minutes=1),
+        )
 
     db.add(booking)
     db.flush()
@@ -266,21 +360,28 @@ async def confirm_booking_post(
         distance_km = "Unknown"
 
     # human quantity text
-    rt = (effective_rate_type or "").strip().lower()
-    if rt == "per hour":
-        hrs = int(quantity)
-        mins = int(round((quantity - hrs) * 60))
-        parts = []
-        if hrs > 0:
-            parts.append(f"{hrs} hr{'s' if hrs != 1 else ''}")
-        if mins > 0 or hrs == 0:
-            parts.append(f"{mins} min{'s' if mins != 1 else ''}")
-        quantity_text = " ".join(parts)
-    elif rt in ("custom", "per custom"):
-        quantity_text = f"fixed ₹{effective_rate:.2f}"
+    if is_wfh:
+        quantity_text = (
+            f"WFH • Expected ₹{expected_price:.0f} • "
+            f"Deadline: {deadline.strftime('%d %b %Y')}"
+        )
+
     else:
-        unit = rt.replace("per ", "")
-        quantity_text = f"{quantity} {unit}{'s' if quantity > 1 else ''}"
+        rt = (effective_rate_type or "").strip().lower()
+        if rt == "per hour":
+            hrs = int(quantity)
+            mins = int(round((quantity - hrs) * 60))
+            parts = []
+            if hrs > 0:
+                parts.append(f"{hrs} hr{'s' if hrs != 1 else ''}")
+            if mins > 0 or hrs == 0:
+                parts.append(f"{mins} min{'s' if mins != 1 else ''}")
+            quantity_text = " ".join(parts)
+        elif rt in ("custom", "per custom"):
+            quantity_text = f"fixed ₹{effective_rate:.2f}"
+        else:
+            unit = rt.replace("per ", "")
+            quantity_text = f"{quantity} {unit}{'s' if quantity > 1 else ''}"
 
     message = (
         f"📢 <b>New booking request</b><br>"
@@ -301,8 +402,10 @@ async def confirm_booking_post(
     db.add(notif)
     db.commit()
 
-    return JSONResponse({"redirect": "/welcome"})
-
+    return RedirectResponse(
+        url="/welcome",
+        status_code=status.HTTP_303_SEE_OTHER
+    )
 
 
 @router.get("/check_pending_payment")
@@ -314,7 +417,8 @@ def check_pending_payment(
         db.query(Booking)
         .filter(
             Booking.provider_id == current_user.id,
-            Booking.status == "Accepted",
+            Booking.status.in_(["Accepted"]),
+            Booking.booking_type != "wfh",  # ✅ EXCLUDE WFH
             Booking.expires_at > datetime.utcnow(),
         )
         .first()
@@ -324,6 +428,8 @@ def check_pending_payment(
         # If your pay_token route is named differently, adjust this URL.
         return JSONResponse({"redirect_url": f"/pay_token/{booking.token}"})
     return JSONResponse({"redirect_url": None})
+
+
 
 
 @router.post("/book_worker/{worker_id}")
@@ -356,6 +462,13 @@ def booking_timeout(
 
     if booking.status != "Token Paid":
         booking.status = "Cancelled"
+
+        if booking.provider:
+            booking.provider.busy = False
+
+        if booking.worker:
+            booking.worker.busy = False
+
         db.commit()
 
     # No flash in FastAPI; redirect back to welcome

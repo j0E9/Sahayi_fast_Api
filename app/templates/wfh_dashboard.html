@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>WFH Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+
+  <style>
+    :root{
+      --brand1:#0d6efd;
+      --brand2:#00b4ff;
+      --glass: rgba(255,255,255,.55);
+      --glassBorder: rgba(255,255,255,.25);
+      --shadow: 0 12px 35px rgba(0,0,0,.08);
+      --shadow2: 0 20px 50px rgba(0,0,0,.12);
+      --radius: 18px;
+    }
+
+    body{
+      background: radial-gradient(900px 500px at 15% 10%, rgba(106,17,203,.18), transparent),
+                  radial-gradient(900px 550px at 85% 20%, rgba(37,117,252,.18), transparent),
+                  linear-gradient(180deg, #f7f9ff, #f4f7ff);
+      min-height: 100vh;
+    }
+
+    /* Layout container */
+    .page-wrap{
+      max-width: 980px;
+      margin: 18px auto 60px;
+      padding: 0 14px;
+    }
+
+    /* Top hero */
+    .hero{
+      background: linear-gradient(135deg, var(--brand1), var(--brand2));
+      border-radius: 22px;
+      padding: 18px;
+      color: #fff;
+      position: relative;
+      overflow: hidden;
+      box-shadow: var(--shadow2);
+    }
+    .hero::before{
+      content:"";
+      position:absolute;
+      inset:-60px -60px auto auto;
+      width: 220px;
+      height: 220px;
+      background: rgba(255,255,255,.18);
+      border-radius: 999px;
+      filter: blur(1px);
+      transform: rotate(12deg);
+    }
+    .hero::after{
+      content:"";
+      position:absolute;
+      left:-70px;
+      bottom:-70px;
+      width: 240px;
+      height: 240px;
+      background: rgba(255,255,255,.10);
+      border-radius: 999px;
+    }
+
+    .hero h3{
+      font-weight: 800;
+      letter-spacing: .2px;
+      margin: 0;
+    }
+    .hero small{
+      opacity: .9;
+    }
+
+    /* Stats */
+    .stat-row{
+      margin-top: 14px;
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(4, 1fr);
+    }
+    .stat{
+      background: rgba(255,255,255,.16);
+      border: 1px solid rgba(255,255,255,.22);
+      border-radius: 16px;
+      padding: 12px 12px;
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+    }
+    .stat .label{ opacity:.85; font-size: .78rem; }
+    .stat .value{ font-size: 1.15rem; font-weight: 800; line-height: 1.1; }
+
+    @media(max-width: 768px){
+      .stat-row{ grid-template-columns: repeat(2, 1fr); }
+    }
+
+    /* Search / Filter bar */
+    .tools-bar{
+      margin-top: 14px;
+      background: rgba(255,255,255,.70);
+      border: 1px solid rgba(0,0,0,.04);
+      border-radius: 18px;
+      padding: 12px;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+    }
+    .tools-bar .form-control, .tools-bar .form-select{
+      border-radius: 14px;
+      border: 1px solid rgba(0,0,0,.06);
+      box-shadow: none !important;
+    }
+    .tools-bar .form-control:focus, .tools-bar .form-select:focus{
+      border-color: rgba(37,117,252,.45);
+      outline: none;
+    }
+
+    /* Fix Clear button looking too big on mobile */
+    .tools-bar .input-group .btn{
+      border-radius: 14px;
+      padding: 10px 14px;
+      white-space: nowrap;
+    }
+
+    .tools-bar .input-group .form-control{
+      border-radius: 14px;
+    }
+
+
+    /* Sticky tabs */
+    .tabs-wrap{
+      margin-top: 12px;
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      padding-top: 10px;
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+    }
+
+    .nav-tabs{
+      border: none;
+      gap: 10px;
+      padding: 10px;
+      border-radius: 18px;
+      background: rgba(255,255,255,.70);
+      box-shadow: var(--shadow);
+    }
+    .nav-tabs .nav-link{
+      border: none !important;
+      border-radius: 14px !important;
+      padding: 10px 14px;
+      color: #2b2b2b;
+      font-weight: 700;
+      opacity: .85;
+      transition: all .15s ease;
+      white-space: nowrap;
+    }
+    .nav-tabs .nav-link:hover{
+      transform: translateY(-1px);
+      opacity: 1;
+    }
+    .nav-tabs .nav-link.active{
+      color: #fff !important;
+      opacity: 1;
+      background: linear-gradient(135deg, var(--brand1), var(--brand2)) !important;
+      box-shadow: 0 10px 24px rgba(37,117,252,.22);
+    }
+
+    /* Badges */
+    .tab-badge{
+      font-size: .75rem;
+      margin-left: 6px;
+      padding: 5px 8px;
+      border-radius: 999px;
+    }
+
+    /* Cards */
+    .grid{
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 14px;
+      margin-top: 14px;
+    }
+    @media(max-width: 768px){
+      .grid{ grid-template-columns: 1fr; }
+    }
+
+    .job-card{
+      border: 1px solid rgba(0,0,0,.06);
+      background: rgba(255,255,255,.78);
+      border-radius: var(--radius);
+      overflow: hidden;
+      box-shadow: var(--shadow);
+      transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+      position: relative;
+      height: 100%;
+    }
+    .job-card:hover{
+      transform: translateY(-4px);
+      box-shadow: var(--shadow2);
+      border-color: rgba(37,117,252,.25);
+    }
+
+    .job-card .card-body{
+      padding: 14px 14px 12px;
+    }
+
+    .pill{
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-weight: 800;
+      font-size: .78rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border: 1px solid rgba(0,0,0,.06);
+      background: rgba(255,255,255,.65);
+    }
+
+    .job-title{
+      font-size: 1rem;
+      font-weight: 800;
+      margin-bottom: 4px;
+      color: #141414;
+    }
+
+    .sub{
+      color: rgba(0,0,0,.55);
+      font-size: .86rem;
+    }
+
+    .meta-row{
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 12px;
+    }
+
+    .card-arrow{
+      width: 36px;
+      height: 36px;
+      display: grid;
+      place-items: center;
+      border-radius: 12px;
+      background: rgba(37,117,252,.10);
+      border: 1px solid rgba(37,117,252,.16);
+      transition: transform .15s ease;
+    }
+    .job-card:hover .card-arrow{
+      transform: translateX(2px);
+    }
+
+    /* Status accents */
+    .accent-info::before,
+    .accent-warning::before,
+    .accent-danger::before,
+    .accent-success::before,
+    .accent-secondary::before{
+      content:"";
+      position:absolute;
+      inset: 0 auto 0 0;
+      width: 7px;
+      border-radius: 0 16px 16px 0;
+    }
+    .accent-info::before{ background: rgba(13,110,253,.85); }
+    .accent-warning::before{ background: rgba(255,193,7,.95); }
+    .accent-danger::before{ background: rgba(220,53,69,.95); }
+    .accent-success::before{ background: rgba(25,135,84,.95); }
+    .accent-secondary::before{ background: rgba(108,117,125,.95); }
+
+    /* Empty states */
+    .empty{
+      margin-top: 14px;
+      border-radius: 18px;
+      background: rgba(255,255,255,.75);
+      border: 1px dashed rgba(0,0,0,.12);
+      padding: 20px;
+      text-align: center;
+      box-shadow: var(--shadow);
+    }
+
+    /* Fade animation for tab panes */
+    .tab-pane{
+      animation: fadeIn .18s ease;
+    }
+    @keyframes fadeIn{
+      from{ opacity: 0; transform: translateY(6px); }
+      to{ opacity: 1; transform: translateY(0); }
+    }
+
+    /* Make <a> whole card clickable */
+    .card-link{
+      text-decoration: none;
+      color: inherit;
+    }
+
+  </style>
+</head>
+
+<body>
+
+<div class="page-wrap">
+
+  <!-- HERO HEADER -->
+  <div class="hero">
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+      <div>
+        <h3>WFH Dashboard</h3>
+        <small>Track, manage, and complete jobs efficiently.</small>
+      </div>
+
+      <div class="text-end">
+        <small class="d-block">Status</small>
+        <span class="badge rounded-pill bg-light text-dark fw-bold px-3 py-2">
+          Live
+        </span>
+      </div>
+    </div>
+
+    <!-- Quick stats (counts injected using Jinja lengths) -->
+    <div class="stat-row">
+      <div class="stat">
+        <div class="label">Given Active</div>
+        <div class="value">{{ given_active|length if given_active else 0 }}</div>
+      </div>
+      <div class="stat">
+        <div class="label">Received Active</div>
+        <div class="value">{{ received_active|length if received_active else 0 }}</div>
+      </div>
+      <div class="stat">
+        <div class="label">Disputed</div>
+        <div class="value">
+          {{ (given_disputed|length if given_disputed else 0) + (received_disputed|length if received_disputed else 0) }}
+        </div>
+      </div>
+      <div class="stat">
+        <div class="label">Completed</div>
+        <div class="value">
+          {{ (given_completed|length if given_completed else 0) + (received_completed|length if received_completed else 0) }}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SEARCH + FILTER -->
+  <div class="tools-bar">
+    <div class="row g-2 align-items-center">
+
+      <!-- Search + Clear together -->
+      <div class="col-12 col-md-7">
+        <div class="input-group">
+          <input id="searchInput" class="form-control" type="text"
+                 placeholder="Search by skill name or booking id...">
+
+          <button id="clearBtn" class="btn btn-outline-primary fw-bold" type="button">
+            Clear
+          </button>
+        </div>
+      </div>
+
+      <!-- Filter -->
+      <div class="col-12 col-md-5">
+        <select id="statusFilter" class="form-select">
+          <option value="all" selected>Filter: All</option>
+          <option value="given">Given</option>
+          <option value="received">Received</option>
+          <option value="disputed">Disputed</option>
+          <option value="completed">Completed</option>
+          <option value="cancelled">Cancelled</option>
+        </select>
+      </div>
+
+    </div>
+  </div>
+
+
+  <!-- TABS -->
+  <div class="tabs-wrap">
+    <ul class="nav nav-tabs">
+
+      <li class="nav-item">
+        <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#given">
+          🧑‍💼 Given
+          {% if given_active %}
+            <span class="badge bg-light text-dark tab-badge">{{ given_active|length }}</span>
+          {% endif %}
+        </button>
+      </li>
+
+      {% if has_worker_profile %}
+      <li class="nav-item">
+        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#received">
+          🧑‍🔧 Received
+          {% if received_active %}
+            <span class="badge bg-warning text-dark tab-badge">{{ received_active|length }}</span>
+          {% endif %}
+        </button>
+      </li>
+      {% endif %}
+
+      <li class="nav-item">
+        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#disputed">
+          ⚠️ Disputed
+          {% if given_disputed or received_disputed %}
+            <span class="badge bg-danger tab-badge">
+              {{ (given_disputed|length) + (received_disputed|length) }}
+            </span>
+          {% endif %}
+        </button>
+      </li>
+
+      <li class="nav-item">
+        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#completed">
+          ✅ Completed
+        </button>
+      </li>
+
+      <li class="nav-item">
+        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#cancelled">
+          ❌ Cancelled
+        </button>
+      </li>
+
+    </ul>
+  </div>
+
+  <!-- TAB CONTENT -->
+  <div class="tab-content mt-2">
+
+    <!-- GIVEN -->
+    <div class="tab-pane fade show active" id="given">
+      {% if given_active %}
+        <div class="grid" id="givenGrid">
+          {% for b in given_active %}
+          <a class="card-link jobItem" data-section="given"
+             data-search="{{ (b.skill_name ~ ' ' ~ b.id)|lower }}"
+             href="/wfh/giver/booking/{{ b.id }}">
+            <div class="job-card accent-info">
+              <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start gap-2">
+                  <div>
+                    <div class="job-title">{{ b.skill_name }}</div>
+                    <div class="sub">Booking ID: <strong>#{{ b.id }}</strong></div>
+                  </div>
+                  <span class="pill">
+                    🧑‍💼 {{ b.status }}
+                  </span>
+                </div>
+
+                <div class="meta-row">
+                  <small class="text-muted">Tap to open details</small>
+                  <div class="card-arrow">➜</div>
+                </div>
+              </div>
+            </div>
+          </a>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="empty">
+          <h6 class="fw-bold mb-1">No active work given</h6>
+          <div class="text-muted">Once you assign jobs, they will appear here.</div>
+        </div>
+      {% endif %}
+    </div>
+
+    <!-- RECEIVED -->
+    {% if has_worker_profile %}
+    <div class="tab-pane fade" id="received">
+      {% if received_active %}
+        <div class="grid" id="receivedGrid">
+          {% for b in received_active %}
+          <a class="card-link jobItem" data-section="received"
+             data-search="{{ (b.skill_name ~ ' ' ~ b.id)|lower }}"
+             href="/wfh/booking/{{ b.id }}">
+            <div class="job-card accent-warning">
+              <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start gap-2">
+                  <div>
+                    <div class="job-title">{{ b.skill_name }}</div>
+                    <div class="sub">Booking ID: <strong>#{{ b.id }}</strong></div>
+                  </div>
+                  <span class="pill">
+                    🧑‍🔧 {{ b.status }}
+                  </span>
+                </div>
+
+                <div class="meta-row">
+                  <small class="text-muted">Tap to open details</small>
+                  <div class="card-arrow">➜</div>
+                </div>
+              </div>
+            </div>
+          </a>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="empty">
+          <h6 class="fw-bold mb-1">No active work received</h6>
+          <div class="text-muted">Once you accept jobs, they will appear here.</div>
+        </div>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- DISPUTED -->
+    <div class="tab-pane fade" id="disputed">
+      {% if given_disputed or received_disputed %}
+        <div class="grid" id="disputedGrid">
+
+          {% for b in given_disputed %}
+          <a class="card-link jobItem" data-section="disputed"
+             data-search="{{ (b.skill_name ~ ' ' ~ b.id)|lower }}"
+             href="/wfh/giver/booking/{{ b.id }}">
+            <div class="job-card accent-danger">
+              <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start gap-2">
+                  <div>
+                    <div class="job-title">{{ b.skill_name }}</div>
+                    <div class="sub">Booking ID: <strong>#{{ b.id }}</strong></div>
+                  </div>
+
+                  {% if b.dispute and b.dispute.raised_by == request.session.get("user_id") %}
+                    <span class="pill">⚠️ You raised</span>
+                  {% else %}
+                    <span class="pill">⚠️ Against you</span>
+                  {% endif %}
+                </div>
+
+                <div class="meta-row">
+                  <small class="text-muted">Open dispute details</small>
+                  <div class="card-arrow">➜</div>
+                </div>
+              </div>
+            </div>
+          </a>
+          {% endfor %}
+
+          {% for b in received_disputed %}
+          <a class="card-link jobItem" data-section="disputed"
+             data-search="{{ (b.skill_name ~ ' ' ~ b.id)|lower }}"
+             href="/wfh/booking/{{ b.id }}">
+            <div class="job-card accent-danger">
+              <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start gap-2">
+                  <div>
+                    <div class="job-title">{{ b.skill_name }}</div>
+                    <div class="sub">Booking ID: <strong>#{{ b.id }}</strong></div>
+                  </div>
+
+                  {% if b.dispute and b.dispute.raised_by == request.session.get("user_id") %}
+                    <span class="pill">⚠️ You raised</span>
+                  {% else %}
+                    <span class="pill">⚠️ Against you</span>
+                  {% endif %}
+                </div>
+
+                <div class="meta-row">
+                  <small class="text-muted">Open dispute details</small>
+                  <div class="card-arrow">➜</div>
+                </div>
+              </div>
+            </div>
+          </a>
+          {% endfor %}
+
+        </div>
+      {% else %}
+        <div class="empty">
+          <h6 class="fw-bold mb-1">No disputed jobs</h6>
+          <div class="text-muted">Disputes will appear here if any are raised.</div>
+        </div>
+      {% endif %}
+    </div>
+
+    <!-- COMPLETED -->
+    <div class="tab-pane fade" id="completed">
+      {% if given_completed or received_completed %}
+        <div class="grid" id="completedGrid">
+          {% for b in given_completed %}
+          <a class="card-link jobItem" data-section="completed"
+             data-search="{{ (b.skill_name ~ ' ' ~ b.id)|lower }}"
+             href="/wfh/giver/booking/{{ b.id }}">
+            <div class="job-card accent-success">
+              <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start gap-2">
+                  <div>
+                    <div class="job-title">{{ b.skill_name }}</div>
+                    <div class="sub">Booking ID: <strong>#{{ b.id }}</strong></div>
+                  </div>
+                  <span class="pill">✅ Completed</span>
+                </div>
+
+                <div class="meta-row">
+                  <small class="text-muted">View completed details</small>
+                  <div class="card-arrow">➜</div>
+                </div>
+              </div>
+            </div>
+          </a>
+          {% endfor %}
+
+          {% for b in received_completed %}
+          <a class="card-link jobItem" data-section="completed"
+             data-search="{{ (b.skill_name ~ ' ' ~ b.id)|lower }}"
+             href="/wfh/booking/{{ b.id }}">
+            <div class="job-card accent-success">
+              <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start gap-2">
+                  <div>
+                    <div class="job-title">{{ b.skill_name }}</div>
+                    <div class="sub">Booking ID: <strong>#{{ b.id }}</strong></div>
+                  </div>
+                  <span class="pill">✅ Completed</span>
+                </div>
+
+                <div class="meta-row">
+                  <small class="text-muted">View completed details</small>
+                  <div class="card-arrow">➜</div>
+                </div>
+              </div>
+            </div>
+          </a>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="empty">
+          <h6 class="fw-bold mb-1">No completed jobs yet</h6>
+          <div class="text-muted">Completed tasks will be listed here.</div>
+        </div>
+      {% endif %}
+    </div>
+
+    <!-- CANCELLED -->
+    <div class="tab-pane fade" id="cancelled">
+      {% if given_cancelled or received_cancelled %}
+        <div class="grid" id="cancelledGrid">
+          {% for b in given_cancelled %}
+          <a class="card-link jobItem" data-section="cancelled"
+             data-search="{{ (b.skill_name ~ ' ' ~ b.id)|lower }}"
+             href="/wfh/giver/booking/{{ b.id }}">
+            <div class="job-card accent-secondary">
+              <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start gap-2">
+                  <div>
+                    <div class="job-title">{{ b.skill_name }}</div>
+                    <div class="sub">Booking ID: <strong>#{{ b.id }}</strong></div>
+                  </div>
+                  <span class="pill">❌ Cancelled</span>
+                </div>
+
+                <div class="meta-row">
+                  <small class="text-muted">View cancellation</small>
+                  <div class="card-arrow">➜</div>
+                </div>
+              </div>
+            </div>
+          </a>
+          {% endfor %}
+
+          {% for b in received_cancelled %}
+          <a class="card-link jobItem" data-section="cancelled"
+             data-search="{{ (b.skill_name ~ ' ' ~ b.id)|lower }}"
+             href="/wfh/booking/{{ b.id }}">
+            <div class="job-card accent-secondary">
+              <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start gap-2">
+                  <div>
+                    <div class="job-title">{{ b.skill_name }}</div>
+                    <div class="sub">Booking ID: <strong>#{{ b.id }}</strong></div>
+                  </div>
+                  <span class="pill">❌ Cancelled</span>
+                </div>
+
+                <div class="meta-row">
+                  <small class="text-muted">View cancellation</small>
+                  <div class="card-arrow">➜</div>
+                </div>
+              </div>
+            </div>
+          </a>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="empty">
+          <h6 class="fw-bold mb-1">No cancelled jobs</h6>
+          <div class="text-muted">Cancelled bookings will show here.</div>
+        </div>
+      {% endif %}
+    </div>
+
+  </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+  // Search + Filter (works across all tabs)
+  const searchInput = document.getElementById("searchInput");
+  const statusFilter = document.getElementById("statusFilter");
+  const clearBtn = document.getElementById("clearBtn");
+
+  function applyFilters(){
+    const q = (searchInput.value || "").toLowerCase().trim();
+    const section = statusFilter.value;
+
+    document.querySelectorAll(".jobItem").forEach(item=>{
+      const text = item.getAttribute("data-search") || "";
+      const sec = item.getAttribute("data-section") || "";
+
+      const matchSearch = q === "" || text.includes(q);
+      const matchSection = section === "all" || sec === section;
+
+      item.style.display = (matchSearch && matchSection) ? "" : "none";
+    });
+  }
+
+  searchInput.addEventListener("input", applyFilters);
+  statusFilter.addEventListener("change", applyFilters);
+
+  clearBtn.addEventListener("click", ()=>{
+    searchInput.value = "";
+    statusFilter.value = "all";
+    applyFilters();
+  });
+
+  // When user changes tabs, keep filters active
+  document.querySelectorAll('[data-bs-toggle="tab"]').forEach(btn=>{
+    btn.addEventListener("shown.bs.tab", applyFilters);
+  });
+
+  // Initial
+  applyFilters();
+</script>
+
+</body>
+</html>

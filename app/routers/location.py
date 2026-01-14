@@ -99,26 +99,26 @@ def _extract_mapbox(fields: dict) -> GetLocDetailsOut:
     )
 
 def _mapbox_reverse_geocode(lat: float, lon: float) -> GetLocDetailsOut:
-    token = settings.MAPBOX_TOKEN or ""
+    token = settings.MAPBOX_ACCESS_TOKEN
     if not token:
-        # dev token; replace with your own
-        token = "pk.eyJ1IjoiajBpMyIsImEiOiJjbWc5MHducmMwYWp5MmpzNmdvcTkxbHJlIn0.NHz6uC-dHVysD-SvDLmAgw"
+        raise RuntimeError("MAPBOX_ACCESS_TOKEN is not configured")
 
     url = (
         f"https://api.mapbox.com/geocoding/v5/mapbox.places/"
-        f"{lon},{lat}.json?access_token={token}&language=en&limit=1"
+        f"{lon},{lat}.json"
     )
 
-    try:
-        r = requests.get(url, timeout=6)
-        r.raise_for_status()
-        data = r.json()
-        out = _extract_mapbox(data)
-        print("DEBUG Mapbox ->", out.dict())
-        return out
-    except Exception as e:
-        print("Mapbox error:", repr(e))
-        return GetLocDetailsOut()
+    params = {
+        "access_token": token,
+        "language": "en",
+        "limit": 1,
+    }
+
+    r = requests.get(url, params=params, timeout=6)
+    r.raise_for_status()
+    data = r.json()
+    return _extract_mapbox(data)
+
 
 def _nominatim_reverse_geocode(lat: float, lon: float) -> GetLocDetailsOut:
     """

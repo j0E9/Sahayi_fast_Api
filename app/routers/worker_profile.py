@@ -12,19 +12,35 @@ from fastapi import (
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
-from werkzeug.utils import secure_filename  # pip install werkzeug
 from itertools import zip_longest  # add this import at the top
 from app.database import get_db
 from app.models import (
     User, WorkerProfile, Skill, ShowcaseImage, Rating
 )
+from pathlib import Path
+import uuid
 
 router = APIRouter(tags=["worker_profile"])
 templates = Jinja2Templates(directory="app/templates")
 
 # Adjust this if your uploads path differs
-UPLOAD_ROOT = "app/static/uploads"
+UPLOAD_ROOT = "app/static/uploads/users"
 os.makedirs(UPLOAD_ROOT, exist_ok=True)
+
+
+
+def get_user_dir(user_id: int, category: str) -> Path:
+    """
+    category examples:
+    - profile
+    - ids
+    - showcase
+    - video
+    """
+    base = Path(UPLOAD_ROOT) / f"user_{user_id}" / category
+    base.mkdir(parents=True, exist_ok=True)
+    return base
+
 
 # ---------- Trust API session auth ----------
 def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
@@ -69,17 +85,21 @@ IMAGE_EXTS = {"jpg", "jpeg", "png", "webp", "gif"}
 VIDEO_EXTS = {"mp4", "mov", "m4v", "webm", "mkv"}
 
 
-def save_upload(user_id: int, file: UploadFile) -> Optional[str]:
+def save_upload(user_id: int, file: UploadFile, category: str) -> Optional[str]:
     if not file or not file.filename:
         return None
-    filename = secure_filename(file.filename)
-    # Prefix with user id to reduce collisions
-    final_name = f"{user_id}_{filename}"
-    dest_path = os.path.join(UPLOAD_ROOT, final_name)
+
+    ext = os.path.splitext(file.filename)[1].lower()
+    safe_name = f"{uuid.uuid4().hex}{ext}"
+
+    user_dir = get_user_dir(user_id, category)
+    dest_path = user_dir / safe_name
+
     with open(dest_path, "wb") as out:
         shutil.copyfileobj(file.file, out)
-    return final_name
 
+    # return RELATIVE path for DB
+    return f"users/user_{user_id}/{category}/{safe_name}"
 
 # ---------- routes ----------
 @router.get("/seek_job", response_class=HTMLResponse)
@@ -636,6 +656,8 @@ async def create_worker_profile_post(
     rates: list[str] = Form(default_factory=list, alias="rates[]"),
     rate_types: list[str] = Form(default_factory=list, alias="rate_types[]"),
     skill_categories: list[str] = Form(default_factory=list, alias="skill_categories[]"),  # ✅ NEW
+    wf_scopes: list[str] = Form(default_factory=list, alias="wf_scope[]"),                # ✅ NEW
+
 
     photo: UploadFile | None = File(None),
     id_front: UploadFile | None = File(None),
@@ -652,10 +674,10 @@ async def create_worker_profile_post(
     worker_code = generate_unique_worker_id(db)
 
     # Save uploads (images only for these fields)
-    photo_name = save_upload(current_user.id, photo) if photo and allowed_file(photo.filename, IMAGE_EXTS) else None
-    id_front_name = save_upload(current_user.id, id_front) if id_front and allowed_file(id_front.filename, IMAGE_EXTS) else None
-    id_back_name = save_upload(current_user.id, id_back) if id_back and allowed_file(id_back.filename, IMAGE_EXTS) else None
-    pan_name = save_upload(current_user.id, pan_card) if pan_card and allowed_file(pan_card.filename, IMAGE_EXTS) else None
+    photo_name = save_upload(current_user.id, photo, "profile") if photo and allowed_file(photo.filename,IMAGE_EXTS) else None
+    id_front_name = save_upload(current_user.id, id_front, "ids") if id_front and allowed_file(id_front.filename,IMAGE_EXTS) else None
+    id_back_name = save_upload(current_user.id, id_back, "ids") if id_back and allowed_file(id_back.filename,IMAGE_EXTS) else None
+    pan_name = save_upload(current_user.id, pan_card, "ids") if pan_card and allowed_file(pan_card.filename,IMAGE_EXTS) else None
 
     # Create profile
     profile = WorkerProfile(
@@ -683,10 +705,25 @@ async def create_worker_profile_post(
         r = (rate or "").strip()
         t = (rt or "").strip() or None
         c = (cat or "Other").strip()
-        if n and r:
+
+        if not n:
+            continue
+
+        if c.lower() in ("work from home", "wfh", "remote", "sahayi from home"):
+            # WFH → no rate
             db.add(Skill(
                 name=n,
-                category=c,      # ← NEW
+                category=c,
+                rate=None,
+                rate_type=None,
+                user_id=current_user.id
+            ))
+        else:
+            if not r:
+                continue
+            db.add(Skill(
+                name=n,
+                category=c,
                 rate=r,
                 rate_type=t,
                 user_id=current_user.id
@@ -736,7 +773,9 @@ async def edit_worker_profile_post(
     skills: List[str] = Form([]),
     rates: List[str] = Form([]),
     rate_types: List[str] = Form([]),
-    categories: List[str] = Form([]),  # 👈 NEW (use alias="categories[]" if your HTML uses [] )
+    categories: List[str] = Form([]),  # existing
+    wf_scopes: List[str] = Form([]),   # ✅ NEW
+
 
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -760,39 +799,83 @@ async def edit_worker_profile_post(
     # Handle profile video (replace if provided)
     if video and video.filename and allowed_file(video.filename, VIDEO_EXTS):
         if profile.video:
-            old_path = os.path.join(UPLOAD_ROOT, profile.video)
+            old_path = os.path.join("app/static/uploads", profile.video)
             if os.path.exists(old_path):
                 try:
                     os.remove(old_path)
                 except Exception:
                     pass
-        saved = save_upload(current_user.id, video)
+
+        saved = save_upload(current_user.id, video, "video")
         profile.video = saved
 
     # Handle showcase images (append new)
     for img in showcase_images:
         if img and img.filename and allowed_file(img.filename, IMAGE_EXTS):
-            saved = save_upload(current_user.id, img)
+            saved = save_upload(current_user.id, img, "showcase")
             if saved:
                 db.add(ShowcaseImage(user_id=current_user.id, image_url=saved))
 
     # Replace skills (now includes category)
     db.query(Skill).filter_by(user_id=current_user.id).delete(synchronize_session=False)
 
-    for name, rate, rt, cat in zip_longest(skills, rates, rate_types, categories, fillvalue=None):
-        name = (name or "").strip().lower()
-        rate = (rate or "").strip()
-        rt   = (rt or "").strip() or None
-        cat  = (cat or "Other").strip()
-        if name and rate:
-            db.add(Skill(
-                name=name,
-                category=cat,        # 👈 NEW
-                rate=rate,
-                rate_type=rt,
-                location=full_location,
-                user_id=current_user.id
-            ))
+    # Insert / replace skills with category and optional WFH scope
+    # use zip_longest so mismatched list lengths don't crash
+    for name, rate, rt, cat, wf_scope in zip_longest(
+            skills, rates, rate_types, categories, wf_scopes, fillvalue=None):
+
+        n = (name or "").strip()
+        r = (rate or "").strip()
+        t = (rt or "").strip() or None
+        c = (cat or "Other").strip()
+        wf = (wf_scope or "").strip()
+
+        if not n:
+            # skip empty skill names
+            continue
+
+        # Work From Home handling: allow missing rate and interpret scope
+        location_field = None
+        if c.lower() == "work from home" or c.lower() == "workfromhome":
+            # interpret wf scope:
+            # - 'everywhere' => location_field = 'everywhere'
+            # - numeric => 'radius:<n>'
+            if wf:
+                if wf.lower() == "everywhere":
+                    location_field = "everywhere"
+                else:
+                    try:
+                        # allow floats/ints as radius
+                        num = float(wf)
+                        location_field = f"radius:{num}"
+                    except Exception:
+                        location_field = wf  # whatever was posted (fallback)
+            else:
+                # default scope when none provided
+                location_field = "everywhere"
+
+            # provide safe fallback rate/rate_type so DB non-null constraints won't reject
+            # WFH has NO predefined price
+            r = None
+            t = None
+
+
+        # Non-WFH: require a rate to be present (existing behavior). If no rate given, skip to match earlier logic
+        else:
+            if not r:
+                # skip skills with no rate for non-WFH categories (preserves previous behaviour)
+                continue
+
+        # Persist normalized skill (lowercasing name preserved? keep original casing if you prefer)
+        db.add(Skill(
+            name=n.lower(),       # you used .lower() earlier; keep consistent
+            category=c,
+            rate=r,
+            rate_type=t,
+            location=location_field or None,
+            user_id=current_user.id
+        ))
+
 
     db.commit()
     return {"success": True, "redirect": "/seek_job"}
@@ -814,7 +897,7 @@ def delete_media(
         if not profile or profile.user_id != current_user.id:
             raise HTTPException(404, "Video not found or not permitted")
         if profile.video:
-            path = os.path.join(UPLOAD_ROOT, profile.video)
+            path = os.path.join("app/static/uploads", profile.video)
             if os.path.exists(path):
                 try:
                     os.remove(path)
@@ -828,7 +911,7 @@ def delete_media(
     img = db.get(ShowcaseImage, media_id)
     if not img or img.user_id != current_user.id:
         raise HTTPException(404, "Image not found or not permitted")
-    path = os.path.join(UPLOAD_ROOT, img.image_url)
+    path = os.path.join("app/static/uploads", img.image_url)
     if os.path.exists(path):
         try:
             os.remove(path)

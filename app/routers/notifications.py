@@ -10,6 +10,37 @@ from app.models import Notification, Booking, User
 
 router = APIRouter(prefix="", tags=["notifications"])
 
+type_label_map = {
+    "booking_request": "Booking Request",
+    "auto_rejected": "Auto Rejected",
+    "payment_required": "Payment Required",
+    "waiting_payment": "Waiting for Payment",
+    "token_paid": "Payment Successful",
+    "payment_expired": "Payment Cancelled",
+    "wfh_request": "WFH Booking",
+}
+
+type_icon_map = {
+    "booking_request": "📩",
+    "auto_rejected": "❌",
+    "payment_required": "💳",
+    "waiting_payment": "⏳",
+    "token_paid": "✅",
+    "payment_expired": "❌",
+    "wfh_request": "🏠",
+}
+
+type_badge_class_map = {
+    "booking_request": "bg-primary",
+    "auto_rejected": "bg-danger",
+    "payment_required": "bg-warning text-dark",
+    "waiting_payment": "bg-info text-dark",
+    "token_paid": "bg-success",
+    "payment_expired": "bg-danger",
+    "wfh_request": "bg-warning text-dark",
+}
+
+
 # --- Trust API-style session auth ---
 def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
     uid = request.session.get("user_id")
@@ -30,7 +61,6 @@ def check_job_alert(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    # Pick the best ordering column your model has
     order_col = getattr(Notification, "timestamp", None) or \
                 getattr(Notification, "created_at", None) or \
                 Notification.id
@@ -39,20 +69,27 @@ def check_job_alert(
         db.query(Notification)
         .filter(
             Notification.recipient_id == current_user.id,
-            Notification.is_read == False,            # noqa: E712
+            Notification.is_read == False,   # noqa
             Notification.action_type == "booking_request",
         )
         .order_by(order_col.desc())
         .first()
     )
 
-    if note:
-        sender_name = (
-            getattr(getattr(note, "sender", None), "name", None) or "someone"
-        )
-        return JobAlertOut(has_new_request=True, sender=sender_name)
+    if not note:
+        return JobAlertOut(has_new_request=False)
 
-    return JobAlertOut(has_new_request=False, sender=None)
+    sender = "someone"
+
+    if note.booking_id:
+        booking = db.get(Booking, note.booking_id)
+        if booking and booking.booking_type == "wfh":
+            sender = "WFH Booking"
+        elif note.sender:
+            sender = note.sender.name
+
+    return JobAlertOut(has_new_request=True, sender=sender)
+
 # REUSE your existing `router = APIRouter(...)` – do NOT redeclare it.
 
 # ---- session-based auth helper (rename if you already have one) ----
@@ -66,6 +103,23 @@ def get_current_user_for_notifications(
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
     return user
+
+def get_remaining_seconds(booking):
+    if not booking:
+        return None
+
+    # WFH bookings never have timers
+    if booking.booking_type == "wfh":
+        return None
+
+    if not booking.expires_at:
+        return None
+
+    return max(
+        0,
+        int((booking.expires_at - datetime.utcnow()).total_seconds())
+    )
+
 
 # If you already have /notifications, change this path to /notifications/page
 @router.get("/notifications", response_class=HTMLResponse)
@@ -89,6 +143,12 @@ def notifications_page(
             n.is_read = True  # mark read
 
         base_type = n.action_type or "general"
+        if n.action_type == "booking_request" and n.booking_id:
+            booking_check = db.get(Booking, n.booking_id)
+            if booking_check and booking_check.booking_type == "wfh":
+                base_type = "wfh_request"
+
+
 
         # ---- derive payment state (for correct label) ----
         booking = None
@@ -101,7 +161,7 @@ def notifications_page(
                 now = datetime.utcnow()
                 if booking.status == "Token Paid":
                     payment_state = "paid"
-                elif booking.expires_at < now:
+                elif booking.expires_at and booking.expires_at < now:
                     payment_state = "expired"
                 else:
                     payment_state = "pending"
@@ -112,31 +172,6 @@ def notifications_page(
             display_type = "token_paid"
         elif payment_state == "expired":
             display_type = "payment_expired"
-
-        type_label_map = {
-            "booking_request": "Booking Request",
-            "auto_rejected": "Auto Rejected",
-            "payment_required": "Payment Required",
-            "waiting_payment": "Waiting for Payment",
-            "token_paid": "Payment Successful",
-            "payment_expired": "Payment Cancelled",
-        }
-        type_icon_map = {
-            "booking_request": "📩",
-            "auto_rejected": "❌",
-            "payment_required": "💳",
-            "waiting_payment": "⏳",
-            "token_paid": "✅",
-            "payment_expired": "❌",
-        }
-        type_badge_class_map = {
-            "booking_request": "bg-primary",
-            "auto_rejected": "bg-danger",
-            "payment_required": "bg-warning text-dark",
-            "waiting_payment": "bg-info text-dark",
-            "token_paid": "bg-success",
-            "payment_expired": "bg-danger",
-        }
 
         type_label = type_label_map.get(display_type, "Notification")
         type_icon = type_icon_map.get(display_type, "🔔")
@@ -168,13 +203,21 @@ def notifications_page(
             )
 
         # --- context-specific UI blocks ---
-        if n.action_type == "booking_request":
+        if base_type in ("booking_request", "wfh_request"):
             booking_req = db.get(Booking, n.booking_id) if n.booking_id else None
-            if booking_req and booking_req.status == "Pending":
+
+            # ---------------- ONSITE BOOKING (has timer) ----------------
+            if (
+                    booking_req
+                    and booking_req.booking_type != "wfh"
+                    and booking_req.status == "Pending"
+                    and booking_req.expires_at
+            ):
                 remaining = max(
                     0,
                     int((booking_req.expires_at - datetime.utcnow()).total_seconds()),
                 )
+
                 block.append(
                     f"""
                     <div class="mt-3">
@@ -187,10 +230,13 @@ def notifications_page(
                             </button>
                             <div class="ms-md-3 small text-muted d-flex align-items-center gap-1">
                                 ⏳ <span>Auto-rejects in</span>
-                                <span class="fw-semibold" id="countdown-{booking_req.id}">{remaining}</span>
+                                <span class="fw-semibold" id="countdown-{booking_req.id}">
+                                    {remaining}
+                                </span>
                             </div>
                         </div>
                     </div>
+
                     <script>
                         function formatTime_{booking_req.id}(seconds) {{
                             const m = Math.floor(seconds / 60);
@@ -202,6 +248,7 @@ def notifications_page(
                         const timer{booking_req.id} = setInterval(() => {{
                             const el = document.getElementById("countdown-{booking_req.id}");
                             if (!el) return;
+
                             if (timeLeft{booking_req.id} <= 0) {{
                                 clearInterval(timer{booking_req.id});
                                 el.innerText = "0:00";
@@ -209,7 +256,7 @@ def notifications_page(
                                     method: "POST",
                                     headers: {{ "Content-Type": "application/json" }},
                                     body: JSON.stringify({{ response: "Reject" }})
-                                }}).then(r => r.json()).then(() => location.reload());
+                                }}).then(() => location.reload());
                             }} else {{
                                 el.innerText = formatTime_{booking_req.id}(timeLeft{booking_req.id}--);
                             }}
@@ -221,7 +268,26 @@ def notifications_page(
                     """
                 )
 
-        elif n.action_type == "auto_rejected":
+            # ---------------- WFH BOOKING (NO TIMER) ----------------
+            elif booking_req and booking_req.booking_type == "wfh":
+                block.append(
+                    """
+                    <div class="mt-3">
+                        <span class="badge bg-warning text-dark mb-2">
+                            🏠 Work From Home – Price Pending
+                        </span>
+                        <div>
+                            <a href="/worker/wfh-bookings" class="btn btn-warning btn-sm">
+                                Open WFH Requests
+                            </a>
+                        </div>
+                    </div>
+                    """
+                )
+
+
+
+        elif base_type == "auto_rejected":
             block.append(
                 """
                 <div class="mt-3 alert alert-danger border-0 py-2 mb-0">
@@ -230,7 +296,8 @@ def notifications_page(
                 """
             )
 
-        elif n.action_type in ("payment_required", "waiting_payment"):
+
+        elif base_type in ("payment_required", "waiting_payment"):
             # Use the booking/payment_state we computed above
             if booking:
                 if payment_state == "paid":
@@ -431,8 +498,9 @@ def notifications_page(
                         if (filter === "unread") {{
                             show = !isRead;
                         }} else if (filter === "booking_request") {{
-                            show = (type === "booking_request");
-                        }} else if (filter === "payments") {{
+                            show = (type === "booking_request" || type === "wfh_request");
+                        }}
+                        else if (filter === "payments") {{
                             show = (type === "payment_required" || type === "waiting_payment");
                         }}
 

@@ -120,6 +120,9 @@ def _ensure_drive_timer_initialized(booking: Booking, db: Session) -> None:
 from sqlalchemy import and_
 
 def auto_warn_and_cancel_if_due(booking: Booking, db: Session) -> None:
+    if booking.booking_type == "wfh":
+        return
+
     """
     Server-side scheduler for automatic warnings + auto-cancel.
 
@@ -274,9 +277,20 @@ def auto_warn_and_cancel_if_due(booking: Booking, db: Session) -> None:
 
     if stage == 3:
         logger.info("auto_warn: stage 3 -> auto-cancel booking=%s", booking.id)
+
         booking.auto_cancelled = True
         booking.status = "Cancelled"
         booking.expires_at = now
+
+        # 🔥 CRITICAL CLEANUP
+        booking.payment_required = False
+        booking.payment_completed = False
+
+        if booking.provider:
+            booking.provider.busy = False
+
+        if booking.worker:
+            booking.worker.busy = False
 
         try:
             db.add(Notification(
@@ -295,6 +309,9 @@ def auto_warn_and_cancel_if_due(booking: Booking, db: Session) -> None:
 
 
 def get_next_warning_eta_seconds(booking: Booking, db: Session) -> Optional[int]:
+    if booking.booking_type == "wfh":
+        return None
+
     """
     Compute seconds until the next automatic warn/cancel event
     for this booking, based on the same logic as auto_warn_and_cancel_if_due.
@@ -446,14 +463,24 @@ def verify_extra_payment(
     if booking_id <= 0 or extra_minutes <= 0:
         return {"success": False, "message": "Invalid booking or minutes"}
 
-    # 3) Use existing logic to mark extra payment + start (or schedule) timer
+    # 3) Load booking and validate
+    booking = db.get(Booking, booking_id)
+    if not booking:
+        return {"success": False, "message": "Booking not found"}
+
+    if booking.booking_type == "wfh":
+        return {
+            "success": False,
+            "message": "Extra payment not allowed for work-from-home jobs"
+        }
+
+    # 4) Start extra timer only AFTER validation
     timer_result = start_extra_timer(
         payload={"booking_id": booking_id, "extra_minutes": extra_minutes},
         db=db,
         current_user=current_user,
     )
     if not timer_result.get("success"):
-        # If something failed in start_extra_timer, do not touch wallet
         return timer_result
 
     # 4) CREDIT worker wallet for the extra-time amount
@@ -509,7 +536,16 @@ def verify_worker_location(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    booking = db.get(Booking, booking_id) or HTTPException(404)
+    booking = db.get(Booking, booking_id)
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+
+    if booking.booking_type == "wfh":
+        raise HTTPException(
+            status_code=400,
+            detail="Location verification not applicable for work-from-home jobs"
+        )
+
     if current_user.id != booking.worker_id:
         raise HTTPException(403, "Unauthorized")
 
@@ -538,8 +574,16 @@ def request_extra_time(
         .order_by(Booking.id.desc())
         .first()
     )
+
     if not booking:
         return {"success": False, "message": "No active booking."}
+
+    if booking.booking_type == "wfh":
+        return {
+            "success": False,
+            "message": "Extra time not allowed for work-from-home jobs"
+        }
+
     if booking.extra_timer_requested:
         return {"success": False, "message": "Already requested."}
 
@@ -586,8 +630,11 @@ def get_estimated_drive_time_by_booking(
     """
     booking = db.get(Booking, booking_id)
     if not booking:
-        # keep behaviour consistent with a REST 404 for missing booking
         raise HTTPException(status_code=404, detail="Booking not found")
+
+    if booking.booking_type == "wfh":
+        return {"seconds": None}
+
 
     # Find coords for worker -> provider (both must exist)
     w = booking.worker
@@ -636,6 +683,12 @@ def create_order_for_extra(
     booking = db.get(Booking, booking_id)
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found")
+
+    if booking.booking_type == "wfh":
+        return {
+            "success": False,
+            "message": "Extra time is not applicable for work-from-home jobs"
+        }
 
     # Only provider (giver) can pay
     if current_user.id != booking.provider_id:
@@ -745,6 +798,12 @@ def start_extra_timer(
     if not booking:
         return {"success": False, "message": "Booking not found."}
 
+    if booking.booking_type == "wfh":
+        return {
+            "success": False,
+            "message": "Extra timer not allowed for work-from-home jobs"
+        }
+
     # Only provider or worker participants allowed to call
     if current_user.id not in (booking.provider_id, booking.worker_id):
         raise HTTPException(status_code=403, detail="Not part of booking")
@@ -847,7 +906,10 @@ def pay_extra_amount_get(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    booking = db.get(Booking, booking_id) or HTTPException(404)
+    booking = db.get(Booking, booking_id)
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+
     if current_user.id != booking.provider_id:
         raise HTTPException(403, "Unauthorized")
 
@@ -878,7 +940,9 @@ def pay_extra_amount_post(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    booking = db.get(Booking, booking_id) or HTTPException(404)
+    booking = db.get(Booking, booking_id)
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
     provider = booking.provider
     worker = booking.worker
 
@@ -1122,13 +1186,32 @@ def get_chat_status(
     booking = (
         db.query(Booking)
         .filter(
-            ((Booking.worker_id == current_user.id) | (Booking.provider_id == current_user.id)),
+            ((Booking.worker_id == current_user.id) |
+             (Booking.provider_id == current_user.id)),
             Booking.status == "Token Paid",
+            Booking.payment_completed == True
         )
         .first()
     )
+
     if not booking:
         return {"show_chat_icon": False}
+    if booking.booking_type == "wfh":
+        # Block interaction until price is confirmed
+        if not getattr(booking, "price_confirmed", False):
+            return {
+                "show_chat_icon": False,
+                "wfh_pending": True,
+                "booking_id": booking.id,
+            }
+
+        return {
+            "show_chat_icon": True,
+            "booking_id": booking.id,
+            "otp_code": None,
+            "show_otp_input": False,
+            "show_otp": False,
+        }
 
     is_giver = booking.provider_id == current_user.id
     is_worker = booking.worker_id == current_user.id
@@ -1157,6 +1240,15 @@ def verify_otp(
         .order_by(Booking.id.desc())
         .first()
     )
+    if not booking:
+        return {"success": False, "message": "No active booking found"}
+
+    if booking.booking_type == "wfh":
+        return {
+            "success": False,
+            "message": "OTP not required for work-from-home jobs"
+        }
+
     if not booking or not getattr(booking, "otp_code", None):
         return {"success": False, "message": "No valid booking found."}
 
@@ -1185,7 +1277,9 @@ def chat(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    booking = db.get(Booking, booking_id) or HTTPException(404)
+    booking = db.get(Booking, booking_id)
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
     if current_user.id not in [booking.worker_id, booking.provider_id]:
         raise HTTPException(403, "Forbidden")
     return templates.TemplateResponse("chat.html", {"request": request, "booking": booking})
@@ -1215,6 +1309,9 @@ def worker_check_warning(
 ):
     booking = db.get(Booking, booking_id)
     if not booking:
+        return {"warning": None, "next_warning_in_seconds": None}
+
+    if booking.booking_type == "wfh":
         return {"warning": None, "next_warning_in_seconds": None}
 
     # Only worker involved in this booking can see warnings

@@ -1210,7 +1210,49 @@
       }
     }
 
+   /* === WFH popup: FORCE small pill on mobile === */
 
+    /* === WFH popup: DESKTOP default === */
+    #wfh-popup {
+      top: 25%;
+      left: 16px;
+      transform: translateY(-50%);
+    }
+
+    @media (max-width: 768px) {
+      #wfh-popup {
+        top: 12px;
+        right: 12px;
+        left: auto;
+        transform: none;
+
+        display: inline-flex !important;
+        width: auto !important;
+        max-width: fit-content !important;
+
+        padding: 6px 10px;
+        gap: 6px;
+        font-size: 12px;
+
+        border-radius: 999px;
+        box-shadow: 0 6px 14px rgba(13,110,253,0.25);
+
+        white-space: nowrap;   /* ⬅ prevents stretching */
+      }
+
+      #wfh-popup span {
+        white-space: nowrap;
+      }
+
+      #wfh-popup span:first-child {
+        font-size: 14px;
+      }
+
+      #wfh-popup span:last-child {
+        font-size: 12px;
+        font-weight: 600;
+      }
+    }
 
 
     </style>
@@ -1462,6 +1504,10 @@
           <div class="cat-card" data-cat="Other">
             <span class="cat-emoji">⋯</span>
             <span class="cat-title">Other</span>
+          </div>
+          <div class="cat-card" data-cat="Sahayi from home">
+            <span class="cat-emoji">🏠</span>
+            <span class="cat-title">Sahayi from Home</span>
           </div>
         </div>
       </section>
@@ -1796,6 +1842,37 @@
   </div>
 </div>
 
+<div id="wfh-popup"
+     style="
+        position:fixed;
+        z-index:5000;
+
+        background: linear-gradient(135deg, #0d6efd, #3b82f6);
+        color:#ffffff;
+
+        padding:10px 14px;
+        border-radius:16px;
+        box-shadow:0 12px 28px rgba(13,110,253,0.35);
+
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        cursor:pointer;
+
+        display:none;
+        align-items:center;
+        gap:8px;
+     ">
+
+
+  <!-- Icon -->
+  <span style="font-size:18px;">🏠</span>
+
+  <!-- Text -->
+  <span style="font-size:14px; font-weight:600; white-space:nowrap;">
+    WFH Bookings
+  </span>
+
+</div>
+
 
 <div id="chat-fab"
      style="display:none;position:fixed;left:14px;bottom:14px;z-index:4600;width:56px;height:56px;
@@ -1954,6 +2031,83 @@
 
 
 <script>
+/*
+  SAFETY BRIDGE + AUTO REFRESH (APP ONLY)
+  - Desktop remains unchanged
+  - App users get updated location every 60 seconds
+*/
+
+(function () {
+  let injectedLocation = null;
+  let refreshTimer = null;
+
+  // Ask Flutter to send location again (if channel exists)
+  function requestFreshLocationFromFlutter() {
+    try {
+      // This works only if your Flutter WebView created a JavaScriptChannel named FlutterChannel
+      if (window.FlutterChannel && typeof window.FlutterChannel.postMessage === "function") {
+        window.FlutterChannel.postMessage("REQUEST_LOCATION");
+        console.log("📍 Requested fresh location from Flutter");
+      }
+    } catch (e) {
+      console.warn("FlutterChannel request failed:", e);
+    }
+  }
+
+  // Called by Flutter to inject location
+  window.onFlutterLocation = function (lat, lng) {
+    injectedLocation = {
+      coords: {
+        latitude: lat,
+        longitude: lng
+      }
+    };
+
+    console.log("📍 App location injected:", lat, lng);
+
+    if (typeof fetchLocationAndUpdate === "function") {
+      fetchLocationAndUpdate(false);
+    } else {
+      // If actions.js not loaded yet, try once after 1 second
+      setTimeout(() => {
+        if (typeof fetchLocationAndUpdate === "function") {
+          fetchLocationAndUpdate(false);
+        }
+      }, 1000);
+    }
+    // Start refresh loop once we know we are in App mode
+    if (!refreshTimer) {
+      refreshTimer = setInterval(() => {
+        requestFreshLocationFromFlutter();
+      }, 60 * 1000); // every 1 minute
+    }
+  };
+
+  // Intercept browser geolocation ONLY if Flutter injected location exists
+  const originalGetCurrentPosition = navigator.geolocation?.getCurrentPosition;
+
+  if (originalGetCurrentPosition) {
+    navigator.geolocation.getCurrentPosition = function (success, error, options) {
+      if (injectedLocation) {
+        // ✅ APP MODE: Return injected GPS silently
+        success(injectedLocation);
+        return;
+      }
+
+      // ✅ DESKTOP MODE: Normal browser behavior
+      return originalGetCurrentPosition.call(
+        navigator.geolocation,
+        success,
+        error,
+        options
+      );
+    };
+  }
+})();
+</script>
+
+
+<script>
   document.addEventListener("DOMContentLoaded", function () {
     const mobileNotify = document.getElementById("mobile-nav-notify");
     const mobileSOS = document.getElementById("mobile-nav-sos");
@@ -2040,7 +2194,7 @@
     const firstDone = localStorage.getItem(LOC_FIRST_DONE) === '1';
     if (!firstDone) {
       // FIRST EVER PAGE OPEN → do an auto-fetch once
-      await fetchLocationAndUpdate();
+      await fetchLocationAndUpdate(true); // ✅ force reverse geocode now
       // mark as done so future reloads won't auto fetch
       try { localStorage.setItem(LOC_FIRST_DONE, '1'); } catch {}
     } else {
@@ -2048,6 +2202,9 @@
       restoreLocationDisplay();
     }
   }
+
+  document.addEventListener("DOMContentLoaded", initLocationOnLoad);
+
 </script>
 
 
@@ -2580,7 +2737,8 @@ window.addEventListener('resize', positionWorkerToggle); // ← add this line
 })();
 
 // Role is decided per booking, not per profile
-let CURRENT_USER_ROLE = null;
+let CURRENT_USER_ROLE = window.CURRENT_USER_ROLE || null;
+
 
 // === PATCH: role-aware poll starters ===
 let warningPollStarted = false;
@@ -2764,14 +2922,45 @@ function prettyLocation(l, lat, lon) {
   return `Approx. ${lat.toFixed(3)}, ${lon.toFixed(3)}`;
 }
 
-async function fetchLocationAndUpdate() {
+// ✅ Geocode throttling keys
+const LAST_GEO_KEY = "LAST_GEO_LOOKUP";
+const GEO_DISTANCE_THRESHOLD = 1000; // meters (1 km)
+
+
+function distanceMeters(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const toRad = (x) => (x * Math.PI) / 180;
+
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+
+  return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function getLastGeo() {
+  try {
+    return JSON.parse(localStorage.getItem(LAST_GEO_KEY) || "null");
+  } catch {
+    return null;
+  }
+}
+
+function setLastGeo(lat, lon) {
+  localStorage.setItem(LAST_GEO_KEY, JSON.stringify({ lat, lon, t: Date.now() }));
+}
+
+
+async function fetchLocationAndUpdate(forceGeocode = false) {
   const locDisplay = document.getElementById("location-display");
   const locError = document.getElementById("location-error");
 
   if (!navigator.geolocation) {
-    if (locDisplay) {
-      setLocationDisplay("❌ Not supported"); // persist
-    }
+    if (locDisplay) setLocationDisplay("❌ Not supported");
     return;
   }
   if (_locInFlight) return;
@@ -2780,39 +2969,67 @@ async function fetchLocationAndUpdate() {
   navigator.geolocation.getCurrentPosition(
     async (pos) => {
       try {
-        if (locationRetryInterval) { clearInterval(locationRetryInterval); locationRetryInterval = null; }
+        if (locationRetryInterval) {
+          clearInterval(locationRetryInterval);
+          locationRetryInterval = null;
+        }
         if (locError) locError.style.display = "none";
 
         const lat = pos.coords.latitude;
         const lon = pos.coords.longitude;
 
-        let loc = { state: "Unknown", zipcode: "Unknown" };
-        try {
-          const res = await fetch("/get_location_details", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ latitude: lat, longitude: lon }),
-          });
-          if (res.ok) loc = await res.json();
-        } catch {}
+        // ✅ Decide whether we should reverse geocode or reuse cached UI
+        let shouldReverseGeocode = forceGeocode;
 
-        const needsFallback =
-          (!loc.state || loc.state === "Unknown") &&
-          (!loc.zipcode || loc.zipcode === "Unknown");
-        if (needsFallback) {
-          try {
-            const fb = await browserFallbackReverseGeocode(lat, lon);
-            loc = { ...loc, ...fb };
-          } catch (e) {
-            console.warn("Browser fallback reverse geocode failed:", e);
-          }
+        const last = getLastGeo();
+        if (!shouldReverseGeocode && last && typeof last.lat === "number" && typeof last.lon === "number") {
+          const moved = distanceMeters(last.lat, last.lon, lat, lon);
+          shouldReverseGeocode = moved >= GEO_DISTANCE_THRESHOLD;
         }
 
-        const pretty = prettyLocation(loc, lat, lon);
+        // ✅ Default loc
+        let loc = { state: "Unknown", zipcode: "Unknown", city: null };
 
-        // ✅ render + persist
-        setLocationDisplay(pretty, { state: loc.state || 'Unknown', zip: loc.zipcode || 'Unknown' });
+        if (shouldReverseGeocode) {
+          // ✅ Only now we call Mapbox/OSM
+          try {
+            const res = await fetch("/get_location_details", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ latitude: lat, longitude: lon }),
+            });
+            if (res.ok) loc = await res.json();
+          } catch {}
 
+          // fallback if Mapbox returns unknown
+          const needsFallback =
+            (!loc.state || loc.state === "Unknown") &&
+            (!loc.zipcode || loc.zipcode === "Unknown");
+
+          if (needsFallback) {
+            try {
+              const fb = await browserFallbackReverseGeocode(lat, lon);
+              loc = { ...loc, ...fb };
+            } catch (e) {
+              console.warn("Browser fallback reverse geocode failed:", e);
+            }
+          }
+
+          // ✅ Persist last geo lookup position so we don’t spam Mapbox
+          setLastGeo(lat, lon);
+
+          const pretty = prettyLocation(loc, lat, lon);
+          setLocationDisplay(pretty, {
+            state: loc.state || "Unknown",
+            zip: loc.zipcode || "Unknown",
+          });
+        } else {
+          // ✅ No reverse geocode: keep the existing displayed location
+          // (Don't change UI text every minute)
+          console.log("✅ Skipped reverse geocode (not moved enough)");
+        }
+
+        // ✅ Always update backend with raw GPS (cheap + needed for nearby matching)
         try {
           await fetch("/update_location", {
             method: "POST",
@@ -2820,8 +3037,8 @@ async function fetchLocationAndUpdate() {
             body: JSON.stringify({
               latitude: lat,
               longitude: lon,
-              state: loc.state,
-              zipcode: loc.zipcode,
+              state: loc.state || "Unknown",
+              zipcode: loc.zipcode || "Unknown",
             }),
           });
         } catch {}
@@ -2830,7 +3047,7 @@ async function fetchLocationAndUpdate() {
       } catch (e) {
         console.warn("Reverse geocode/update failed:", e);
         const approx = `Approx. ${pos.coords.latitude.toFixed(3)}, ${pos.coords.longitude.toFixed(3)}`;
-        setLocationDisplay(approx); // ✅ persist fallback
+        setLocationDisplay(approx);
       } finally {
         _locInFlight = false;
       }
@@ -2840,15 +3057,14 @@ async function fetchLocationAndUpdate() {
       if (locError) locError.style.display = "block";
       _locInFlight = false;
 
-      // On first load you might have a retry loop. After first success,
-      // you can keep this off; it won't run on reloads anyway because we don't call this.
-      if (!locationRetryInterval && localStorage.getItem(LOC_FIRST_DONE) !== '1') {
-        locationRetryInterval = setInterval(fetchLocationAndUpdate, 10000);
+      if (!locationRetryInterval && localStorage.getItem(LOC_FIRST_DONE) !== "1") {
+        locationRetryInterval = setInterval(() => fetchLocationAndUpdate(false), 10000);
       }
     },
     { enableHighAccuracy: true, timeout: 10000 }
   );
 }
+
 
 
 // Manual retry button
@@ -2987,7 +3203,7 @@ document.getElementById("close-change-location")?.addEventListener("click", () =
 
 // Use live location
 document.getElementById("use-live-location")?.addEventListener("click", async () => {
-  await fetchLocationAndUpdate(); // existing function
+  await fetchLocationAndUpdate(true); // ✅ force reverse geocode now
   document.getElementById("change-location-box").style.display = "none";
 });
 
@@ -6007,6 +6223,41 @@ function startWorkerWarnTimer(seconds) {
   workerWarnCountdownInterval = setInterval(tick, 1000);
 }
 
+async function checkWFHBooking() {
+  try {
+    const res = await fetch("/api/wfh/context", {
+      credentials: "same-origin"
+    });
+
+    if (!res.ok) return;
+
+    const data = await res.json();
+
+    const popup = document.getElementById("wfh-popup");
+    if (!popup) return;
+
+    if (data.has_active_wfh === true) {
+      popup.style.display = "inline-flex";
+    } else {
+      popup.style.display = "none";
+    }
+  } catch (e) {
+    console.error("WFH check failed", e);
+  }
+}
+
+// run on load
+checkWFHBooking();
+
+// poll every 30s
+setInterval(checkWFHBooking, 30000);
+
+// click → ALWAYS go to dashboard
+document.getElementById("wfh-popup")?.addEventListener("click", () => {
+  window.location.href = "/wfh";
+});
+
 </script>
 </body>
 </html>
+

@@ -9,14 +9,14 @@ from math import radians, sin, cos, sqrt, atan2
 from decimal import Decimal
 from sqlalchemy import Integer, Float, Text, DateTime, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy import (
     Column, Integer, String, Text, DateTime, Float, Boolean, ForeignKey, Numeric,
     UniqueConstraint, CheckConstraint, Index, func
 )
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from .database import Base
-
+from sqlalchemy import Enum
 # ------------------ Models ------------------
 
 class User(Base):
@@ -46,6 +46,13 @@ class User(Base):
     jobs: Mapped[list["Job"]] = relationship("Job", back_populates="user", cascade="all,delete-orphan")
     wallet_transactions: Mapped[list["WalletTransaction"]] = relationship("WalletTransaction", back_populates="user")
     payout_requests: Mapped[list["PayoutRequest"]] = relationship("PayoutRequest", back_populates="user")
+
+    is_platform: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False,
+        index=True
+    )
 
     # helpers
     def distance_to(self, lat: float, lon: float) -> float:
@@ -176,12 +183,35 @@ class Booking(Base):
         String(32), unique=True, nullable=False, default=lambda: secrets.token_hex(16)
     )
 
+    # ---------------- WFH Escrow & Timing ----------------
+    started_at = Column(DateTime, nullable=True)
+    start_date: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    end_date: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    escrow_amount: Mapped[Decimal | None] = mapped_column(
+        Numeric(12, 2),
+        nullable=True
+    )
+
+    escrow_locked: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False
+    )
+
+    escrow_released: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False
+    )
+
     # foreign keys
     job_id: Mapped[int | None] = mapped_column(ForeignKey("job.id"))
     provider_id: Mapped[int | None] = mapped_column(ForeignKey("user.id"))
     worker_id: Mapped[int | None] = mapped_column(ForeignKey("user.id"))
 
-    status: Mapped[str] = mapped_column(String(20), default="pending")
+    status: Mapped[str] = mapped_column(String(32), default="pending", index=True)
+
 
     # core fields
     rate: Mapped[float | None] = mapped_column(Float)
@@ -212,6 +242,12 @@ class Booking(Base):
     payment_completed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     razorpay_status: Mapped[str | None] = mapped_column(String(32))
 
+
+    # ---------------- WFH specific ----------------
+    expected_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    deadline: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    description = Column(Text, nullable=False)  # ✅ ADD THIS
+
     # ---------------- Minimal Extra-time fields ----------------
     extra_timer_requested: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     extra_timer_requested_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
@@ -229,6 +265,11 @@ class Booking(Base):
         Boolean, name="extra_timer_payment_done", default=False, nullable=False
     )
 
+    # ---------------- WFH update / revision ----------------
+    update_message: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True
+    )
     @property
     def extra_payment_completed(self) -> bool:
         return bool(getattr(self, "extra_timer_payment_done", False))
@@ -255,6 +296,74 @@ class Booking(Base):
     warn_stage = Column(Integer, default=0, nullable=False)  # 0..3
     warn_last_at = Column(DateTime, nullable=True)
     auto_cancelled = Column(Boolean, default=False, nullable=False)
+    review_deadline = Column(DateTime, nullable=True)
+    completion_requested_once: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False,
+        index=True
+    )
+
+    booking_type: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="onsite",  # onsite | wfh
+        index=True
+    )
+
+    # ---------------- PRICE STATE ----------------
+    price_status: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="fixed",  # fixed | pending | proposed | confirmed
+        index=True
+    )
+
+    cancel_window_closed: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,  # Python-side default
+        server_default="false",  # DB-side default
+        nullable=False,
+        index=True
+    )
+
+    # ---------------- LOCATION SHARING (WFH) ----------------
+
+    location_request_status: Mapped[str | None] = mapped_column(
+        String(20),
+        nullable=True,
+        default=None,
+        index=True
+    )
+    # None | requested | approved | rejected
+
+    location_shared_at: Mapped[datetime | None] = mapped_column(
+        DateTime,
+        nullable=True
+    )
+
+    location_rejected_reason: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True
+    )
+
+    @property
+    def revision_count(self) -> int:
+        """
+        Number of times job giver requested rework.
+        Derived from project update history.
+        """
+        return sum(
+            1 for u in (self.project_updates or [])
+            if u.status == "revision_requested"
+        )
+
+    dispute = relationship(
+        "WFHDispute",
+        back_populates="booking",
+        uselist=False,
+        cascade="all, delete-orphan"
+    )
 
     # relations (reciprocal relationship for Job added here)
     job: Mapped["Job | None"] = relationship("Job", back_populates="bookings", foreign_keys=[job_id])
@@ -262,15 +371,222 @@ class Booking(Base):
     worker: Mapped["User | None"] = relationship("User", foreign_keys=[worker_id])
 
 
+    # ---------------- WFH PROJECT UPDATES ----------------
+    project_updates: Mapped[list["WFHProjectUpdate"]] = relationship(
+        "WFHProjectUpdate",
+        back_populates="booking",
+        cascade="all, delete-orphan",
+        order_by="WFHProjectUpdate.created_at.desc()"
+    )
+
+class WFHDispute(Base):
+    __tablename__ = "wfh_dispute"
+
+    id = Column(Integer, primary_key=True)
+    booking_id = Column(ForeignKey("booking.id"), nullable=False)
+    raised_by = Column(ForeignKey("user.id"), nullable=False)
+
+    reason = Column(Text, nullable=False)
+    status = Column(String(20), default="open")  # open / resolved
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    booking = relationship(
+        "Booking",
+        back_populates="dispute"
+    )
+
+
+
+class WFHProjectUpdate(Base):
+    __tablename__ = "wfh_project_update"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    booking_id: Mapped[int] = mapped_column(ForeignKey("booking.id"), nullable=False, index=True)
+
+    requested_by: Mapped[int] = mapped_column(ForeignKey("user.id"), nullable=False)
+    submitted_by: Mapped[int | None] = mapped_column(ForeignKey("user.id"), nullable=True)
+
+    update_type: Mapped[str] = mapped_column(String(30), default="progress")
+    message: Mapped[str] = mapped_column(Text, nullable=True)
+    provider_comment: Mapped[str | None] = mapped_column(Text)
+
+    preview_url: Mapped[str | None] = mapped_column(String(255))
+    file_url: Mapped[str | None] = mapped_column(String(255))
+
+    status: Mapped[str] = mapped_column(String(20), default="requested", index=True)
+
+    # 🔴 NEW — REQUIRED
+    request_origin: Mapped[str] = mapped_column(
+        Enum("system", "job_giver", name="wfh_update_origin"),
+        nullable=False,
+        default="job_giver",
+        index=True
+    )
+
+    request_deadline: Mapped[datetime | None] = mapped_column(
+        DateTime,
+        nullable=True,
+        index=True
+    )
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    submitted_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+    booking: Mapped["Booking"] = relationship(
+        "Booking",
+        back_populates="project_updates"
+    )
+
+
+class WFHDeliverable(Base):
+    __tablename__ = "wfh_deliverable"
+
+    id = Column(Integer, primary_key=True)
+    booking_id = Column(ForeignKey("booking.id"), nullable=False)
+    version = Column(Integer, default=1)  # v1, v2, v3
+    submitted_by = Column(ForeignKey("user.id"), nullable=False)
+
+    type = Column(String(20), nullable=False)
+    # website | mobile_app | design | content | food | craft | other
+
+    message = Column(Text, nullable=True)  # explanation / notes
+
+    file_url = Column(String(255), nullable=True)
+    preview_url = Column(String(255), nullable=True)
+
+    status = Column(String(20), default="submitted")
+    # submitted | revision_requested | approved
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class WFHDisputeResponse(Base):
+    __tablename__ = "wfh_dispute_response"
+
+    id = Column(Integer, primary_key=True)
+    dispute_id = Column(ForeignKey("wfh_dispute.id"), nullable=False)
+    user_id = Column(ForeignKey("user.id"), nullable=False)
+
+    message = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    files = relationship(
+        "WFHDisputeFile",
+        primaryjoin="WFHDisputeResponse.id==WFHDisputeFile.response_id",
+        cascade="all, delete-orphan"
+    )
+
+
+class WFHDisputeFile(Base):
+    __tablename__ = "wfh_dispute_file"
+
+    id = Column(Integer, primary_key=True)
+
+    dispute_id = Column(
+        ForeignKey("wfh_dispute.id"),
+        nullable=False,
+        index=True
+    )
+
+    response_id = Column(
+        ForeignKey("wfh_dispute_response.id"),
+        nullable=True
+    )
+
+    file_url = Column(String(255), nullable=False)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+
 class PlatformProfit(Base):
     __tablename__ = "platform_profit"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    booking_id: Mapped[int] = mapped_column(ForeignKey("booking.id"), nullable=False)
-    amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
-    giver_commission: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
-    worker_commission: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    # ---- Core reference ----
+    booking_id: Mapped[int | None] = mapped_column(
+        ForeignKey("booking.id"), nullable=True
+    )
+
+    # ---- Financial classification ----
+    type: Mapped[str] = mapped_column(
+        String(32), nullable=False
+        # values:
+        # 'commission'
+        # 'refund'
+        # 'withdrawal'
+        # 'escrow_hold'
+        # 'escrow_release'
+    )
+
+    direction: Mapped[str] = mapped_column(
+        String(8), nullable=False
+        # 'credit' | 'debit'
+    )
+
+    # ---- Amounts ----
+    amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
+
+    giver_commission: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    worker_commission: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+
+    # ---- Escrow / Hold tracking ----
+    on_hold: Mapped[bool] = mapped_column(default=False)
+    hold_for_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("user.id")
+    )
+    release_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+    # ---- Audit ----
+    reference: Mapped[str] = mapped_column(String(64), unique=True)
+    meta: Mapped[dict | None] = mapped_column(JSONB)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow
+    )
+
+class PlatformBalance(Base):
+    __tablename__ = "platform_balance"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+    total_company_profit: Mapped[Decimal] = mapped_column(Numeric(14,2), default=0)
+    total_worker_distributed: Mapped[Decimal] = mapped_column(Numeric(14,2), default=0)
+    total_refunded: Mapped[Decimal] = mapped_column(Numeric(14,2), default=0)
+    total_withdrawn: Mapped[Decimal] = mapped_column(Numeric(14,2), default=0)
+
+    available_profit: Mapped[Decimal] = mapped_column(Numeric(14,2), default=0)
+    bank_balance: Mapped[Decimal] = mapped_column(Numeric(14,2), default=0)
+
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+class JobDistanceCache(Base):
+    __tablename__ = "job_distance_cache"
+
+    id = Column(Integer, primary_key=True)
+
+    job_id = Column(Integer, ForeignKey("job.id"), nullable=False)
+    skill_id = Column(Integer, ForeignKey("skill.id"), nullable=False)
+
+    # cached worker location snapshot
+    worker_lat = Column(Float, nullable=False)
+    worker_lon = Column(Float, nullable=False)
+
+    # cached user location snapshot
+    user_lat = Column(Float, nullable=False)
+    user_lon = Column(Float, nullable=False)
+
+    # mapbox results
+    distance_km = Column(Float, nullable=False)
+    duration_min = Column(Float, nullable=True)
+
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("job_id", "skill_id", name="uq_job_skill_distance"),
+    )
 
 
 class Notification(Base):

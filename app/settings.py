@@ -28,6 +28,7 @@ class Settings:
 
     # App secrets and config
     SECRET_KEY: str = os.getenv("SECRET_KEY", "change-me")  # MUST be changed in prod
+    FERNET_KEY: str = os.getenv("FERNET_KEY")
     DATABASE_URL: str = os.getenv(
         "DATABASE_URL",
         "postgresql+psycopg://postgres:Joe72022%40@127.0.0.1:5432/sahayidb"
@@ -36,6 +37,7 @@ class Settings:
     # Razorpay (same keys you already use for the first payment)
     RAZORPAY_KEY_ID: str = os.getenv("RAZORPAY_KEY_ID", "")
     RAZORPAY_KEY_SECRET: str = os.getenv("RAZORPAY_KEY_SECRET", "")
+
 
     # --- Auth / token settings ---
     ACCESS_TOKEN_SECRET: str = os.getenv("ACCESS_TOKEN_SECRET", "dev_access_secret_change_me")
