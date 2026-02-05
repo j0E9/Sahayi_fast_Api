@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Pay Tokens</title>
   <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+  <script src="/static/js/theme.js" defer></script>
   <style>
     body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; padding: 24px; }
     .card { max-width: 520px; margin: auto; border: 1px solid #e5e7eb; border-radius: 12px; padding: 20px; }
@@ -15,9 +16,138 @@
     .btn-primary { background: #2563eb; color: white; }
     .muted { color: #6b7280; font-size: 14px; }
     .divider { border-top: 1px solid #e5e7eb; margin: 10px 0; }
+
+    /* ================= DARK MODE ================= */
+    [data-theme="dark"] body{
+      background: linear-gradient(180deg, #020617, #020617);
+      color: #f9fafb;
+    }
+
+    /* Main Card */
+    [data-theme="dark"] .card{
+      background: rgba(2,6,23,.95);
+      border-color: #1e293b;
+      box-shadow: 0 25px 60px rgba(0,0,0,.6);
+    }
+
+    /* Text */
+    [data-theme="dark"] h2{
+      color: #f9fafb;
+    }
+
+    [data-theme="dark"] .row span,
+    [data-theme="dark"] .row strong{
+      color: #e5e7eb;
+    }
+
+    [data-theme="dark"] .row-muted{
+      color: #94a3b8;
+    }
+
+    [data-theme="dark"] .muted{
+      color: #94a3b8;
+    }
+
+    /* Divider */
+    [data-theme="dark"] .divider{
+      border-color: #1e293b;
+    }
+
+    /* Button */
+    [data-theme="dark"] .btn-primary{
+      background: linear-gradient(135deg,#2563eb,#38bdf8);
+      border: none;
+    }
+
+    [data-theme="dark"] .btn-primary:hover{
+      opacity: .9;
+    }
+
+    [data-theme="dark"] .btn-primary:disabled{
+      background: #334155;
+      color: #94a3b8;
+    }
+    /* ================= SUCCESS MODAL ================= */
+
+    .success-overlay{
+      position: fixed;
+      inset: 0;
+      background: rgba(2,6,23,.75);
+      backdrop-filter: blur(6px);
+      z-index: 9999;
+
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .success-card{
+      background: #ffffff;
+      border-radius: 18px;
+      padding: 28px 26px;
+      width: 90%;
+      max-width: 360px;
+      text-align: center;
+
+      box-shadow: 0 25px 60px rgba(0,0,0,.35);
+      animation: popIn .25s ease;
+    }
+
+    .success-icon{
+      font-size: 42px;
+      margin-bottom: 10px;
+    }
+
+    .success-card h3{
+      font-weight: 800;
+      margin-bottom: 6px;
+    }
+
+    .success-card p{
+      color: #64748b;
+      font-size: 14px;
+    }
+
+    /* Dark Mode */
+    [data-theme="dark"] .success-card{
+      background: #020617;
+      border: 1px solid #1e293b;
+      color: #f9fafb;
+    }
+
+    [data-theme="dark"] .success-card p{
+      color: #94a3b8;
+    }
+
+    /* Animation */
+    @keyframes popIn{
+      from{ transform: scale(.9); opacity:0; }
+      to{ transform: scale(1); opacity:1; }
+    }
+    /* Hide success modal by default */
+    .success-overlay.hidden{
+      display: none;
+    }
+
+
+
   </style>
 </head>
 <body>
+
+<!-- Payment Success Modal -->
+<div id="successOverlay" class="success-overlay hidden">
+  <div class="success-card">
+    <div class="success-icon">✅</div>
+    <h3>Payment Successful</h3>
+    <p>Your payment has been completed successfully.</p>
+
+    <button id="successBtn" class="btn btn-primary mt-3">
+      Continue
+    </button>
+  </div>
+</div>
+
   <div class="card">
     <h2>Confirm Payment</h2>
 
@@ -108,8 +238,17 @@
           });
           const v = await verifyRes.json();
           if (verifyRes.ok && v.success) {
-            alert("✅ Payment Successful");
-            window.location.replace("/welcome");
+
+            // Show custom success popup
+            const overlay = document.getElementById("successOverlay");
+            const btn = document.getElementById("successBtn");
+
+            overlay.classList.remove("hidden");
+
+            btn.onclick = () => {
+              window.location.replace("/welcome");
+            };
+
           } else {
             alert("Payment verification failed: " + (v.detail || v.message || "Unknown error"));
             payBtn.disabled = false;

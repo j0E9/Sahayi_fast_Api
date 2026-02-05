@@ -7,6 +7,7 @@ from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import Notification, Booking, User
+from app.security.auth import get_current_user
 
 router = APIRouter(prefix="", tags=["notifications"])
 
@@ -41,15 +42,6 @@ type_badge_class_map = {
 }
 
 
-# --- Trust API-style session auth ---
-def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
-    uid = request.session.get("user_id")
-    if not uid:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
-    user = db.query(User).get(int(uid))
-    if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
-    return user
 
 # --- Response schema (optional but nice) ---
 class JobAlertOut(BaseModel):
@@ -161,17 +153,20 @@ def notifications_page(
                 now = datetime.utcnow()
                 if booking.status == "Token Paid":
                     payment_state = "paid"
-                elif booking.expires_at and booking.expires_at < now:
+                elif booking.status in ("Cancelled", "AutoCancelled"):
                     payment_state = "expired"
                 else:
                     payment_state = "pending"
 
         # effective type for display (badge & icon)
         display_type = base_type
-        if payment_state == "paid":
-            display_type = "token_paid"
-        elif payment_state == "expired":
-            display_type = "payment_expired"
+
+        # ✅ ONLY convert payment notifications
+        if base_type in ("payment_required", "waiting_payment"):
+            if payment_state == "paid":
+                display_type = "token_paid"
+            elif payment_state == "expired":
+                display_type = "payment_expired"
 
         type_label = type_label_map.get(display_type, "Notification")
         type_icon = type_icon_map.get(display_type, "🔔")
@@ -185,7 +180,7 @@ def notifications_page(
 
         block = [
             f'<div class="notification-card card mb-3 shadow-sm {read_class}" '
-            f'     data-type="{base_type}" data-read={"false" if was_unread else "true"}>',
+            f'     data-type="{display_type}" data-read={"false" if was_unread else "true"}>',
             '  <div class="card-body d-flex flex-column flex-md-row gap-3 align-items-start">',
             '    <div class="notif-icon flex-shrink-0 d-flex align-items-center justify-content-center rounded-circle">',
             f'      <span class="fs-4">{type_icon}</span>',
@@ -368,10 +363,13 @@ def notifications_page(
         <title>Notifications - JobConnect</title>
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+        <link rel="stylesheet" href="/static/css/theme.css">
+        <script src="/static/js/theme.js" defer></script>
         <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
         <style>
             body {{
-                background: radial-gradient(circle at top left, #e0f2ff, #f8f9fa 45%, #f1f3f5);
+                background: var(--bg-main);
+                color: var(--text-main);
                 min-height: 100vh;
                 padding: 24px 12px;
                 font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -414,7 +412,8 @@ def notifications_page(
                 border-radius: 16px;
                 border: 1px solid rgba(0,0,0,0.03);
                 transition: transform 0.12s ease-out, box-shadow 0.12s ease-out, border-color 0.12s ease-out;
-                background-color: #ffffff;
+                background-color: var(--bg-card);
+                color: var(--text-main);
             }}
             .notification-card.notification-unread {{
                 border-color: #0d6efd33;
@@ -427,8 +426,8 @@ def notifications_page(
             .notif-icon {{
                 width: 44px;
                 height: 44px;
-                background: linear-gradient(135deg, #eef4ff, #edf2ff);
-                border: 1px solid #e0e7ff;
+                background: var(--bg-card);
+                border: 1px solid var(--border);
             }}
             .card-text {{
                 font-size: 0.95rem;
@@ -439,6 +438,91 @@ def notifications_page(
                     padding: 16px 8px;
                 }}
             }}
+            
+            /* ============================
+               DARK MODE FIX - NOTIFICATIONS
+               ============================ */
+            
+            html[data-theme="dark"] body {{
+              background: var(--bg-main);
+              color: #ffffff;
+            }}
+            
+            /* Notification cards */
+            html[data-theme="dark"] .notification-card {{
+              background: linear-gradient(180deg, #020617, #0b1220);
+              border: 1px solid #1e293b;
+              box-shadow: 0 6px 18px rgba(0,0,0,0.5);
+              color: #ffffff;
+              margin-bottom: 16px;
+            }}
+            
+            /* Main text */
+            html[data-theme="dark"] .notification-card .card-text {{
+              color: #ffffff !important;
+            }}
+            
+            /* Date text */
+            html[data-theme="dark"] .notification-card small {{
+              color: #94a3b8 !important;
+            }}
+            
+            /* Header */
+            html[data-theme="dark"] .notifications-header h2,
+            html[data-theme="dark"] .notifications-header p {{
+              color: #ffffff;
+            }}
+            
+            /* Filter pills */
+            html[data-theme="dark"] .filter-pill {{
+              background: #020617;
+              border: 1px solid #1e293b;
+              color: #f8fafc;
+            }}
+            
+            html[data-theme="dark"] .filter-pill:hover {{
+              background: #0b1220;
+            }}
+            
+            html[data-theme="dark"] .filter-pill.active {{
+              background: #2563eb;
+              border-color: #2563eb;
+              color: #ffffff;
+            }}
+            
+            /* Icon */
+            html[data-theme="dark"] .notif-icon {{
+              background: #020617;
+              border: 1px solid #1e293b;
+            }}
+            
+            /* Alerts */
+            html[data-theme="dark"] .alert {{
+              background: #0b1220;
+              border: 1px solid #1e293b;
+              color: #ffffff;
+            }}
+            
+            /* Buttons */
+            html[data-theme="dark"] .notification-card .btn {{
+              color: #ffffff;
+            }}
+            /* ================= FIX DARK MODE TIMER ================= */
+
+            html[data-theme="dark"] .notification-card .countdown,
+            html[data-theme="dark"] .notification-card [id^="countdown-"],
+            html[data-theme="dark"] .notification-card .text-muted span{{
+            
+              color: #38bdf8 !important;   /* cyan-blue */
+              font-weight: 600;
+            }}
+            
+            /* Clock + "Auto-rejects in" text */
+            html[data-theme="dark"] .notification-card .text-muted{{
+              color: #cbd5f5 !important;   /* light slate */
+            }}
+
+
         </style>
     </head>
     <body>

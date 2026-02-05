@@ -12,7 +12,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy import (
     Column, Integer, String, Text, DateTime, Float, Boolean, ForeignKey, Numeric,
-    UniqueConstraint, CheckConstraint, Index, func
+    UniqueConstraint, CheckConstraint, Index, func,Date
 )
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from .database import Base
@@ -46,6 +46,13 @@ class User(Base):
     jobs: Mapped[list["Job"]] = relationship("Job", back_populates="user", cascade="all,delete-orphan")
     wallet_transactions: Mapped[list["WalletTransaction"]] = relationship("WalletTransaction", back_populates="user")
     payout_requests: Mapped[list["PayoutRequest"]] = relationship("PayoutRequest", back_populates="user")
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=datetime.utcnow,
+        nullable=False,
+        index=True
+    )
 
     is_platform: Mapped[bool] = mapped_column(
         Boolean,
@@ -120,6 +127,118 @@ class Rating(Base):
         UniqueConstraint("booking_id", "job_giver_id", name="uq_rating_booking_giver"),  # 👈 ADD
     )
 
+class WorkerAvailability(Base):
+    __tablename__ = "worker_availability"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+    worker_id: Mapped[int] = mapped_column(
+        ForeignKey("user.id"),
+        index=True,
+        nullable=False
+    )
+
+    date: Mapped[datetime.date] = mapped_column(
+        Date,
+        nullable=False,
+        index=True
+    )
+
+    start_time: Mapped[str] = mapped_column(String(5), nullable=False)  # "09:00"
+    end_time: Mapped[str] = mapped_column(String(5), nullable=False)    # "22:00"
+
+    is_available: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=datetime.utcnow
+    )
+
+    worker: Mapped["User"] = relationship("User")
+
+from sqlalchemy import Time
+
+class FutureBooking(Base):
+    __tablename__ = "future_booking"
+
+    id = Column(Integer, primary_key=True)
+    worker_id = Column(ForeignKey("user.id"), nullable=False)
+    provider_id = Column(ForeignKey("user.id"), nullable=False)
+
+    date = Column(Date, nullable=False)
+
+    start_time = Column(Time, nullable=False)
+    end_time = Column(Time, nullable=False)
+
+    status = Column(String(20), default="reserved", index=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+from sqlalchemy import Time
+
+class WorkerBooking(Base):
+    __tablename__ = "worker_bookings"
+
+    id = Column(Integer, primary_key=True)
+    worker_id = Column(Integer, index=True, nullable=False)
+    giver_id = Column(Integer, index=True, nullable=False)
+
+    date = Column(Date, index=True, nullable=False)
+
+    start_time = Column(Time, nullable=False)
+    end_time = Column(Time, nullable=False)
+
+    status = Column(String(20), default="booked", index=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class BookingReport(Base):
+    __tablename__ = "booking_report"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+    booking_id: Mapped[int] = mapped_column(
+        ForeignKey("booking.id"),
+        nullable=False,
+        index=True
+    )
+
+    reporter_id: Mapped[int] = mapped_column(
+        ForeignKey("user.id"),
+        nullable=False,
+        index=True
+    )
+
+    reported_user_id: Mapped[int] = mapped_column(
+        ForeignKey("user.id"),
+        nullable=False,
+        index=True
+    )
+
+    severity_weight = Column(Integer, nullable=False)
+    reporter_weight = Column(Float, nullable=False)
+    final_weight = Column(Float, nullable=False)
+
+    reason: Mapped[str] = mapped_column(String(100), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+
+    proof_url: Mapped[str | None] = mapped_column(String(255))
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=datetime.utcnow
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "booking_id",
+            "reporter_id",
+            name="uq_booking_report_once"
+        ),
+    )
+
+
+
+
+
 class WorkerProfile(Base):
     __tablename__ = "worker_profile"
 
@@ -150,6 +269,21 @@ class WorkerProfile(Base):
     ifsc: Mapped[str | None] = mapped_column(String(20))
     account_number: Mapped[str | None] = mapped_column(String(50))
 
+    #Reports
+    # 🔥 Moderation (weighted, time-bounded)
+    risk_score_30d = Column(Float, default=0.0, nullable=False)
+    last_moderation_update = Column(DateTime)
+
+    # 🔴 STRIKE MEMORY
+    strike_count = Column(Integer, default=0, nullable=False)
+
+    moderation_status = Column(
+        Enum("normal", "limited", "suspended", "banned", name="moderation_status"),
+        default="normal",
+        nullable=False,
+        index=True
+    )
+
     # ID Proof
     id_front: Mapped[str | None] = mapped_column(String(200))
     id_back: Mapped[str | None] = mapped_column(String(200))
@@ -159,6 +293,7 @@ class WorkerProfile(Base):
     is_online: Mapped[bool] = mapped_column(Boolean, default=False)
     is_worker: Mapped[bool] = mapped_column(Boolean, default=False)
     is_verified: Mapped[bool] = mapped_column(Boolean, default=False)
+
 
     user: Mapped["User"] = relationship("User", back_populates="worker_profile")
 
@@ -345,6 +480,12 @@ class Booking(Base):
     location_rejected_reason: Mapped[str | None] = mapped_column(
         String(255),
         nullable=True
+    )
+
+    giver_commission_amount: Mapped[Decimal | None] = mapped_column(
+        Numeric(12, 2),
+        nullable=True,
+        default=Decimal("0.00")
     )
 
     @property
@@ -567,8 +708,18 @@ class JobDistanceCache(Base):
 
     id = Column(Integer, primary_key=True)
 
-    job_id = Column(Integer, ForeignKey("job.id"), nullable=False)
-    skill_id = Column(Integer, ForeignKey("skill.id"), nullable=False)
+    job_id = Column(
+        Integer,
+        ForeignKey("job.id", ondelete="CASCADE"),
+        nullable=False
+    )
+
+    skill_id = Column(
+        Integer,
+        ForeignKey("skill.id", ondelete="CASCADE"),
+        nullable=False
+    )
+
 
     # cached worker location snapshot
     worker_lat = Column(Float, nullable=False)

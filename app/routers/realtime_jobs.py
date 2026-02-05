@@ -22,24 +22,16 @@ from razorpay.errors import SignatureVerificationError
 import logging
 from datetime import datetime, timedelta
 from app.settings import settings
-from sqlalchemy import and_
+from app.security.auth import get_current_user
 from sqlalchemy.orm import Session
 from datetime import datetime
 from sqlalchemy import or_
+from app.services.onsite_escrow import refund_onsite_escrow
+
 # If you use Twilio in this file, import your client/TWILIO_PHONE as needed.
 # from app.twilio import client, TWILIO_PHONE
 
 router = APIRouter(tags=["realtime"])
-
-# ---------- auth (Trust API style) ----------
-def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
-    uid = request.session.get("user_id")
-    if not uid:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
-    user = db.get(User, int(uid))
-    if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
-    return user
 
 # ---------- helpers ----------
 def generate_otp() -> str:
@@ -282,13 +274,29 @@ def auto_warn_and_cancel_if_due(booking: Booking, db: Session) -> None:
         booking.status = "Cancelled"
         booking.expires_at = now
 
-        # 🔥 CRITICAL CLEANUP
+        # ✅ IMPORTANT: keep correct payment flags for cancelled booking
         booking.payment_required = False
-        booking.payment_completed = False
+        booking.payment_completed = True  # ✅ because money was paid and is refunded to wallet
 
+        # ✅ Refund escrow to provider wallet if it exists
+        try:
+            if (
+                    booking.booking_type in {"onsite", "realtime"}
+                    and getattr(booking, "escrow_locked", False) is True
+                    and getattr(booking, "escrow_released", False) is False
+            ):
+                refund_ok = refund_onsite_escrow(
+                    db=db,
+                    booking=booking,
+                    reason="realtime_auto_cancel_warning"
+                )
+                logger.info("auto_warn: refund_ok=%s booking=%s", refund_ok, booking.id)
+        except Exception as e:
+            logger.exception("auto_warn: refund failed booking=%s err=%s", booking.id, str(e))
+
+        # free both sides
         if booking.provider:
             booking.provider.busy = False
-
         if booking.worker:
             booking.worker.busy = False
 

@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
 
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="/static/js/theme.js" defer></script>
+
 
   <style>
     :root{
@@ -84,6 +86,7 @@
       backdrop-filter: blur(10px);
       -webkit-backdrop-filter: blur(10px);
       font-weight: 800;
+      white-space: nowrap;
     }
 
     .hero-meta{
@@ -224,6 +227,7 @@
       -webkit-backdrop-filter: blur(12px);
       z-index: 50;
       display: none;
+      border-radius: 18px 18px 0 0;
     }
 
     @media(max-width: 768px){
@@ -268,6 +272,176 @@
     select.form-select:focus{
       border-color: rgba(13,110,253,.40) !important;
     }
+
+    /* ================= MOBILE COMPACT UI FIX ================= */
+    @media (max-width: 576px){
+
+      .page-wrap{
+        margin: 12px auto 95px;
+        padding: 0 12px;
+      }
+
+      .hero{
+        padding: 14px;
+        border-radius: 18px;
+      }
+
+      .hero-title{
+        font-size: 1.1rem;
+      }
+
+      .hero-sub{
+        font-size: .85rem;
+        line-height: 1.25;
+      }
+
+      .hero-pill{
+        padding: 6px 10px;
+        font-size: .78rem;
+        gap: 6px;
+      }
+
+      /* Convert meta into clean grid */
+      .hero-meta{
+        margin-top: 10px;
+        gap: 10px;
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+      }
+
+      .meta-box{
+        min-width: 0;
+        padding: 10px;
+        border-radius: 14px;
+      }
+
+      .meta-box .label{
+        font-size: .68rem;
+      }
+
+      .meta-box .value{
+        font-size: .95rem;
+      }
+
+      .glass-card .card-body{
+        padding: 14px;
+      }
+
+      .section-title h6{
+        font-size: 1rem;
+      }
+
+      .pill{
+        font-size: .72rem;
+        padding: 5px 9px;
+      }
+
+      .alert{
+        padding: 10px 12px;
+        font-size: .92rem;
+        border-radius: 14px;
+      }
+
+      .update-card{
+        padding: 12px;
+        border-radius: 14px;
+      }
+
+      .btn-soft{
+        padding: 10px 12px;
+        font-size: .95rem;
+      }
+    }
+
+    /* ================= DARK MODE ================= */
+    [data-theme="dark"] body{
+      background:
+        radial-gradient(900px 500px at 15% 10%, rgba(59,130,246,.18), transparent),
+        radial-gradient(900px 550px at 85% 20%, rgba(14,165,233,.18), transparent),
+        linear-gradient(180deg, #020617, #020617);
+      color: #f9fafb;
+    }
+
+    /* Glass / Cards */
+    [data-theme="dark"] .glass-card,
+    [data-theme="dark"] .update-card,
+    [data-theme="dark"] .mobile-actions{
+      background: rgba(2,6,23,.92) !important;
+      border-color: #1e293b !important;
+      color: #f9fafb !important;
+    }
+
+    /* Hero meta */
+    [data-theme="dark"] .meta-box{
+      background: rgba(255,255,255,.06) !important;
+      border-color: #1e293b !important;
+    }
+
+    /* Headings */
+    [data-theme="dark"] .hero-title,
+    [data-theme="dark"] .section-title h6{
+      color: #f9fafb !important;
+    }
+
+    [data-theme="dark"] .hero-sub{
+      color: #cbd5f5 !important;
+    }
+
+    /* Description */
+    [data-theme="dark"] .desc-box{
+      background: rgba(59,130,246,.08) !important;
+      border-color: rgba(59,130,246,.25) !important;
+      color: #e5e7eb !important;
+    }
+
+    /* Pills */
+    [data-theme="dark"] .pill{
+      background: rgba(255,255,255,.06) !important;
+      border-color: #1e293b !important;
+      color: #fff !important;
+    }
+
+    /* Forms */
+    [data-theme="dark"] input,
+    [data-theme="dark"] textarea,
+    [data-theme="dark"] select,
+    [data-theme="dark"] .input-group-text{
+      background: #020617 !important;
+      color: #fff !important;
+      border-color: #334155 !important;
+    }
+
+    [data-theme="dark"] input::placeholder,
+    [data-theme="dark"] textarea::placeholder{
+      color: #64748b !important;
+    }
+
+    /* Alerts */
+    [data-theme="dark"] .alert{
+      background: rgba(255,255,255,.05) !important;
+      color: #f9fafb !important;
+      border-color: #1e293b !important;
+    }
+
+    /* Buttons */
+    [data-theme="dark"] .btn-outline-primary,
+    [data-theme="dark"] .btn-outline-danger,
+    [data-theme="dark"] .btn-outline-secondary{
+      color: #fff !important;
+      border-color: #475569 !important;
+    }
+
+    [data-theme="dark"] .btn-outline-primary:hover,
+    [data-theme="dark"] .btn-outline-danger:hover,
+    [data-theme="dark"] .btn-outline-secondary:hover{
+      background: rgba(255,255,255,.08) !important;
+    }
+
+    /* Timeline hover */
+    [data-theme="dark"] .update-card:hover{
+      box-shadow: 0 25px 60px rgba(0,0,0,.7) !important;
+    }
+
   </style>
 </head>
 
@@ -396,9 +570,13 @@
    | list
    | length %}
 
+  {% set max_revisions = 3 %}
+  {% set remaining_revisions = max_revisions - revision_count %}
+
+
   {% if booking.status != "WFH_CANCELLED" %}
   <!-- PAYMENT + ACTIONS -->
-  <div class="glass-card mb-3">
+  <div class="glass-card mb-3" id="paymentActions">
     <div class="card-body">
 
       <div class="section-title">
@@ -433,11 +611,11 @@
               </div>
             {% endif %}
 
-            <form method="post" action="/wfh/giver/booking/{{ booking.id }}/submit-price">
+            <form method="post" action="/wfh/giver/booking/{{ booking.id }}/submit-price" class="ajax-form">
               <div class="input-group mt-2">
                 <span class="input-group-text">₹</span>
                 <input type="number" name="price" class="form-control" required>
-                <button class="btn btn-warning btn-soft">Submit</button>
+                <button type="submit" class="btn btn-warning btn-soft">Submit</button>
               </div>
             </form>
 
@@ -477,13 +655,86 @@
             </div>
           {% endif %}
 
-          {% if request_update_allowed and not has_pending_update_request %}
-            <form method="post" action="/wfh/booking/{{ booking.id }}/request-update" class="mt-3">
-              <button class="btn btn-outline-primary btn-soft w-100">
+          {% set expired_update = booking.project_updates
+             | selectattr("status", "equalto", "expired")
+             | selectattr("request_origin", "equalto", "job_giver")
+             | list
+             | first
+          %}
+
+          {% if expired_update %}
+            <div class="alert alert-danger mt-2">
+              ❌ Worker did not respond within deadline.
+              <br>
+              Choose an action below:
+            </div>
+
+            <!-- ✅ Option A: Extend time -->
+            <form method="post"
+                  action="/wfh/booking/{{ booking.id }}/extend-update"
+                  class="ajax-form mb-2">
+              <div class="d-grid gap-2">
+                <button type="submit" name="days" value="1" class="btn btn-outline-primary">
+                  ⏳ Extend by 24 Hours
+                </button>
+                <button type="submit" name="days" value="3" class="btn btn-outline-primary">
+                  ⏳ Extend by 3 Days
+                </button>
+              </div>
+            </form>
+
+            <!-- ✅ Option B: Cancel & Refund (only if allowed) -->
+            {% if not booking.completion_requested_once %}
+              <form method="post"
+                    action="/wfh/booking/{{ booking.id }}/cancel-missed-update"
+                    class="ajax-form"
+                    data-confirm="Worker missed update deadline. Cancel & refund escrow?">
+                <button type="submit" class="btn btn-danger w-100">
+                  ❌ Cancel & Refund Escrow
+                </button>
+              </form>
+            {% else %}
+              <div class="alert alert-secondary mt-2">
+                Worker already submitted completion. Refund cancel is blocked. Use dispute.
+              </div>
+            {% endif %}
+
+            <!-- ✅ Option C: Dispute -->
+            <form method="post"
+                  action="/wfh/booking/{{ booking.id }}/dispute"
+                  enctype="multipart/form-data"
+                  class="ajax-form mt-2"
+                  data-confirm="Open dispute? Escrow will be locked.">
+
+              <textarea name="reason"
+                        class="form-control mb-2"
+                        required
+                        minlength="10"
+                        rows="3"
+                        placeholder="Explain what happened clearly...">Worker did not respond after update deadline.</textarea>
+
+              <input type="file"
+                     name="proof"
+                     class="form-control mb-2"
+                     multiple
+                     required
+                     accept=".jpg,.jpeg,.png,.webp,.gif,.pdf,.zip">
+
+              <button type="submit" class="btn btn-outline-danger w-100">
+                ⚠️ Open Dispute
+              </button>
+            </form>
+          {% endif %}
+
+
+
+          {% if request_update_allowed and not has_pending_update_request and not expired_update %}
+            <form method="post" action="/wfh/giver/booking/{{ booking.id }}/request-update" class="ajax-form mt-3">
+              <button type="submit" class="btn btn-outline-primary btn-soft w-100">
                 🔄 Request Progress Update
               </button>
             </form>
-          {% elif booking.status == "WFH_IN_PROGRESS" %}
+          {% elif booking.status == "WFH_IN_PROGRESS" and not request_update_allowed %}
             <div class="alert alert-secondary text-center mt-3 mb-0">
               ⏳ You can request a progress update after 50% of the job time
             </div>
@@ -492,9 +743,9 @@
           {% if final_cancel_allowed and not booking.completion_requested_once and booking.status != "WFH_CANCELLED" %}
             <form method="post"
                   action="/wfh/booking/{{ booking.id }}/cancel"
-                  class="mt-3"
-                  onsubmit="return confirm('Cancel job after deadline? This will refund escrow.')">
-              <button class="btn btn-danger btn-soft w-100">
+                  class="ajax-form mt-3"
+                  data-confirm="Cancel job after deadline? This will refund escrow.">
+              <button type="submit" class="btn btn-danger btn-soft w-100">
                 ⏰ Cancel Job (Final)
               </button>
             </form>
@@ -506,170 +757,9 @@
   </div>
   {% endif %}
 
-  {% if not booking.payment_completed and booking.status != "WFH_CANCELLED" %}
-    <form method="post"
-          action="/wfh/booking/{{ booking.id }}/cancel"
-          onsubmit="return confirm('Cancel job before payment?')">
-      <button class="btn btn-outline-danger btn-soft w-100">
-        ❌ Cancel Job (Before Payment)
-      </button>
-    </form>
-  {% endif %}
-
-  {% if booking.payment_completed and booking.status == "WFH_REVIEW_PENDING" and revision_count >= 3 %}
-  <div class="glass-card mt-3 mb-3 border border-danger">
-    <div class="card-body">
-      <div class="section-title">
-        <h6 class="text-danger mb-0">⚠️ Dispute (Revision Limit Reached)</h6>
-        <span class="pill">3/3 revisions used</span>
-      </div>
-
-      <form method="post"
-            action="/wfh/booking/{{ booking.id }}/dispute"
-            enctype="multipart/form-data"
-            onsubmit="return confirm('Open dispute? Escrow will be frozen.')">
-
-        <label class="form-label mt-2 fw-bold">Dispute Reason</label>
-        <textarea name="reason" class="form-control mb-2" rows="3" required
-                  placeholder="Explain the issue clearly"></textarea>
-
-        <label class="form-label fw-bold">Upload Proof (optional)</label>
-        <input type="file" name="proof" id="proofFiles" class="form-control mb-2"
-               accept="image/*,.pdf" multiple>
-
-        <div class="alert alert-info p-2" style="font-size:14px;">
-          You can select multiple files in one time
-        </div>
-
-        <div id="selectedFilesBox" class="border rounded p-2 d-none">
-          <strong>Selected Files:</strong>
-          <ul id="selectedFilesList" class="mb-0"></ul>
-        </div>
-
-        <button class="btn btn-outline-danger btn-soft w-100 mt-2">
-          ⚖️ Open Dispute
-        </button>
-      </form>
-    </div>
-  </div>
-  {% endif %}
-
-  <!-- DISPUTE THREAD -->
-  {% if dispute %}
-    <div class="glass-card mb-3 border border-danger">
-      <div class="card-body">
-        <div class="section-title">
-          <h6 class="text-danger">⚖️ Dispute Thread</h6>
-          <span class="pill status-pill status-red">Active</span>
-        </div>
-
-        <div class="alert alert-warning">
-          <strong>Reason:</strong><br>
-          {{ dispute.reason }}
-        </div>
-
-        {% if dispute_responses %}
-          <h6 class="mt-3 fw-bold">📨 Responses</h6>
-
-          {% for r in dispute_responses %}
-            <div class="update-card">
-              <small class="text-muted">
-                {{ "You" if r.user_id == current_user.id else "Other User" }}
-                • {{ r.created_at.strftime("%d %b %Y, %I:%M %p") if r.created_at }}
-              </small>
-
-              <p class="mb-1 mt-2">{{ r.message }}</p>
-
-              {% if r.files %}
-                <div class="mt-2">
-                  <small class="text-muted">Attachments:</small><br>
-                  {% for f in r.files %}
-                    <a class="btn btn-sm btn-outline-secondary mt-1"
-                       href="/wfh/dispute/file/{{ f.id }}"
-                       target="_blank">
-                      📎 View File
-                    </a>
-                  {% endfor %}
-                </div>
-              {% endif %}
-            </div>
-          {% endfor %}
-        {% endif %}
-
-        {% set current_user_already_responded = dispute_responses
-           | selectattr("user_id", "equalto", current_user.id)
-           | list
-           | length > 0
-        %}
-
-        {% set dispute_worker_responded = dispute_responses
-           | selectattr("user_id", "equalto", booking.worker_id)
-           | list
-           | length > 0
-        %}
-
-        {% set dispute_giver_responded = dispute_responses
-           | selectattr("user_id", "equalto", booking.provider_id)
-           | list
-           | length > 0
-        %}
-
-        {% set both_responded = dispute_worker_responded and dispute_giver_responded %}
-
-        {% if dispute.raised_by != current_user.id and not current_user_already_responded %}
-          <hr>
-          <h6 class="text-danger fw-bold">📝 Share Your Side</h6>
-
-          <form method="post"
-                action="/wfh/dispute/{{ dispute.id }}/respond"
-                enctype="multipart/form-data"
-                onsubmit="return confirm('Submit your response to this dispute?')">
-
-            <textarea name="message" class="form-control mb-2" rows="3" required
-                      placeholder="Explain your side clearly..."></textarea>
-
-            <label class="form-label fw-bold">Upload Proof (optional)</label>
-            <input type="file" name="proof" id="proofFilesOpen"
-                   class="form-control mb-2" accept="image/*,.pdf" multiple>
-
-            <div class="alert alert-info p-2" style="font-size:14px;">
-              You can upload multiple files at once.
-            </div>
-
-            <div id="selectedFilesBoxOpen" class="border rounded p-2 d-none">
-              <strong>Selected Files:</strong>
-              <ul id="selectedFilesListOpen" class="mb-0"></ul>
-            </div>
-
-            <button class="btn btn-danger btn-soft w-100">
-              ✅ Submit Response
-            </button>
-          </form>
-
-        {% else %}
-
-          {% if both_responded %}
-            <div class="alert alert-success mt-3 text-center">
-              ✅ Both users responded. Admin will review and solve it soon.
-            </div>
-          {% elif dispute_giver_responded %}
-            <div class="alert alert-info mt-3 text-center">
-              ✅ You have responded. Waiting for admin review.
-            </div>
-          {% else %}
-            <div class="alert alert-secondary mt-3 text-center">
-              ✅ Dispute opened. Waiting for the other user response.
-            </div>
-          {% endif %}
-
-        {% endif %}
-      </div>
-    </div>
-  {% endif %}
-
   <!-- SUBMITTED WORK -->
   {% if booking.status != "WFH_CANCELLED" and (booking.project_updates or booking.status == "WFH_REVIEW_PENDING") %}
-    <div class="glass-card mb-3">
+    <div class="glass-card mb-3" id="submittedWork">
       <div class="card-body">
         <div class="section-title">
           <h6>📦 Submitted Work</h6>
@@ -677,11 +767,12 @@
         </div>
 
         {% for u in booking.project_updates
-           if u.status in ["submitted", "commented", "revision_requested", "approval_requested"] %}
+           if u.status in ["submitted", "commented", "revision_requested", "approval_requested", "approved"] %}
 
           <div class="update-card">
             <div class="update-header">
-              <strong>{{ u.update_type|capitalize }}</strong>
+              <strong>{{ u.update_type|replace("_", " ")|title }}</strong>
+
               <span class="pill">
                 🕒 {{ u.submitted_at.strftime("%d %b %I:%M %p") if u.submitted_at }}
               </span>
@@ -691,69 +782,239 @@
               <p class="mt-2 mb-2">{{ u.message }}</p>
             {% endif %}
 
+            {% if u.preview_url %}
+              <a class="btn btn-outline-primary btn-soft w-100 mb-2" target="_blank"
+                 href="{{ u.preview_url }}">
+                🔗 Open Preview Link
+              </a>
+            {% endif %}
+
             {% if u.file_url %}
-              <a class="btn btn-outline-primary btn-soft w-100"
+              <a class="btn btn-outline-primary btn-soft w-100 mb-2"
                  href="/wfh/update/file/{{ u.id }}">
                 📎 Download Attachment
               </a>
             {% endif %}
 
-            {% if u.provider_comment %}
-              <div class="alert alert-info mt-3 mb-0">
-                <strong>🗨 You commented:</strong><br>
-                {{ u.provider_comment }}
+            <!-- ✅ SHOW WORKER REQUESTED COMPLETION ACTIONS ONLY FOR MILESTONE -->
+            {% if booking.status == "WFH_REVIEW_PENDING" and u.status == "approval_requested" and u.update_type == "milestone" %}
+
+              <div class="alert alert-warning mt-3 mb-2">
+                ✅ Worker requested completion (Milestone). Choose an action:
               </div>
-            {% endif %}
 
-            {% if u.status == "submitted" and not u.provider_comment %}
-              <form method="post" class="mt-3">
-                <textarea name="reason" class="form-control" required
-                          placeholder="Send feedback to worker"></textarea>
-
-                <button formaction="/wfh/update/{{ u.id }}/comment"
-                        class="btn btn-info btn-soft w-100 mt-2">
-                  💬 Send Comment
+              <!-- ✅ APPROVE & RELEASE PAYMENT -->
+              <form method="post"
+                    action="/wfh/booking/{{ booking.id }}/approve-complete"
+                    class="ajax-form"
+                    data-confirm="Approve and release payment to worker?">
+                <button type="submit" class="btn btn-success btn-soft w-100 mb-2">
+                  ✅ Approve Work & Release Payment
                 </button>
               </form>
-            {% endif %}
-          </div>
-        {% endfor %}
 
-        {% if booking.status == "WFH_REVIEW_PENDING" and not booking.escrow_released %}
-          <hr>
+              {% if revision_count < 3 %}
+                <!-- ✅ REQUEST REVISION (MAX 3) -->
+                <form method="post"
+                      action="/wfh/update/{{ u.id }}/revision"
+                      class="ajax-form"
+                      data-confirm="Request revision from worker?">
 
-          <div class="alert alert-warning mt-3">
-            🧾 <strong>Worker has requested approval</strong>
-          </div>
+                  <textarea name="reason"
+                            class="form-control mb-2"
+                            required
+                            minlength="5"
+                            rows="2"
+                            placeholder="Explain what changes are needed..."></textarea>
 
-          <div class="d-grid gap-2 mt-2">
-            <form method="post" action="/wfh/booking/{{ booking.id }}/approve-complete">
-              <button class="btn btn-success btn-soft">
-                ✅ Approve & Release Payment
-              </button>
-            </form>
+                  <button type="submit"
+                          class="btn btn-warning btn-soft w-100"
+                          {% if remaining_revisions > 0 %}
+                            <button type="submit" class="btn btn-warning btn-soft w-100">
+                              🔁 Request Revision ({{ remaining_revisions }} left)
+                            </button>
+                          {% else %}
+                            <button type="button" class="btn btn-warning btn-soft w-100" disabled>
+                              🔁 Request Revision (Max reached)
+                            </button>
+                          {% endif %}
+                  </button>
+                </form>
+                <!-- ✅ OPTIONAL COMMENT -->
+                <form method="post"
+                      action="/wfh/update/{{ u.id }}/comment"
+                      class="ajax-form mt-2">
 
-            {% if revision_count < 3 %}
-              <form method="post" action="/wfh/booking/{{ booking.id }}/request-revision">
-                <input type="hidden" name="reason" value="Please revise the work">
-                <button class="btn btn-warning btn-soft">
-                  🔁 Request Revision ({{ 3 - revision_count }} left)
-                </button>
-              </form>
+                  <input type="text"
+                         name="reason"
+                         class="form-control mb-2"
+                         placeholder="Comment (optional)">
+
+                  <button type="submit" class="btn btn-outline-secondary btn-soft w-100">
+                    💬 Add Comment
+                  </button>
+                </form>
+
+              {% else %}
+                <!-- ✅ MAX REVISIONS REACHED -->
+                <div class="alert alert-danger mt-3 mb-2">
+                  ⚠️ Maximum revisions reached (3). Only approve or open dispute is allowed now.
+                </div>
+
+                <!-- ✅ Open Dispute -->
+                <form method="post"
+                      action="/wfh/booking/{{ booking.id }}/dispute"
+                      enctype="multipart/form-data"
+                      class="ajax-form"
+                      data-confirm="Open dispute? Escrow will be locked.">
+
+                  <textarea name="reason"
+                            class="form-control mb-2"
+                            required
+                            minlength="10"
+                            rows="3"
+                            placeholder="Explain what happened and why you are opening a dispute..."></textarea>
+
+                  <input type="file"
+                         name="proof"
+                         class="form-control mb-2"
+                         multiple
+                         required
+                         accept=".jpg,.jpeg,.png,.webp,.gif,.pdf,.zip">
+
+                  <button type="submit" class="btn btn-outline-danger btn-soft w-100">
+                    ⚠️ Open Dispute
+                  </button>
+                </form>
+              {% endif %}
+
             {% else %}
-              <div class="alert alert-danger text-center">
-                🚫 Maximum revisions reached (3/3)
-              </div>
+              <!-- ✅ FOR OTHER UPDATE TYPES: SHOW COMMENT BOX (JOB GIVER REPLY) -->
 
-              <div class="alert alert-info text-center">
-                ⚠️ You can raise a dispute only using the dispute form (with reason & proof upload).
-              </div>
+              {% if u.status == "submitted" and u.submitted_by == booking.worker_id %}
+                <div class="alert alert-info mt-3 mb-2">
+                  💬 Reply to this update (Job Giver Response)
+                </div>
+
+                <form method="post" action="/wfh/update/{{ u.id }}/comment" class="ajax-form">
+                  <input type="text"
+                         name="reason"
+                         class="form-control mb-2"
+                         required
+                         minlength="2"
+                         placeholder="Type your response to the worker...">
+
+                  <button type="submit" class="btn btn-outline-secondary btn-soft w-100">
+                    ✅ Send Reply
+                  </button>
+                </form>
+              {% endif %}
+
+              {% if u.status == "commented" and u.provider_comment %}
+                <div class="alert alert-secondary mt-3 mb-0">
+                  <strong>✅ Job Giver replied:</strong><br>
+                  {{ u.provider_comment }}
+                </div>
+              {% endif %}
+
             {% endif %}
           </div>
-        {% endif %}
+
+        {% endfor %}
       </div>
     </div>
   {% endif %}
+
+
+  {% if dispute %}
+    <div class="glass-card mb-3" id="disputeCenter">
+      <div class="card-body">
+
+        <div class="section-title">
+          <h6>⚠️ Dispute Center</h6>
+          <span class="pill status-pill status-red">WFH Disputed</span>
+        </div>
+
+        <div class="alert alert-danger">
+          <strong>Dispute Opened</strong><br>
+          Reason: {{ dispute.reason }}
+        </div>
+
+        <!-- ✅ Timeline -->
+        {% if dispute_responses and dispute_responses|length > 0 %}
+          {% for r in dispute_responses %}
+            <div class="update-card">
+              <div class="update-header">
+                <strong>
+                  {% if r.user_id == booking.provider_id %}
+                    Job Giver
+                  {% elif r.user_id == booking.worker_id %}
+                    Worker
+                  {% else %}
+                    User #{{ r.user_id }}
+                  {% endif %}
+                </strong>
+                <span class="pill">
+                  🕒 {{ r.created_at.strftime("%d %b %I:%M %p") if r.created_at }}
+                </span>
+              </div>
+
+              <p class="mt-2 mb-2">{{ r.message }}</p>
+
+              {% if r.files and r.files|length > 0 %}
+                {% for f in r.files %}
+                  <a class="btn btn-outline-primary btn-soft w-100 mb-2"
+                     href="/wfh/dispute/file/{{ f.id }}">
+                    📎 Download Proof
+                  </a>
+                {% endfor %}
+              {% endif %}
+            </div>
+          {% endfor %}
+        {% else %}
+          <div class="alert alert-secondary">
+            No responses yet.
+          </div>
+        {% endif %}
+
+        <!-- ✅ Respond form for the OTHER user -->
+        {% if current_user.id != dispute.raised_by %}
+          <div class="alert alert-warning mt-3">
+            ✍️ Share your side (allowed only once)
+          </div>
+
+          <form method="post"
+                action="/wfh/dispute/{{ dispute.id }}/respond"
+                enctype="multipart/form-data">
+
+            <textarea name="message"
+                      class="form-control mb-2"
+                      rows="3"
+                      required
+                      minlength="10"
+                      placeholder="Explain your side clearly..."></textarea>
+
+            <input type="file"
+                   name="proof"
+                   class="form-control mb-2"
+                   multiple
+                   accept=".jpg,.jpeg,.png,.webp,.gif,.pdf,.zip">
+
+            <button type="submit" class="btn btn-danger btn-soft w-100">
+              ✅ Submit Response
+            </button>
+          </form>
+        {% else %}
+          <div class="alert alert-info mt-3">
+            ✅ You opened this dispute. Waiting for the other party response.
+          </div>
+        {% endif %}
+
+      </div>
+    </div>
+  {% endif %}
+
+
 
   <!-- WORKER INFO -->
   <div class="glass-card mb-3">
@@ -777,46 +1038,43 @@
 
 </div>
 
-<!-- MOBILE ACTION BAR (shows helpful actions, does not replace buttons above) -->
-<div class="mobile-actions">
-  <div class="d-flex gap-2">
-    <a href="/wfh/dashboard" class="btn btn-outline-primary btn-soft flex-fill">⬅️ Back</a>
-
-    {% if booking.status == "WFH_CONFIRMED" and not booking.payment_completed %}
-      <button class="btn btn-success btn-soft flex-fill" onclick="startPayment()">Pay</button>
-    {% else %}
-      <a href="#submittedWork" class="btn btn-primary btn-soft flex-fill">Updates</a>
-    {% endif %}
-  </div>
-</div>
-
-<!-- STATUS POLLING -->
 <script>
-const bookingId = {{ booking.id }};
-async function pollBookingStatus() {
-  try {
-    const res = await fetch(`/wfh/booking/${bookingId}/status`);
-    if (!res.ok) return;
-    const data = await res.json();
-    const el = document.getElementById("booking-status");
+  // ✅ Scroll to submitted work WITHOUT creating new browser history entries
+  const jumpBtn = document.getElementById("jumpUpdatesBtn");
 
-    if (el.innerText !== data.status) {
-      el.innerText = data.status;
+  if (jumpBtn) {
+    jumpBtn.addEventListener("click", () => {
+      const target = document.getElementById("submittedWork");
+      if (!target) return;
 
-      if (["WFH_COMPLETED", "WFH_DISPUTED", "WFH_CANCELLED"].includes(data.status)) {
-        location.reload();
-      }
+      target.scrollIntoView({ behavior: "smooth", block: "start" });
+
+      // ✅ Replace URL hash without pushing history entry
+      const baseUrl = location.pathname + location.search;
+      history.replaceState(null, "", baseUrl + "#submittedWork");
+    });
+  }
+</script>
+<script>
+  window.addEventListener("popstate", () => {
+    // If user comes back and hash exists, clean it once
+    if (location.hash === "#submittedWork") {
+      history.replaceState(null, "", location.pathname + location.search);
     }
-  } catch (e) {}
-}
-setInterval(pollBookingStatus, 3000);
-pollBookingStatus();
+  });
 </script>
 
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
 <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+
+
 <script>
 async function startPayment() {
-  const res = await fetch("/razorpay/create_order/{{ booking.token }}", {method:"POST"});
+  const res = await fetch("/razorpay/create_order/{{ booking.token }}", {
+    method: "POST"
+  });
+
   const data = await res.json();
 
   new Razorpay({
@@ -827,47 +1085,152 @@ async function startPayment() {
     order_id: data.order_id,
     handler: async function (response) {
       const verify = await fetch("/razorpay/verify_payment", {
-        method:"POST",
-        headers:{ "Content-Type":"application/json" },
-        body: JSON.stringify({...response, token:"{{ booking.token }}"})
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...response, token: "{{ booking.token }}" })
       });
+
       const result = await verify.json();
       if (result.success) location.reload();
     }
   }).open();
 }
 </script>
+<script>
+const bookingId = {{ booking.id }};
+let stopped = false;
+
+async function pollBookingStatus() {
+  if (stopped) return;
+
+  try {
+    const res = await fetch(`/wfh/booking/${bookingId}/status`);
+    if (!res.ok) return;
+
+    const data = await res.json();
+
+    // ✅ Update status label
+    const el = document.getElementById("booking-status");
+    if (el) el.innerText = data.status;
+
+    // ✅ Stop polling when final states reached (NO reload loop)
+    if (["WFH_DISPUTED", "WFH_CANCELLED", "WFH_COMPLETED"].includes(data.status)) {
+      stopped = true;
+      clearInterval(window.__poller);
+      clearInterval(window.__uiRefresh);
+      console.log("Final state reached. Polling stopped.");
+    }
+
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+window.__poller = setInterval(pollBookingStatus, 5000);
+pollBookingStatus();
+</script>
 
 <script>
-function setupMultiFilePreview(inputId, boxId, listId) {
-  const input = document.getElementById(inputId);
-  const box = document.getElementById(boxId);
-  const list = document.getElementById(listId);
+async function refreshSections() {
+  if (stopped) return;
 
-  if (!input || !box || !list) return;
+  try {
+    const res = await fetch(`/wfh/giver/booking/${bookingId}`, {
+      headers: { "X-UI-REFRESH": "1" }
+    });
 
-  input.addEventListener("change", () => {
-    list.innerHTML = "";
+    if (!res.ok) return;
 
-    if (!input.files || input.files.length === 0) {
-      box.classList.add("d-none");
+    const html = await res.text();
+    const doc = new DOMParser().parseFromString(html, "text/html");
+
+    // ✅ Update Submitted Work
+    const newWork = doc.querySelector("#submittedWork");
+    const oldWork = document.querySelector("#submittedWork");
+    if (newWork && oldWork) oldWork.innerHTML = newWork.innerHTML;
+
+    // ✅ Update Payment/Actions Card
+    const newPay = doc.querySelector("#paymentActions");
+    const oldPay = document.querySelector("#paymentActions");
+    if (newPay && oldPay) oldPay.innerHTML = newPay.innerHTML;
+
+    // ✅ Update Dispute Center
+    const newDispute = doc.querySelector("#disputeCenter");
+    const oldDispute = document.querySelector("#disputeCenter");
+    if (newDispute && oldDispute) oldDispute.innerHTML = newDispute.innerHTML;
+
+  } catch (err) {
+    console.log("Live refresh error:", err);
+  }
+}
+
+// ✅ refresh every 5 seconds (same as your status poll)
+window.__uiRefresh = setInterval(refreshSections, 5000);
+refreshSections();
+</script>
+
+<script>
+document.addEventListener("submit", async function (e) {
+  const form = e.target;
+  if (!form.classList.contains("ajax-form")) return;
+
+  e.preventDefault(); // ✅ stops redirect & URL stacking
+
+  // ✅ confirmation support
+  const confirmMsg = form.dataset.confirm;
+  if (confirmMsg) {
+    const ok = confirm(confirmMsg);
+    if (!ok) return;
+  }
+
+  const url = form.action;
+  const method = (form.method || "POST").toUpperCase();
+
+  const btn = form.querySelector("button[type='submit']");
+  if (btn) {
+    btn.disabled = true;
+    btn.dataset.oldText = btn.innerText;
+    btn.innerText = "Processing...";
+  }
+
+  try {
+    const formData = new FormData(form);
+
+    const res = await fetch(url, {
+      method: method,
+      body: formData
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error("Request failed:", errText);
+      alert("Action failed. Please try again.");
       return;
     }
 
-    box.classList.remove("d-none");
-
-    for (let i = 0; i < input.files.length; i++) {
-      const li = document.createElement("li");
-      li.textContent = input.files[i].name;
-      list.appendChild(li);
+    if (res.redirected) {
+      window.location.href = res.url;
+      return;
     }
-  });
-}
 
-setupMultiFilePreview("proofFiles", "selectedFilesBox", "selectedFilesList");
-setupMultiFilePreview("proofFilesOpen", "selectedFilesBoxOpen", "selectedFilesListOpen");
+
+    // ✅ refresh UI sections without reloading page
+    if (typeof refreshSections === "function") {
+      await refreshSections();
+    }
+
+  } catch (err) {
+    console.error(err);
+    alert("Network error. Try again.");
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerText = btn.dataset.oldText || "Submit";
+    }
+  }
+});
 </script>
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
 </body>
 </html>

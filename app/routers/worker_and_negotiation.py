@@ -15,21 +15,12 @@ from app.models import (
     User, WorkerProfile, ShowcaseImage, Skill, Rating,
     Job, PriceNegotiation
 )
+from app.security.auth import get_current_user
 
 router = APIRouter(tags=["worker", "negotiation"])
 templates = Jinja2Templates(directory="app/templates")
 
-# ----------------------------
-# Trust API session-based auth
-# ----------------------------
-def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
-    uid = request.session.get("user_id")
-    if not uid:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
-    user = db.get(User, int(uid))
-    if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
-    return user
+
 
 
 # ==========================================================

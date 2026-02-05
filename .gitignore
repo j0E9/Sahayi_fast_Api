@@ -1,11 +1,17 @@
-__pycache__/
-*.py[cod]
-.idea/
-.vscode/
+# Virtual env
 .venv/
-env/
-venv/
-.DS_Store
-Thumbs.db
+
+# Secrets
+.env
+app/.env
+
+# Runtime data
+uploads/
+storage/
+
+# Python cache
+__pycache__/
 *.pyc
-app/static/uploads/
+
+# Logs
+*.log

@@ -7,6 +7,9 @@ from sqlalchemy.orm import Session, joinedload
 from app.models import Rating
 from app.database import get_db
 from app.models import Booking, User, WorkerWarning
+from app.routers.payments_calls import release_onsite_escrow_on_completion
+from app.security.auth import get_current_user
+
 
 
 
@@ -16,16 +19,6 @@ def generate_otp(length: int = 6) -> str:
     return "".join(str(secrets.randbelow(10)) for _ in range(length))
 
 router = APIRouter(tags=["booking-details"])
-
-# ---- session-based auth (Trust API style) ----
-def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
-    uid = request.session.get("user_id")
-    if not uid:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
-    user = db.get(User, int(uid))
-    if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
-    return user
 
 
 
@@ -111,6 +104,10 @@ def _payload_for_booking(booking: Booking, viewer: User, db: Session) -> dict:
 
     # Completed — allow rating popup for the giver
     if booking.status == "Completed":
+        # ✅ Repair: if onsite booking completed but escrow still locked, release it
+        if booking.booking_type != "wfh" and getattr(booking, "escrow_locked", False) and not getattr(booking,"escrow_released",False):
+            release_onsite_escrow_on_completion(db, booking)
+
         if booking.worker:
             booking.worker.busy = False
         if booking.provider:
@@ -192,10 +189,16 @@ def _payload_for_booking(booking: Booking, viewer: User, db: Session) -> dict:
             booking.extra_timer_confirmed_stop = True
             booking.extra_timer_stopped = True
             booking.status = "Completed"
+
+            # ✅ Release escrow ONLY for onsite jobs paid via Razorpay escrow
+            if booking.booking_type != "wfh":
+                release_onsite_escrow_on_completion(db, booking)
+
             if booking.worker:
                 booking.worker.busy = False
             if booking.provider:
                 booking.provider.busy = False
+
             db.commit()
 
             if is_giver and not has_giver_rated(db, booking):
@@ -241,11 +244,17 @@ def _payload_for_booking(booking: Booking, viewer: User, db: Session) -> dict:
 
         if getattr(booking, "final_otp_verified", False):
             booking.status = "Completed"
+
+            if booking.booking_type != "wfh":
+                release_onsite_escrow_on_completion(db, booking)
+
             if booking.worker:
                 booking.worker.busy = False
             if booking.provider:
                 booking.provider.busy = False
+
             db.commit()
+
             if is_giver and not has_giver_rated(db, booking):
                 return _rating_payload(booking, is_giver, name, map_url)
             return {"show": False, "message": "✅ Job completed and verified."}
@@ -395,11 +404,17 @@ def _payload_for_booking(booking: Booking, viewer: User, db: Session) -> dict:
                 # If extra timer stopped & confirmed -> complete booking
                 if getattr(booking, "extra_timer_confirmed_stop", False):
                     booking.status = "Completed"
+
+                    if booking.booking_type != "wfh":
+                        release_onsite_escrow_on_completion(db, booking)
+
                     if booking.worker:
                         booking.worker.busy = False
                     if booking.provider:
                         booking.provider.busy = False
+
                     db.commit()
+
                     if is_giver and not has_giver_rated(db, booking):
                         return _rating_payload(booking, is_giver, name, map_url)
                     return {"show": False, "message": "✅ Extra time completed. Job finished."}
@@ -419,11 +434,17 @@ def _payload_for_booking(booking: Booking, viewer: User, db: Session) -> dict:
 
             # No extra timer requested and no payment -> expire chat and complete booking
             booking.status = "Completed"
+
+            if booking.booking_type != "wfh":
+                release_onsite_escrow_on_completion(db, booking)
+
             if booking.worker:
                 booking.worker.busy = False
             if booking.provider:
                 booking.provider.busy = False
+
             db.commit()
+
             if is_giver and not has_giver_rated(db, booking):
                 return _rating_payload(booking, is_giver, name, map_url)
             return {"show": False, "message": "⛔ Chat expired. No extra time was requested."}

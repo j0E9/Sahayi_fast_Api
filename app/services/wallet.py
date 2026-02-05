@@ -13,14 +13,14 @@ def _row_sig(user_id: int, amount: Decimal, kind: str, reference: str | None,
     data = f"{user_id}|{amount}|{kind}|{reference or ''}|{previous_hash or ''}|{created_at.isoformat()}"
     return hmac.new(WALLET_HMAC_SECRET.encode(), data.encode(), hashlib.sha256).hexdigest()
 
-def add_ledger_row(db: Session, *, user_id: int, amount_rupees: int,
+def add_ledger_row(db: Session, *, user_id: int, amount_rupees: Decimal | int | float,
                    kind: str, reference: str | None, meta: dict | None = None) -> WalletTransaction:
     """Positive amount = credit; negative = debit."""
     prev = db.query(WalletTransaction)\
              .filter(WalletTransaction.user_id == user_id)\
              .order_by(WalletTransaction.id.desc()).first()
     created_at = datetime.utcnow()
-    amt = Decimal(str(amount_rupees)).quantize(Decimal("1.00"))
+    amt = Decimal(str(amount_rupees)).quantize(Decimal("0.01"))
     row = WalletTransaction(
         user_id=user_id,
         amount=amt,

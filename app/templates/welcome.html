@@ -6,13 +6,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/theme.css">
+
 
   <style>
     body {
       margin: 0;
       font-family: 'Poppins', sans-serif;
-      background: linear-gradient(to right, #e0f7fa, #ffffff);
-      color: #333;
+      background: var(--bg-main);
+      color: var(--text-main);
       min-height: 100vh;
       overflow-x: hidden;
     }
@@ -229,7 +231,7 @@
     }
 
     .option-card {
-      background: white;
+      background: var(--bg-card);
       padding: 30px 20px;
       border-radius: 16px;
       width: 250px;
@@ -294,7 +296,7 @@
       transform: translateX(-50%);
       width: 100%;
       max-width: 400px;
-      background: white;
+      background: var(--bg-card);
       border-radius: 12px;
       box-shadow: 0 0 20px rgba(0, 0, 0, 0.15);
       padding: 20px;
@@ -464,7 +466,7 @@
         z-index: 4700;          /* ✅ above bottom nav (4200) and chat-fab (4600) */
         width: 220px;
         border-radius: 12px;
-        background: #fff;
+        background: var(--bg-card);
         box-shadow: 0 10px 30px rgba(0,0,0,0.18);
         padding: 8px;
       }
@@ -521,7 +523,7 @@
         justify-content: center; /* center vertically */
         align-items: center; /* center horizontally */
         padding: 0 16px;
-        background: linear-gradient(to right, #e0f7fa, #ffffff);
+        background: transparent;
       }
 
       .container-hero {
@@ -581,7 +583,7 @@
 
       .cat-card {
         width: auto; /* IMPORTANT: override old 220px width */
-        background: #ffffff;
+        background: var(--bg-card);
         border-radius: 18px;
         padding: 14px 8px;
         box-shadow: 0 6px 16px rgba(6, 32, 66, 0.10);
@@ -636,7 +638,8 @@
         z-index: 1;
         font-weight: 600;
         font-size: 14px;
-        color: #0b3c6f;
+        color: var(--text-main);
+
       }
       /* 📱 Responsive improvements for mobile */
       @media (max-width: 768px) {
@@ -690,25 +693,6 @@
         }
       }
 
-     /* =============================
-       BLUE + WHITE THEME OVERRIDES
-       ============================= */
-    :root {
-      --primary: #0d6efd;
-      --primary-soft: #e7f1ff;
-      --primary-soft-strong: #d4e5ff;
-      --accent: #0b3c6f;
-      --bg-soft: #f4f7ff;
-    }
-
-    /* Overall background */
-    body {
-      background:
-        linear-gradient(180deg, #f5f9ff 0%, #ffffff 45%, #e7f1ff 100%);
-      color: #263238;
-    }
-
-
     /* Location box – SMALL compact card */
     .location-box {
       position: fixed;
@@ -724,7 +708,8 @@
       padding: 6px 10px 8px;     /* tighter padding */
       border-radius: 12px;
 
-      background: #ffffff;
+      background: var(--bg-card);
+      color: var(--text-main);
       border: 1px solid #d9e5ff;
       box-shadow: 0 6px 16px rgba(6, 32, 66, 0.18);
 
@@ -788,7 +773,7 @@
       min-width: 130px;
       padding: 0 12px;
       border-radius: 999px;
-      background: #ffffff;
+      background: var(--bg-card);
       border: 1px solid #d2e0ff;
       display: none;          /* you’ll toggle this via JS */
       align-items: center;
@@ -834,7 +819,7 @@
       position: relative;
       border-radius: 999px;
       overflow: hidden;
-      background: linear-gradient(135deg, #ffffff, #edf3ff);
+      background: var(--bg-card);
       border: 1px solid #d4e2ff;
       box-shadow: 0 10px 24px rgba(6, 32, 66, 0.15);
     }
@@ -878,7 +863,7 @@
       justify-content: center;
     }
     .cat-card {
-      background: #ffffff;
+      background: var(--bg-card);
       border-radius: 16px;
       padding: 14px 10px;
       box-shadow: 0 6px 16px rgba(6, 32, 66, 0.12);
@@ -928,7 +913,7 @@
       z-index: 1;
       font-weight: 600;
       font-size: 14px;
-      color: #0b3c6f;
+      color: var(--text-main);
     }
 
     /* Hero responsive tweaks */
@@ -965,7 +950,7 @@
       max-width: 880px;
       padding: 18px 18px 22px;
       border-radius: 24px;
-      background: linear-gradient(135deg, #ffffff, #f3f6ff);
+      background: var(--bg-card);
       box-shadow: 0 14px 28px rgba(6, 32, 66, 0.14);
       border: 1px solid #dde7ff;
     }
@@ -1019,7 +1004,7 @@
     .welcome-block h1 {
       font-size: 2.2rem;
       font-weight: 700;
-      color: #102a53;
+      color: var(--text-main);
       line-height: 1.25;
     }
 
@@ -1195,7 +1180,8 @@
     #mobile-profile-sheet .profile-option a {
       display: block;
       text-decoration: none;
-      color: #333;
+      color: var(--text-main);
+
     }
 
     /* Highlight on tap/hover */
@@ -1253,6 +1239,511 @@
         font-weight: 600;
       }
     }
+    /* ===============================
+       DARK MODE CHAT FIX
+    ================================ */
+
+    [data-theme="dark"] #chat-direction-panel {
+      background: #020617;
+      border: 1px solid #1e293b;
+      box-shadow: 0 20px 50px rgba(0,0,0,.7);
+    }
+
+    /* Chat area */
+    [data-theme="dark"] #chat-box {
+      background: #020617;
+      border: 1px solid #1e293b;
+      color: #e5e7eb;
+    }
+
+    /* My messages */
+    [data-theme="dark"] .chat-message.me {
+      background: linear-gradient(135deg,#2563eb,#38bdf8);
+      color: #ffffff;
+    }
+
+    /* Partner messages */
+    [data-theme="dark"] .chat-message.partner {
+      background: #0f172a;
+      color: #e5e7eb;
+      border: 1px solid #1e293b;
+    }
+
+    /* Input box */
+    [data-theme="dark"] #chat-input {
+      background: #020617;
+      color: #f9fafb;
+      border: 1px solid #1e293b;
+    }
+
+    [data-theme="dark"] #chat-input::placeholder {
+      color: #64748b;
+    }
+
+    /* Send button */
+    [data-theme="dark"] #send-chat-btn {
+      background: linear-gradient(135deg,#2563eb,#38bdf8);
+      border: none;
+    }
+
+    /* Header toolbar */
+    [data-theme="dark"] #chat-multi-toolbar {
+      background: #020617;
+      border-bottom: 1px solid #1e293b;
+    }
+
+    /* Extra time box */
+    [data-theme="dark"] #extra-time-inline {
+      background: #020617;
+      border: 1px solid #1e293b;
+      color: #e5e7eb;
+    }
+    /* ================= CUSTOM POPUP ================= */
+
+    .custom-popup{
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.55);
+      backdrop-filter: blur(6px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+    }
+
+    .custom-popup.hidden{
+      display: none;
+    }
+
+    /* Popup Card */
+    .popup-card{
+      width: 90%;
+      max-width: 380px;
+      background: #ffffff;
+      border-radius: 18px;
+      padding: 22px 20px;
+      text-align: center;
+      box-shadow: 0 25px 60px rgba(0,0,0,.25);
+      animation: popupIn .2s ease;
+    }
+
+    .popup-card h5{
+      font-weight: 800;
+      margin-bottom: 8px;
+    }
+
+    .popup-card p{
+      color: #444;
+      font-size: .95rem;
+    }
+
+    /* Button */
+    .popup-btn{
+      margin-top: 15px;
+      width: 100%;
+      padding: 10px;
+      border-radius: 12px;
+      border: none;
+      background: linear-gradient(135deg,#2563eb,#38bdf8);
+      color: white;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    /* Dark Mode */
+    [data-theme="dark"] .popup-card{
+      background: #020617;
+      color: #f9fafb;
+      border: 1px solid #1e293b;
+    }
+
+    [data-theme="dark"] .popup-card p{
+      color: #94a3b8;
+    }
+
+    /* Animation */
+    @keyframes popupIn{
+      from{ transform: scale(.9); opacity: 0; }
+      to{ transform: scale(1); opacity: 1; }
+    }
+
+    /* ================= CHAT EXTRA TIME DARK MODE ================= */
+
+    /* Main chat popup */
+    [data-theme="dark"] #chat-direction-panel{
+      background: rgba(2,6,23,.98);
+      border: 1px solid #1e293b;
+      box-shadow: 0 25px 60px rgba(0,0,0,.7);
+      color: #f9fafb;
+    }
+
+    /* Toolbar buttons */
+    [data-theme="dark"] #chat-multi-toolbar .btn{
+      background: #020617 !important;
+      border: 1px solid #334155 !important;
+      color: #e5e7eb !important;
+    }
+
+    [data-theme="dark"] #chat-multi-toolbar .btn:hover{
+      background: #1e293b !important;
+    }
+
+    /* Extra Time Box (IMPORTANT FIX) */
+    [data-theme="dark"] #extra-time-inline{
+      background: #020617 !important;
+      border: 1px solid #1e293b !important;
+      color: #f9fafb !important;
+      box-shadow: 0 12px 35px rgba(0,0,0,.6);
+    }
+
+    /* Extra Time Title */
+    [data-theme="dark"] #extra-time-inline h6{
+      color: #f9fafb;
+    }
+
+    /* Labels */
+    [data-theme="dark"] #extra-time-inline label{
+      color: #cbd5f5;
+    }
+
+    /* Inputs */
+    [data-theme="dark"] #extra-time-inline input{
+      background: #020617 !important;
+      border: 1px solid #334155 !important;
+      color: #f9fafb !important;
+    }
+
+    /* Input group addon (hr / min) */
+    [data-theme="dark"] #extra-time-inline .input-group-text{
+      background: #020617 !important;
+      border: 1px solid #334155 !important;
+      color: #94a3b8 !important;
+    }
+
+    /* Focus */
+    [data-theme="dark"] #extra-time-inline input:focus{
+      border-color: #38bdf8 !important;
+      box-shadow: 0 0 0 2px rgba(56,189,248,.25);
+    }
+
+    /* Confirm button */
+    [data-theme="dark"] #extra-inline-confirm{
+      background: linear-gradient(135deg,#2563eb,#38bdf8) !important;
+      border: none !important;
+      color: white !important;
+    }
+
+    /* Cancel button */
+    [data-theme="dark"] #extra-inline-cancel{
+      background: transparent !important;
+      border: 1px solid #334155 !important;
+      color: #e5e7eb !important;
+    }
+
+    [data-theme="dark"] #extra-inline-cancel:hover{
+      background: #1e293b !important;
+    }
+    /* ================= RATING POPUP DARK MODE ================= */
+
+    /* Main rating popup container */
+    [data-theme="dark"] .rating-modal,
+    [data-theme="dark"] .rating-box,
+    [data-theme="dark"] .rating-card,
+    [data-theme="dark"] .modal-content{
+
+      background: rgba(2,6,23,.97) !important;
+      border: 1px solid #1e293b !important;
+      color: #f9fafb !important;
+
+      box-shadow: 0 30px 80px rgba(0,0,0,.8);
+      backdrop-filter: blur(14px);
+    }
+
+    /* Headings */
+    [data-theme="dark"] .rating-modal h3,
+    [data-theme="dark"] .rating-modal h4,
+    [data-theme="dark"] .rating-modal h5,
+    [data-theme="dark"] .rating-modal p{
+      color: #f9fafb !important;
+    }
+
+    /* Star area text */
+    [data-theme="dark"] .rating-modal small,
+    [data-theme="dark"] .rating-modal label{
+      color: #cbd5f5 !important;
+    }
+
+    /* Stars (default + hover) */
+    [data-theme="dark"] .rating-modal .star,
+    [data-theme="dark"] .rating-modal .fa-star{
+      color: #334155 !important;
+    }
+
+    [data-theme="dark"] .rating-modal .star.active,
+    [data-theme="dark"] .rating-modal .fa-star.active,
+    [data-theme="dark"] .rating-modal .star:hover,
+    [data-theme="dark"] .rating-modal .fa-star:hover{
+      color: #facc15 !important; /* gold */
+    }
+
+    /* Textarea / Input */
+    [data-theme="dark"] .rating-modal textarea,
+    [data-theme="dark"] .rating-modal input{
+
+      background: #020617 !important;
+      border: 1px solid #334155 !important;
+      color: #f9fafb !important;
+    }
+
+    [data-theme="dark"] .rating-modal textarea::placeholder{
+      color: #64748b !important;
+    }
+
+    /* Focus */
+    [data-theme="dark"] .rating-modal textarea:focus,
+    [data-theme="dark"] .rating-modal input:focus{
+
+      border-color: #38bdf8 !important;
+      box-shadow: 0 0 0 2px rgba(56,189,248,.25);
+    }
+
+    /* Submit Button */
+    [data-theme="dark"] .rating-modal button,
+    [data-theme="dark"] .rating-modal .btn-submit{
+
+      background: linear-gradient(135deg,#2563eb,#38bdf8) !important;
+      border: none !important;
+      color: white !important;
+    }
+
+    [data-theme="dark"] .rating-modal button:hover{
+      opacity: .9;
+    }
+    /* ================= FORCE RATING TEXT WHITE (FINAL OVERRIDE) ================= */
+
+    [data-theme="dark"] #rating-overlay .form-control,
+    [data-theme="dark"] #rating-overlay textarea,
+    [data-theme="dark"] #rating-overlay input{
+
+      color: #f9fafb !important;
+      background: #020617 !important;
+      border-color: #334155 !important;
+
+      -webkit-text-fill-color: #f9fafb !important; /* Chrome autofill fix */
+    }
+
+    /* Placeholder */
+    [data-theme="dark"] #rating-overlay .form-control::placeholder{
+      color: #94a3b8 !important;
+      opacity: 1 !important;
+    }
+
+    /* Caret */
+    [data-theme="dark"] #rating-overlay textarea{
+      caret-color: #38bdf8 !important;
+    }
+
+    /* Worker name + hints */
+    [data-theme="dark"] #rating-overlay .text-muted,
+    [data-theme="dark"] #rating-overlay #rating-hint,
+    [data-theme="dark"] #rating-overlay #rating-msg{
+      color: #94a3b8 !important;
+    }
+
+    /* ============================
+       DARK MODE - CONFIRM ARRIVAL
+    ============================ */
+
+    [data-theme="dark"] #reached-location-section > div {
+      background: #0f172a !important;          /* Dark track */
+      border: 1px solid #1e293b;
+      box-shadow: inset 0 2px 6px rgba(0,0,0,.6);
+    }
+
+    /* Text inside slider */
+    [data-theme="dark"] #reached-location-section span {
+      color: #f9fafb !important;               /* White text */
+    }
+
+    /* Slider thumb (green circle) */
+    [data-theme="dark"] #reached-slider::-webkit-slider-thumb {
+      background: linear-gradient(135deg,#22c55e,#16a34a) !important;
+      box-shadow: 0 6px 14px rgba(0,0,0,.6);
+    }
+
+    [data-theme="dark"] #reached-slider::-moz-range-thumb {
+      background: linear-gradient(135deg,#22c55e,#16a34a) !important;
+      box-shadow: 0 6px 14px rgba(0,0,0,.6);
+    }
+
+    /* Slider track */
+    [data-theme="dark"] #reached-slider {
+      background: transparent !important;
+    }
+
+    /* ============================
+       WORKER DELAY WARNING MODAL
+    ============================ */
+
+    /* Overlay */
+    .worker-warn-overlay{
+      display: none;          /* Hidden by default */
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.6);
+      z-index: 9999;
+
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* When active */
+    .worker-warn-overlay.show{
+      display: flex;
+    }
+
+
+    /* Card */
+    .worker-warn-card{
+      background: #ffffff;
+      border-radius: 14px;
+      max-width: 520px;
+      width: 90%;
+      padding: 24px;
+      text-align: center;
+
+      box-shadow: 0 12px 40px rgba(0,0,0,0.3);
+      animation: warnPop .2s ease;
+    }
+
+    /* Text */
+    .worker-warn-card h3{
+      font-weight: 700;
+    }
+
+    .worker-warn-card p{
+      font-size: 16px;
+      margin: 10px 0;
+    }
+
+    /* Actions */
+    .warn-actions{
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .warn-footer{
+      margin-top: 16px;
+    }
+
+    /* Animation */
+    @keyframes warnPop{
+      from{ transform: scale(.9); opacity:0; }
+      to{ transform: scale(1); opacity:1; }
+    }
+
+    /* ============================
+       DARK MODE
+    ============================ */
+
+    [data-theme="dark"] .worker-warn-overlay{
+      background: rgba(2,6,23,.85);
+      backdrop-filter: blur(6px);
+    }
+
+    [data-theme="dark"] .worker-warn-card{
+      background: #020617;
+      border: 1px solid #1e293b;
+      color: #f9fafb;
+
+      box-shadow: 0 25px 60px rgba(0,0,0,.8);
+    }
+
+    /* Title */
+    [data-theme="dark"] .worker-warn-card h3{
+      color: #facc15; /* warning yellow */
+    }
+
+    /* Message */
+    [data-theme="dark"] .worker-warn-card p{
+      color: #cbd5f5;
+    }
+
+    /* Buttons */
+    [data-theme="dark"] .worker-warn-card .btn-outline-primary{
+      background: transparent;
+      border-color: #2563eb;
+      color: #93c5fd;
+    }
+
+    [data-theme="dark"] .worker-warn-card .btn-outline-primary:hover{
+      background: #1e293b;
+      color: #ffffff;
+    }
+
+    /* Close button */
+    [data-theme="dark"] .worker-warn-card .btn-secondary{
+      background: #1e293b;
+      border: 1px solid #334155;
+      color: #f9fafb;
+    }
+
+    [data-theme="dark"] .worker-warn-card .btn-secondary:hover{
+      background: #334155;
+    }
+
+    /* ===========================
+       THEME TOGGLE FLOAT BUTTON
+       =========================== */
+
+    .theme-fab{
+      width: 48px;
+      height: 48px;
+
+      border-radius: 50%;
+
+      display: flex;
+      align-items: center;
+      justify-content: center;
+
+      font-size: 22px;
+
+      border: none;
+      cursor: pointer;
+
+      background: linear-gradient(135deg,#2563eb,#38bdf8);
+      color: white;
+
+      box-shadow: 0 6px 18px rgba(13,110,253,.5);
+
+      transition: all .25s ease;
+    }
+
+    /* Hover */
+    .theme-fab:hover{
+      transform: scale(1.1) rotate(10deg);
+      box-shadow: 0 10px 26px rgba(56,189,248,.8);
+    }
+
+    /* Active */
+    .theme-fab:active{
+      transform: scale(.95);
+    }
+
+    /* Dark mode style */
+    [data-theme="dark"] .theme-fab{
+      background: linear-gradient(135deg,#facc15,#fb923c);
+      color: #020617;
+
+      box-shadow: 0 6px 18px rgba(250,204,21,.6);
+    }
+
+    /* Mobile spacing */
+    #mobile-profile-sheet .theme-fab{
+      margin: 8px auto 12px;
+    }
+
 
 
     </style>
@@ -1321,6 +1812,17 @@
 </div>
 
 
+<!-- ================= SUCCESS POPUP ================= -->
+<div id="customPopup" class="custom-popup hidden">
+  <div class="popup-card">
+    <h5 id="popupTitle">Success</h5>
+    <p id="popupMsg"></p>
+
+    <button onclick="closePopup()" class="popup-btn">
+      OK
+    </button>
+  </div>
+</div>
 
 
 
@@ -1378,6 +1880,11 @@
       <span>Account</span>
       <button type="button" id="mobile-profile-close" class="mobile-profile-close-btn">✕</button>
     </div>
+      <button id="mobile-theme-toggle"
+           class="theme-fab" title="Toggle Theme">
+          style="border-radius:8px;">
+    🌙 Toggle Dark Mode
+  </button>
 
     <!-- Same options as desktop dropdown -->
     <div class="mobile-profile-options">
@@ -1404,7 +1911,6 @@
 
 
 
-
   <!-- Notification button -->
   <a href="/notifications" class="btn btn-light btn-sm"
      style="border-radius:20px; box-shadow:0 0 5px rgba(0,0,0,0.2);">
@@ -1420,8 +1926,15 @@
 
       <!-- Dropdown box -->
       <div id="profile-box" style="display:none; position:absolute; right:0; margin-top:5px;
-           background:white; border-radius:10px; box-shadow:0 4px 12px rgba(0,0,0,0.2);
+           border-radius:10px; box-shadow:0 4px 12px rgba(0,0,0,0.2);
            width:220px; padding:10px; z-index:2000;">
+
+          <button id="themeToggle"
+                  class="theme-fab" title="Toggle Theme">
+                  style="border-radius:8px;">
+            🌙 Toggle Dark Mode
+          </button>
+
 
         <!-- NEW: worker action -->
         <div class="profile-option">
@@ -1589,7 +2102,7 @@
 
         <!-- Label inside the track -->
         <span style="position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
-                     font-weight: bold; color: #555; font-size: 16px; pointer-events: none;">
+                     font-weight: bold; color: var(--text-main); font-size: 16px; pointer-events: none;">
           📍 Confirm Arrival
         </span>
 
@@ -1767,7 +2280,7 @@
   </div>
 <!-- ⭐ Giver Rating Modal (blocking) -->
 <div id="rating-overlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:6000; align-items:center; justify-content:center;">
-  <div id="rating-card" style="background:#fff; width:92%; max-width:420px; border-radius:14px; padding:18px; box-shadow:0 10px 30px rgba(0,0,0,.25);">
+  <div id="rating-card" class="rating-modal" style="width:92%; max-width:420px; border-radius:14px; padding:18px; box-shadow:0 10px 30px rgba(0,0,0,.25);">
     <h5 style="margin:0 0 8px;">Rate your Sahayi</h5>
     <div id="rating-worker-name" class="text-muted" style="margin-bottom:10px;">Please share feedback for your worker.</div>
 
@@ -1889,30 +2402,42 @@
 
 
 <!-- Worker warning modal -->
-<div id="worker-warn-modal"
-     style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:9999; align-items:center; justify-content:center;">
-  <div style="background:white; border-radius:12px; max-width:520px; width:90%; padding:24px; text-align:center; box-shadow:0 8px 30px rgba(0,0,0,0.3);">
-    <h3 style="margin-top:0;">⚠️ Delay Warning</h3>
-    <p id="worker-warn-msg" style="font-size:18px; margin:12px 0;">Your partner warned you for delay in arriving.</p>
-    <p id="worker-warn-chances" style="font-weight:600; margin-bottom:20px;"></p>
+<div id="worker-warn-modal" class="worker-warn-overlay">
 
-    <div style="display:flex; flex-direction:column; gap:10px;">
-      <button class="btn btn-outline-primary warn-response" data-response="I will be there soon. Sorry for the delay.">
+  <div class="worker-warn-card">
+
+    <h3>⚠️ Delay Warning</h3>
+
+    <p id="worker-warn-msg">
+      Your partner warned you for delay in arriving.
+    </p>
+
+    <p id="worker-warn-chances"></p>
+
+    <div class="warn-actions">
+      <button class="btn btn-outline-primary warn-response"
+              data-response="I will be there soon. Sorry for the delay.">
         🚗 I will be there soon. Sorry for the delay.
       </button>
-      <button class="btn btn-outline-primary warn-response" data-response="Heavy traffic, please wait a bit.">
+
+      <button class="btn btn-outline-primary warn-response"
+              data-response="Heavy traffic, please wait a bit.">
         🚦 Heavy traffic, please wait a bit.
       </button>
-      <button class="btn btn-outline-primary warn-response" data-response="Vehicle breakdown. Sorry for the inconvenience.">
+
+      <button class="btn btn-outline-primary warn-response"
+              data-response="Vehicle breakdown. Sorry for the inconvenience.">
         🛠 Vehicle breakdown. Sorry for the inconvenience.
       </button>
     </div>
 
-    <div style="margin-top:16px;">
+    <div class="warn-footer">
       <button id="worker-warn-close" class="btn btn-secondary">Close</button>
     </div>
+
   </div>
 </div>
+
 
 
 <!-- short alert sound -->
@@ -2028,6 +2553,7 @@
 
 
 <script src="/static/js/actions.js" defer></script>
+<script src="/static/js/theme.js"></script>
 
 
 <script>
@@ -6258,6 +6784,39 @@ document.getElementById("wfh-popup")?.addEventListener("click", () => {
 });
 
 </script>
+<script>
+const desktopToggle = document.getElementById("themeToggle");
+const mobileToggle  = document.getElementById("mobile-theme-toggle");
+
+/* Mobile button triggers desktop toggle */
+if (mobileToggle && desktopToggle) {
+  mobileToggle.addEventListener("click", () => {
+    desktopToggle.click();
+  });
+}
+</script>
+<script>
+function updateThemeIcon(){
+  const isDark = document.documentElement.dataset.theme === "dark";
+
+  document.querySelectorAll(".theme-fab").forEach(btn=>{
+    btn.innerText = isDark ? "☀️" : "🌙";
+  });
+}
+
+// Run on load
+updateThemeIcon();
+
+// Run after toggle
+document.getElementById("themeToggle")?.addEventListener("click",()=>{
+  setTimeout(updateThemeIcon,50);
+});
+
+document.getElementById("mobile-theme-toggle")?.addEventListener("click",()=>{
+  setTimeout(updateThemeIcon,50);
+});
+</script>
+
 </body>
 </html>
 

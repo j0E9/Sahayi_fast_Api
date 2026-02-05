@@ -19,6 +19,7 @@ from app.models import (
 )
 from pathlib import Path
 import uuid
+from app.security.auth import get_current_user
 
 router = APIRouter(tags=["worker_profile"])
 templates = Jinja2Templates(directory="app/templates")
@@ -43,14 +44,6 @@ def get_user_dir(user_id: int, category: str) -> Path:
 
 
 # ---------- Trust API session auth ----------
-def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
-    uid = request.session.get("user_id")
-    if not uid:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
-    user = db.get(User, int(uid))
-    if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
-    return user
 
 
 # ---------- helpers ----------
@@ -110,6 +103,7 @@ def seek_job(
 ):
     user = current_user
     profile = db.query(WorkerProfile).filter_by(user_id=user.id).first()
+    is_limited = profile.moderation_status == "limited"
     if not profile:
         return RedirectResponse(url="/create_worker_profile", status_code=status.HTTP_303_SEE_OTHER)
 
@@ -177,6 +171,8 @@ def seek_job(
         <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
         <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
         <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
+        <script src="/static/js/theme.js" defer></script>
+
         <style>
             :root {{
               --sahayi-blue: #2563eb;
@@ -497,6 +493,140 @@ def seek_job(
                     padding-inline: 1.05rem;
                 }}
             }}
+            
+          .limit-overlay {{
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.45);
+            backdrop-filter: blur(6px);
+            z-index: 9999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          }}
+          .limit-box {{
+            background: white;
+            padding: 28px 32px;
+            border-radius: 16px;
+            max-width: 420px;
+            text-align: center;
+            box-shadow: 0 30px 80px rgba(0,0,0,0.4);
+          }}
+          .limit-box h2 {{
+            font-size: 1.1rem;
+            margin-bottom: 8px;
+          }}
+          .limit-box p {{
+            font-size: 0.9rem;
+            color: #6b7280;
+            margin: 0;
+          }}
+          /* ============================
+           DARK MODE - SEEK JOB PROFILE
+           ============================ */
+        
+        html[data-theme="dark"] body {{
+          background: radial-gradient(circle at top left, #020617, #020617 40%, #000814 100%) !important;
+          color: #f8fafc !important;
+        }}
+        
+        /* Hero */
+        html[data-theme="dark"] .profile-hero {{
+          background: linear-gradient(135deg, #0f172a, #1e3a8a) !important;
+          box-shadow: 0 22px 55px rgba(0,0,0,0.7) !important;
+        }}
+        
+        /* Section cards */
+        html[data-theme="dark"] .section-card {{
+          background: #0b1220 !important;
+          border: 1px solid #1e293b !important;
+          box-shadow: 0 16px 40px rgba(0,0,0,0.6) !important;
+        }}
+        
+        /* Section titles */
+        html[data-theme="dark"] .section-title {{
+          color: #38bdf8 !important;
+        }}
+        
+        /* Stat chips */
+        html[data-theme="dark"] .stat-chip {{
+          background: #020617 !important;
+          border-color: #1e293b !important;
+        }}
+        
+        html[data-theme="dark"] .stat-label {{
+          color: #94a3b8 !important;
+        }}
+        
+        html[data-theme="dark"] .stat-value {{
+          color: #f8fafc !important;
+        }}
+        
+        /* Skill pills */
+        html[data-theme="dark"] .skill-pill {{
+          background: rgba(56,189,248,0.15) !important;
+          color: #e0f2fe !important;
+          box-shadow: none !important;
+        }}
+        
+        /* Ratings */
+        html[data-theme="dark"] .rating-row {{
+          background: #020617 !important;
+          border-color: #1e293b !important;
+        }}
+        
+        html[data-theme="dark"] .rating-row-meta {{
+          color: #94a3b8 !important;
+        }}
+        
+        html[data-theme="dark"] .rating-score {{
+          background: #020617 !important;
+          border: 1px solid #1e293b !important;
+        }}
+        
+        /* Showcase */
+        html[data-theme="dark"] .showcase-thumb {{
+          background: #020617 !important;
+          border-color: #1e293b !important;
+        }}
+        
+        html[data-theme="dark"] .video-wrap {{
+          background: #020617 !important;
+          border-color: #1e293b !important;
+        }}
+        
+        /* Buttons */
+        html[data-theme="dark"] .btn-light {{
+          background: #1e293b !important;
+          color: #f8fafc !important;
+          border: none !important;
+        }}
+        
+        html[data-theme="dark"] .btn-outline-light {{
+          color: #cbd5e1 !important;
+          border-color: #1e293b !important;
+        }}
+        
+        html[data-theme="dark"] .btn-outline-light:hover {{
+          background: #1e293b !important;
+        }}
+        
+        /* Status pill */
+        html[data-theme="dark"] .status-pill {{
+          background: rgba(15,23,42,0.9) !important;
+        }}
+        
+        /* Limit overlay */
+        html[data-theme="dark"] .limit-box {{
+          background: #0b1220 !important;
+          color: #f8fafc !important;
+        }}
+        
+        html[data-theme="dark"] .limit-box p {{
+          color: #94a3b8 !important;
+        }}
+
+            
         </style>
     </head>
     <body>
@@ -618,11 +748,26 @@ def seek_job(
             </section>
 
         </div>
+        
+        <script>
+          const IS_LIMITED = __LIMITED_FLAG__;
+          if (IS_LIMITED) {{
+            document.body.insertAdjacentHTML("beforeend", `
+              <div class="limit-overlay">
+                <div class="limit-box">
+                  <h2>🚫 Action Restricted</h2>
+                  <p>You are restricted from getting any jobs temporarily.</p>
+                </div>
+              </div>
+            `);
+          }}
+        </script>
     </body>
     </html>
     """
-    return HTMLResponse(html)
-
+    return HTMLResponse(
+        html.replace("__LIMITED_FLAG__", "true" if is_limited else "false")
+    )
 
 
 @router.get("/create_worker_profile", response_class=HTMLResponse)
@@ -740,6 +885,7 @@ def edit_worker_profile_get(
     current_user: User = Depends(get_current_user),
 ):
     profile = db.query(WorkerProfile).filter_by(user_id=current_user.id).first()
+    is_limited = profile.moderation_status == "limited"
     if not profile:
         raise HTTPException(404, "No profile found")
 
@@ -748,7 +894,13 @@ def edit_worker_profile_get(
 
     return templates.TemplateResponse(
         "edit_worker_profile.html",
-        {"request": request, "profile": profile, "skills": skills, "showcase_images": showcase_images},
+        {
+            "request": request,
+            "profile": profile,
+            "skills": skills,
+            "showcase_images": showcase_images,
+            "is_limited": is_limited,
+        },
     )
 
 

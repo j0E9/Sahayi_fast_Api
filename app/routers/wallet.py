@@ -10,7 +10,8 @@ from app.database import get_db
 from app.models import User, WalletTransaction, PayoutRequest
 from app.services.wallet import compute_balance, verify_chain, add_ledger_row, open_payout_request
 from app.razor_client import client as razor   # shared client
-from urllib.parse import urlparse
+from app.security.auth import get_current_user
+
 from decimal import Decimal
 import json
 
@@ -64,15 +65,6 @@ def _enforce_same_origin(request: Request):
         return
     raise HTTPException(status_code=403, detail="Bad origin")
 
-
-
-# Reuse your session auth
-def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
-    uid = request.session.get("user_id")
-    if not uid: raise HTTPException(status_code=401, detail="Not authenticated")
-    user = db.get(User, int(uid))
-    if not user: raise HTTPException(status_code=401, detail="User not found")
-    return user
 
 @router.get("/wallet", response_class=HTMLResponse)
 def wallet_home(
@@ -132,19 +124,6 @@ def wallet_home(
         },
     )
 
-@router.get("/payment_history", response_class=HTMLResponse)
-def wallet_history(request: Request, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    txns = (
-        db.query(WalletTransaction)
-          .filter(WalletTransaction.user_id == current_user.id)
-          .order_by(WalletTransaction.id.desc())
-          .all()
-    )
-    return templates.TemplateResponse("wallet_history.html", {
-        "request": request,
-        "txns": txns,
-        "current_user": current_user,
-    })
 
 # ---- Add Money (Razorpay) ----
 @router.post("/wallet/create_order")

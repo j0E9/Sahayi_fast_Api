@@ -38,6 +38,9 @@ class Settings:
     RAZORPAY_KEY_ID: str = os.getenv("RAZORPAY_KEY_ID", "")
     RAZORPAY_KEY_SECRET: str = os.getenv("RAZORPAY_KEY_SECRET", "")
 
+    #DevONlY
+    DEV_OTP_MODE = os.getenv("DEV_OTP_MODE", "false").lower() == "true"
+    DEV_OTP_CODE = os.getenv("DEV_OTP_CODE", "123456")
 
     # --- Auth / token settings ---
     ACCESS_TOKEN_SECRET: str = os.getenv("ACCESS_TOKEN_SECRET", "dev_access_secret_change_me")

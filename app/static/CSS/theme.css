@@ -1,0 +1,322 @@
+/* ===============================
+   SAHAYI THEME SYSTEM (CLEAN)
+   =============================== */
+
+
+/* LIGHT MODE */
+:root {
+
+  --bg-main: #f8fafc;
+  --bg-card: #ffffff;
+
+  --text-main: #0f172a;
+  --text-muted: #64748b;
+
+  --primary: #0d6efd;
+
+  --border: #e5e7eb;
+}
+
+
+
+/* DARK MODE */
+html[data-theme="dark"] {
+
+  --bg-main: #020617;
+  --bg-card: #0b1220;
+
+  --text-main: #f8fafc;
+  --text-muted: #94a3b8;
+
+  --primary: #38bdf8;
+
+  --border: #1e293b;
+}
+
+
+
+/* BASE */
+
+body {
+  background: var(--bg-main);
+  color: var(--text-main);
+}
+
+
+
+/* CARDS */
+
+.category-section,
+.cat-card,
+.option-card,
+.location-box,
+.token-box,
+#chat-direction-panel,
+#change-location-box,
+#mobile-profile-sheet .mobile-profile-panel {
+
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text-main);
+}
+
+
+
+/* INPUTS */
+
+html[data-theme="dark"] input,
+html[data-theme="dark"] textarea {
+
+  background: #020617;
+  color: var(--text-main);
+  border: 1px solid var(--border);
+}
+
+
+
+/* BUTTON */
+
+html[data-theme="dark"] .btn-primary {
+
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #020617;
+}
+
+
+
+/* SEARCH */
+
+html[data-theme="dark"] .search-pill {
+  background: #0b1220;
+}
+
+
+
+/* MOBILE NAV */
+
+html[data-theme="dark"] #mobile-bottom-nav {
+  background: #0b1220;
+}
+
+
+
+/* TEXT SELECTION */
+
+html[data-theme="dark"] ::selection {
+  background: #38bdf8;
+  color: #020617;
+}
+
+html[data-theme="dark"] ::-moz-selection {
+  background: #38bdf8;
+  color: #020617;
+}
+
+
+/* ============================
+   DARK MODE ICON + PILL FIX
+   ============================ */
+
+/* Welcome pill */
+html[data-theme="dark"] .welcome-pill {
+  background: #0b1220;
+  color: #38bdf8;
+  border-color: #1e293b;
+}
+
+/* Location buttons (🔁 💾) */
+html[data-theme="dark"] .loc-btn,
+html[data-theme="dark"] .loc-btn-primary {
+  background: #020617;
+  color: #f8fafc;
+  border-color: #1e293b;
+}
+
+html[data-theme="dark"] .loc-btn:hover,
+html[data-theme="dark"] .loc-btn-primary:hover {
+  background: #0b1220;
+}
+
+/* Top right buttons (🔔 👤 🌙) */
+html[data-theme="dark"] .btn-light {
+  background: #0b1220 !important;
+  color: #f8fafc !important;
+  border: 1px solid #1e293b !important;
+}
+
+/* Notification / token boxes */
+html[data-theme="dark"] .location-box,
+html[data-theme="dark"] .token-box,
+html[data-theme="dark"] .notification-icon {
+  background: #0b1220;
+  color: #f8fafc;
+  border-color: #1e293b;
+}
+
+/* Icon circles */
+html[data-theme="dark"] .loc-icon,
+html[data-theme="dark"] .loc-btn span {
+  background: #020617;
+  color: #f8fafc !important;
+  -webkit-text-fill-color: #f8fafc !important;
+}
+
+/* Emoji circles in categories */
+html[data-theme="dark"] .cat-emoji {
+  background: #020617;
+  border: 1px solid #1e293b;
+}
+
+
+/* ============================
+   DARK MODE LOCATION BUTTON FIX
+   ============================ */
+
+/* Change + Save pills */
+html[data-theme="dark"] .location-actions .loc-btn,
+html[data-theme="dark"] .location-actions .loc-btn-primary {
+  background: #020617 !important;
+  color: #ffffff !important;
+  border: 1px solid #1e293b !important;
+
+  box-shadow: 0 4px 12px rgba(0,0,0,0.6);
+}
+
+/* Emoji + text inside buttons */
+html[data-theme="dark"] .location-actions .loc-btn *,
+html[data-theme="dark"] .location-actions .loc-btn-primary * {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+
+/* Hover */
+html[data-theme="dark"] .location-actions .loc-btn:hover,
+html[data-theme="dark"] .location-actions .loc-btn-primary:hover {
+  background: #0b1220 !important;
+}
+
+
+/* ============================
+   DARK MODE LOCATION TEXT FIX
+   ============================ */
+
+html[data-theme="dark"] .location-box,
+html[data-theme="dark"] .location-box * {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+
+/* ============================
+   DARK MODE MINIMIZED LOCATION FIX
+   ============================ */
+
+html[data-theme="dark"] #location-min {
+  background: #020617 !important;
+  color: #ffffff !important;
+  border: 1px solid #1e293b !important;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.6);
+}
+
+html[data-theme="dark"] #location-min * {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+
+/* ============================
+   DARK MODE CHANGE LOCATION POPUP FIX
+   ============================ */
+
+html[data-theme="dark"] #change-location-box {
+  background: #0b1220 !important;
+  color: #f8fafc !important;
+  border: 1px solid #1e293b !important;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.7) !important;
+}
+
+/* Text inside popup */
+html[data-theme="dark"] #change-location-box * {
+  color: #f8fafc !important;
+  -webkit-text-fill-color: #f8fafc !important;
+}
+
+/* Buttons inside popup */
+html[data-theme="dark"] #change-location-box .btn {
+  background: #020617 !important;
+  color: #ffffff !important;
+  border: 1px solid #1e293b !important;
+}
+
+html[data-theme="dark"] #change-location-box .btn:hover {
+  background: #0b1220 !important;
+}
+
+
+/* ============================
+   DARK MODE PROFILE DROPDOWN FIX
+   ============================ */
+
+html[data-theme="dark"] #profile-box {
+  background: #0b1220 !important;
+  color: #f8fafc !important;
+  border: 1px solid #1e293b !important;
+  box-shadow: 0 12px 32px rgba(0,0,0,0.7) !important;
+}
+
+/* Text inside dropdown */
+html[data-theme="dark"] #profile-box * {
+  color: #f8fafc !important;
+  -webkit-text-fill-color: #f8fafc !important;
+}
+
+/* Hover effect */
+html[data-theme="dark"] #profile-box .profile-option:hover {
+  background: #020617 !important;
+}
+
+/* ============================
+   DARK MODE SEARCH INPUT FIX
+   ============================ */
+
+html[data-theme="dark"] .search-pill input,
+html[data-theme="dark"] .search-pill .form-control {
+  color: #f8fafc !important;                 /* typed text */
+  caret-color: #38bdf8 !important;          /* cursor */
+  background: transparent !important;
+}
+
+/* Placeholder text */
+html[data-theme="dark"] .search-pill input::placeholder,
+html[data-theme="dark"] .search-pill .form-control::placeholder {
+  color: #94a3b8 !important;
+  opacity: 1;
+}
+/* ============================
+   DARK MODE - MOBILE PROFILE SHEET FIX
+   ============================ */
+
+html[data-theme="dark"] #mobile-profile-sheet .mobile-profile-panel {
+  background: #0b1220 !important;
+  color: #f8fafc !important;
+  border-top: 1px solid #1e293b;
+}
+
+/* Header */
+html[data-theme="dark"] .mobile-profile-header {
+  color: #f8fafc !important;
+}
+
+/* Options */
+html[data-theme="dark"] #mobile-profile-sheet .profile-option a {
+  color: #f8fafc !important;
+}
+
+/* Hover */
+html[data-theme="dark"] #mobile-profile-sheet .profile-option:hover {
+  background: #020617 !important;
+}
+
+/* Close button */
+html[data-theme="dark"] .mobile-profile-close-btn {
+  color: #f8fafc !important;
+}

@@ -158,15 +158,29 @@ def send_phone_otp(data: PhoneIn, request: Request, db: Session = Depends(get_db
     if exists:
         return {"success": False, "message": "⚠️ Phone already registered, please login instead."}
 
-    otp = User.generate_otp()
+    if settings.DEV_OTP_MODE:
+        otp = settings.DEV_OTP_CODE
+        print(f"[DEV MODE] Signup OTP for {phone}: {otp}")
+    else:
+        otp = User.generate_otp()
+
     request.session["signup_phone"] = phone
     request.session["signup_phone_otp"] = otp
     request.session["signup_phone_otp_expiry"] = (_now() + timedelta(minutes=5)).isoformat()
+    # DEV MODE: skip SMS, always succeed
+    if settings.DEV_OTP_MODE:
+        return {
+            "success": True,
+            "message": "📩 OTP generated (DEV mode). Use test OTP."
+        }
+
+    # PRODUCTION: send real SMS
     try:
         _send_sms_sync(phone, f"Your Sign-Up OTP code is: {otp}")
         return {"success": True, "message": f"📩 OTP sent to {phone}"}
     except Exception:
         return {"success": False, "message": "❌ Error sending OTP"}
+
 
 @router.post("/phone/verify")
 def verify_phone_otp(data: PhoneVerifyIn, request: Request):
@@ -190,7 +204,26 @@ def send_phone_otp_login(data: PhoneIn, request: Request, db: Session = Depends(
     if not user:
         return {"success": False, "message": "❌ No account found with this phone"}
 
-    otp = User.generate_otp()
+    profile = user.worker_profile
+    if profile:
+        if profile.moderation_status == "suspended":
+            return {
+                "success": False,
+                "message": "🚫 Account suspended. Contact support."
+            }
+
+        if profile.moderation_status == "banned":
+            return {
+                "success": False,
+                "message": "⛔ Account permanently banned. Contact admin."
+            }
+
+    if settings.DEV_OTP_MODE:
+        otp = settings.DEV_OTP_CODE
+        print(f"[DEV MODE] Login OTP for {phone}: {otp}")
+    else:
+        otp = User.generate_otp()
+
     user.phone_otp = otp
     user.phone_otp_expiry = _now() + timedelta(minutes=5)
     db.add(user); db.commit()
@@ -198,11 +231,20 @@ def send_phone_otp_login(data: PhoneIn, request: Request, db: Session = Depends(
     request.session["login_phone"] = phone
     request.session["login_phone_otp"] = otp
     request.session["login_phone_otp_expiry"] = user.phone_otp_expiry.isoformat()
+    # DEV MODE
+    if settings.DEV_OTP_MODE:
+        return {
+            "success": True,
+            "message": "📩 Login OTP generated (DEV mode). Use test OTP."
+        }
+
+    # PRODUCTION
     try:
         _send_sms_sync(phone, f"Your Login OTP code is: {otp}")
         return {"success": True, "message": f"📩 Login OTP sent to {phone}"}
     except Exception:
         return {"success": False, "message": "❌ Error sending OTP"}
+
 
 @router.post("/phone/login/verify")
 def verify_phone_otp_login(data: PhoneVerifyIn, request: Request, db: Session = Depends(get_db)):
@@ -219,6 +261,22 @@ def verify_phone_otp_login(data: PhoneVerifyIn, request: Request, db: Session = 
     user = db.query(User).filter(or_(User.phone == phone, User.phone == phone.replace("+91", ""))).first()
     if not user:
         return {"success": False, "message": "❌ No account found with this phone"}
+
+    profile = user.worker_profile
+    if profile:
+        if profile.moderation_status == "suspended":
+            request.session.clear()  # 🔥 FORCE LOGOUT
+            return {
+                "success": False,
+                "message": "🚫 Account suspended. Login blocked."
+            }
+
+        if profile.moderation_status == "banned":
+            request.session.clear()  # 🔥 FORCE LOGOUT
+            return {
+                "success": False,
+                "message": "⛔ Account permanently banned."
+            }
 
     request.session["user_id"] = user.id  # Trust API session login
     token = create_access_token({"sub": str(user.id)})

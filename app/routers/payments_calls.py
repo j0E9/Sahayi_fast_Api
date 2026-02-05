@@ -18,6 +18,7 @@ from app.models import (
     WalletTransaction,
     PlatformProfit,
 )
+from app.security.auth import get_current_user
 from app.services.platform_balance import increment_platform_balance
 from app.razor_client import client as razor  # single shared Razorpay client
 # Wallet services
@@ -30,6 +31,9 @@ RAZORPAY_WEBHOOK_SECRET = os.getenv("RAZORPAY_WEBHOOK_SECRET", "")
 RZP_TIMEOUT = 20  # seconds for SDK calls
 from urllib.parse import urlparse
 from decimal import Decimal
+from app.services.onsite_escrow import refund_onsite_escrow
+
+
 
 ALLOWED_ORIGIN_HOSTS = {
     "yourdomain.com",
@@ -108,15 +112,6 @@ client = None
 TWILIO_PHONE = ""
 
 
-# -------- Auth ----------
-def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
-    uid = request.session.get("user_id")
-    if not uid:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
-    user = db.get(User, int(uid))
-    if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
-    return user
 
 
 # -------- /check_token_status/<token> ----------
@@ -165,9 +160,22 @@ def pay_token_get(
         booking.payment_required = False
         booking.payment_completed = False
 
+        # ✅ Refund if Razorpay escrow exists
+        try:
+            if (
+                    booking.booking_type in {"onsite", "realtime"}
+                    and getattr(booking, "escrow_locked", False) is True
+                    and getattr(booking, "escrow_released", False) is False
+            ):
+                db.flush()
+                refund_onsite_escrow(db=db, booking=booking, reason="timeout_cancel")
+
+
+        except Exception as e:
+            print("ONSITE REFUND FAILED:", e)
+
         if booking.provider:
             booking.provider.busy = False
-
         if booking.worker:
             booking.worker.busy = False
 
@@ -250,6 +258,22 @@ def pay_token_post(
 
     if booking.expires_at and booking.expires_at < datetime.utcnow():
         booking.status = "Cancelled"
+        booking.payment_required = False
+        booking.payment_completed = False
+
+        # ✅ Refund if Razorpay escrow exists
+        try:
+            if (
+                    booking.booking_type != "wfh"
+                    and getattr(booking, "escrow_locked", False) is True
+                    and getattr(booking, "escrow_released", False) is False
+            ):
+                db.flush()
+                refund_onsite_escrow(db=db, booking=booking, reason="timeout_cancel")
+
+        except Exception:
+            pass
+
         db.commit()
         return HTMLResponse(
             '<script>alert("⛔ Token payment time expired. Booking cancelled.");'
@@ -397,6 +421,21 @@ def create_razorpay_order(
 
     if booking.expires_at and booking.expires_at < datetime.utcnow():
         booking.status = "Cancelled"
+        booking.payment_required = False
+        booking.payment_completed = False
+
+        # ✅ Refund if Razorpay escrow exists
+        try:
+            if (
+                    booking.booking_type != "wfh"
+                    and getattr(booking, "escrow_locked", False) is True
+                    and getattr(booking, "escrow_released", False) is False
+            ):
+                db.flush()
+                refund_onsite_escrow(db=db, booking=booking, reason="timeout_cancel")
+        except Exception:
+            pass
+
         db.commit()
         raise HTTPException(status_code=400, detail="Payment time expired. Booking cancelled")
 
@@ -917,38 +956,152 @@ def _mark_booking_paid(
 
         return
 
-    # ---------- NON-WFH (UNCHANGED) ----------
+    # ---------- NON-WFH → ESCROW HOLD (Razorpay) ----------
+    base = Decimal(str(total_tokens)).quantize(Decimal("0.01"))
+    giver_commission = (base * COMMISSION_RATE_GIVER).quantize(Decimal("0.01"))
+    booking.giver_commission_amount = giver_commission
+
+    # ✅ If payment came from Razorpay bank account,
+    # money is already received by company. Lock it in escrow.
     if method == "razorpay":
-        _credit_worker_only(
-            db,
-            worker=worker,
-            amount=total_tokens,
-            reference=payment_id,
-            booking=booking,
-            order_id=order_id,
-            method=method,
-        )
-    else:
-        _debit_giver_and_credit_worker(
-            db,
-            provider=provider,
-            worker=worker,
-            amount=total_tokens,
-            reference=payment_id,
-            booking=booking,
-            order_id=order_id,
-            method=method,
-        )
+        booking.escrow_amount = base
+        booking.escrow_locked = True
+        booking.escrow_released = False
+
+        # reporting escrow record
+        db.flush()
+        ref = f"escrow_hold_{booking.id}_{payment_id}"
+        if not _platform_profit_exists(db, ref):
+            db.add(
+                PlatformProfit(
+                    booking_id=booking.id,
+                    type="escrow_hold",
+                    direction="credit",
+                    amount=base,
+                    giver_commission=Decimal("0.00"),
+                    worker_commission=Decimal("0.00"),
+                    on_hold=True,
+                    hold_for_user_id=booking.worker_id,
+                    release_at=None,
+                    reference=ref,
+                    meta={"booking_type": "onsite", "method": "razorpay", "order_id": order_id},
+                )
+            )
+
+        booking.status = "Token Paid"
+        booking.payment_completed = True
+        booking.payment_required = False
+        booking.razorpay_status = "captured"
+        booking.razor_payment_id = payment_id
+        if order_id:
+            booking.razor_order_id = order_id
+
+        return
+
+    # ✅ Manual wallet flow can stay as-is (if you still use it)
+    _debit_giver_and_credit_worker(
+        db,
+        provider=provider,
+        worker=worker,
+        amount=base,
+        reference=payment_id,
+        booking=booking,
+        order_id=order_id,
+        method=method,
+    )
 
     booking.status = "Token Paid"
     booking.payment_completed = True
     booking.payment_required = False
-    booking.razorpay_status = "captured" if method == "razorpay" else "manual"
-
+    booking.razorpay_status = "manual"
     booking.razor_payment_id = payment_id
     if order_id:
         booking.razor_order_id = order_id
 
+
+
+def release_onsite_escrow_on_completion(db: Session, booking: Booking) -> None:
+    """
+    Release escrow for an onsite booking ONLY when status becomes Completed.
+    Pays worker (base - 5% worker commission) and records platform commission (giver 5% + worker 5%).
+    Idempotent: safe to call multiple times.
+    """
+    if booking.booking_type == "wfh":
+        return  # WFH handled elsewhere
+
+    if not getattr(booking, "escrow_locked", False):
+        return
+
+    if getattr(booking, "escrow_released", False):
+        return
+
+    base = Decimal(str(booking.escrow_amount or 0)).quantize(Decimal("0.01"))
+    if base <= 0:
+        return
+
+    worker_commission = (base * COMMISSION_RATE_WORKER).quantize(Decimal("0.01"))
+    giver_commission  = (base * COMMISSION_RATE_GIVER).quantize(Decimal("0.01"))
+    worker_net = (base - worker_commission).quantize(Decimal("0.01"))
+    platform_profit = (giver_commission + worker_commission).quantize(Decimal("0.01"))
+
+    worker = booking.worker
+    platform_user = _get_platform_user(db)
+
+    # reference key for idempotency
+    ref = f"onsite_escrow_release_{booking.id}"
+
+    # 1) Credit worker
+    if worker and not _already_recorded(db, user_id=worker.id, kind="escrow_release_credit", reference=ref):
+        add_ledger_row(
+            db=db,
+            user_id=worker.id,
+            amount_rupees=worker_net,
+            kind="escrow_release_credit",
+            reference=ref,
+            meta={
+                "booking_id": booking.id,
+                "base_amount": str(base),
+                "worker_commission": str(worker_commission),
+            },
+        )
+
+    # 2) Credit platform commission
+    if platform_user and not _already_recorded(db, user_id=platform_user.id, kind="platform_commission", reference=ref):
+        add_ledger_row(
+            db=db,
+            user_id=platform_user.id,
+            amount_rupees=platform_profit,
+            kind="platform_commission",
+            reference=ref,
+            meta={
+                "booking_id": booking.id,
+                "base_amount": str(base),
+                "giver_commission": str(giver_commission),
+                "worker_commission": str(worker_commission),
+            },
+        )
+
+        pp_ref = f"commission_{booking.id}_{ref}"
+        if not _platform_profit_exists(db, pp_ref):
+            db.add(
+                PlatformProfit(
+                    booking_id=booking.id,
+                    type="commission",
+                    direction="credit",
+                    amount=platform_profit,
+                    giver_commission=giver_commission,
+                    worker_commission=worker_commission,
+                    on_hold=False,
+                    reference=pp_ref,
+                    meta={"booking_type": "onsite", "source": "escrow_release"},
+                )
+            )
+            increment_platform_balance(db, platform_profit)
+
+    # 3) Mark escrow released
+    booking.escrow_released = True
+    booking.escrow_locked = False
+    booking.escrow_released_at = ist_now() if hasattr(booking, "escrow_released_at") else None
 
 
 # --- NEW helper: surface next pending payment for provider ------------------

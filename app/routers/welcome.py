@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
-
+from app.security.auth import get_current_user
 from app.database import get_db
 from app.models import User, Notification, WorkerProfile
 
@@ -13,11 +13,6 @@ router = APIRouter(tags=["welcome"])
 templates = Jinja2Templates(directory="app/templates")
 
 
-def get_current_user(request: Request, db: Session = Depends(get_db)) -> User | None:
-    uid = request.session.get("user_id")
-    if not uid:
-        return None
-    return db.get(User, int(uid))
 
 
 # app/routers/welcome.py

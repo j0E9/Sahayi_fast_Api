@@ -9,16 +9,16 @@ from sqlalchemy.orm import Session
 from geopy.distance import geodesic
 from sqlalchemy import func
 from app.database import get_db
-from app.models import User, Skill, WorkerProfile, Job,JobDistanceCache
+from app.models import User, Skill, WorkerProfile, Job, JobDistanceCache
 from app.settings import settings
 import html as html_module  # for escaping badge labels
 from app.security.tokens import encode_worker_link
 import math
 import requests
+from app.security.auth import get_current_user
+
 
 router = APIRouter(tags=["jobs"])
-
-
 
 
 def distance_meters(lat1, lon1, lat2, lon2):
@@ -27,21 +27,8 @@ def distance_meters(lat1, lon1, lat2, lon2):
     dlat = to_rad(lat2 - lat1)
     dlon = to_rad(lon2 - lon1)
 
-    a = math.sin(dlat/2)**2 + math.cos(to_rad(lat1)) * math.cos(to_rad(lat2)) * math.sin(dlon/2)**2
-    return 2 * R * math.atan2(math.sqrt(a), math.sqrt(1-a))
-
-
-# --------- session-based auth (Trust API style) ----------
-def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
-    uid = request.session.get("user_id")
-    if not uid:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
-
-    # Query by primary key (SQLAlchemy 2.x compatible)
-    user = db.get(User, int(uid))
-    if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
-    return user
+    a = math.sin(dlat / 2) ** 2 + math.cos(to_rad(lat1)) * math.cos(to_rad(lat2)) * math.sin(dlon / 2) ** 2
+    return 2 * R * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
 
 # Helper: determine if a skill category string represents remote/work-from-home
@@ -62,17 +49,16 @@ def _is_remote_category(cat: str) -> bool:
     )
 
 
-
 # ------------------ GET form ------------------
 @router.get("/provide_job", response_class=HTMLResponse)
 @router.get("/provide_job/", response_class=HTMLResponse)  # allow trailing slash
 def provide_job_form(
-    request: Request,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+        request: Request,
+        current_user: User = Depends(get_current_user),
+        db: Session = Depends(get_db),
 ) -> HTMLResponse:
     skills = db.query(Skill).all()
-    skill_names = [ (s.name or "").strip().lower() for s in skills ]
+    skill_names = [(s.name or "").strip().lower() for s in skills]
 
     html = f"""
     <!DOCTYPE html>
@@ -193,9 +179,9 @@ def provide_job_form(
 
 @router.post("/distance_cached")
 def distance_cached(
-    payload: dict,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+        payload: dict,
+        current_user: User = Depends(get_current_user),
+        db: Session = Depends(get_db)
 ):
     required = ["job_id", "skill_id", "user_lat", "user_lon", "worker_lat", "worker_lon"]
     for k in required:
@@ -283,15 +269,16 @@ def distance_cached(
 @router.post("/provide_job", response_class=HTMLResponse)
 @router.post("/provide_job/", response_class=HTMLResponse)  # allow trailing slash
 def provide_job_submit(
-    request: Request,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+        request: Request,
+        current_user: User = Depends(get_current_user),
+        db: Session = Depends(get_db),
 ) -> HTMLResponse:
     # Safer: read form via request directly
     import anyio
     async def _read_form():
         from starlette.datastructures import FormData
         return await request.form()
+
     form_data = anyio.from_thread.run(_read_form)  # run sync context
 
     job_type_raw = (form_data.get("job_type") or "").strip().lower()
@@ -567,7 +554,6 @@ def provide_job_submit(
 
         return HTMLResponse(content=choice_html)
 
-
     # Normalize chosen_mode into filters
     want_remote_only = False
     want_onsite_only = False
@@ -600,8 +586,18 @@ def provide_job_submit(
         if not worker_user or worker_user.latitude is None or worker_user.longitude is None:
             continue
 
-        profile = db.query(WorkerProfile).filter(WorkerProfile.user_id == worker_user.id).first()
-        if not profile or not profile.is_online or worker_user.busy:
+        profile = db.query(WorkerProfile).filter(
+            WorkerProfile.user_id == worker_user.id
+        ).first()
+
+        # 🔒 MODERATION ENFORCEMENT (INSTAGRAM STYLE)
+        if not profile:
+            continue
+
+        if profile.moderation_status in ("limited", "suspended", "banned"):
+            continue
+
+        if not profile.is_online or worker_user.busy:
             continue
 
         distance_km = geodesic(
@@ -635,14 +631,13 @@ def provide_job_submit(
     return _render_results_page(heading=heading, matched_workers=keyed_by_skill, user_lat=user_lat, user_lon=user_lon)
 
 
-
-
 def _render_results_page(
-    *, heading: str, matched_workers: Dict[int, dict], user_lat: float, user_lon: float
+        *, heading: str, matched_workers: Dict[int, dict], user_lat: float, user_lon: float
 ) -> HTMLResponse:
     from app.settings import settings
 
     matches_count = len(matched_workers)
+    match_label = "match" if matches_count == 1 else "matches"
 
     # Build worker cards
     matched_list = ""
@@ -743,6 +738,7 @@ def _render_results_page(
       <meta name="viewport" content="width=device-width, initial-scale=1">
       <title>Matching Workers</title>
       <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+      <script src="/static/js/theme.js" defer></script>
       <style>
         body {{
           min-height: 100vh;
@@ -878,6 +874,54 @@ def _render_results_page(
             border-radius: 20px;
           }}
         }}
+        
+        /* =========================
+           DARK MODE - RESULTS PAGE
+           ========================= */
+        
+        html[data-theme="dark"] body {{
+          background: radial-gradient(circle at top left, #020617, #020617 40%, #000814 100%) !important;
+          color: #f8fafc !important;
+        }}
+        
+        /* Worker cards */
+        html[data-theme="dark"] .worker-card {{
+          background: #0b1220 !important;
+          border: 1px solid #1e293b !important;
+          box-shadow: 0 12px 30px rgba(0,0,0,0.6) !important;
+        }}
+        
+        /* Distance pill */
+        html[data-theme="dark"] .pill-distance {{
+          background: #020617 !important;
+          border: 1px solid #1e293b !important;
+          color: #e5e7eb !important;
+        }}
+        
+        /* Header */
+        html[data-theme="dark"] .match-header {{
+          background: linear-gradient(135deg, #020617, #0b1220) !important;
+        }}
+        
+        /* Tags */
+        html[data-theme="dark"] .match-tag {{
+          background: #020617 !important;
+          border: 1px solid #1e293b !important;
+          color: #f8fafc !important;
+        }}
+        
+        /* Muted text */
+        html[data-theme="dark"] .text-muted {{
+          color: #cbd5e1 !important;
+        }}
+        
+        /* Badges */
+        html[data-theme="dark"] .badge {{
+          background: #020617 !important;
+          color: #ffffff !important;
+          border: 1px solid #1e293b !important;
+        }}
+
       </style>
     </head>
     <body>
@@ -892,7 +936,7 @@ def _render_results_page(
 
           <div class="match-tags d-flex flex-wrap gap-2 mt-2">
             <span class="match-tag">
-              👥 <span>{matches_count} match{{'es' if matches_count != 1 else ''}}</span>
+              👥 <span>{matches_count} {match_label}</span>
             </span>
             <span class="match-tag">
               📍 <span>Within 105 km</span>
@@ -922,7 +966,7 @@ def _render_results_page(
           const spanId = "distance-" + skillId;
           const span = document.getElementById(spanId);
           const pill = document.getElementById("pill-distance-" + skillId);
-        
+
           try {{
             const res = await fetch("/distance_cached", {{
               method: "POST",
@@ -937,9 +981,9 @@ def _render_results_page(
                 worker_lon: workerLon
               }})
             }});
-        
+
             const data = await res.json();
-        
+
             if (data.ok) {{
               const text = `${{data.distance_km}} km (~${{data.duration_min}} mins)`;
               if (span) span.textContent = text;
@@ -948,7 +992,7 @@ def _render_results_page(
               if (span) span.textContent = "❌ Not available";
               if (pill) pill.textContent = "--";
             }}
-        
+
           }} catch (e) {{
             console.error("Distance error:", e);
             if (span) span.textContent = "⚠️ Error";
@@ -1004,10 +1048,10 @@ def _render_results_page(
 
 @router.get("/jobs/by_category", response_class=HTMLResponse)
 def jobs_by_category(
-    request: Request,
-    c: str,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+        request: Request,
+        c: str,
+        current_user: User = Depends(get_current_user),
+        db: Session = Depends(get_db),
 ) -> HTMLResponse:
     category = (c or "").strip()
     if not category:
@@ -1041,8 +1085,18 @@ def jobs_by_category(
         if not worker_user or worker_user.latitude is None or worker_user.longitude is None:
             continue
 
-        profile = db.query(WorkerProfile).filter(WorkerProfile.user_id == worker_user.id).first()
-        if not profile or not profile.is_online or worker_user.busy:
+        profile = db.query(WorkerProfile).filter(
+            WorkerProfile.user_id == worker_user.id
+        ).first()
+
+        # 🔒 MODERATION ENFORCEMENT
+        if not profile:
+            continue
+
+        if profile.moderation_status in ("limited", "suspended", "banned"):
+            continue
+
+        if not profile.is_online or worker_user.busy:
             continue
 
         distance_km = geodesic(

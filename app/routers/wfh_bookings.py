@@ -20,6 +20,7 @@ from datetime import datetime,timedelta
 from PIL import Image
 import pikepdf
 from typing import List
+from app.security.auth import get_current_user
 
 
 router = APIRouter(tags=["wfh"])
@@ -46,15 +47,6 @@ ALLOWED_MIME = {
 }
 
 
-# ---- session auth ----
-def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
-    uid = request.session.get("user_id")
-    if not uid:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
-    user = db.get(User, int(uid))
-    if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
-    return user
 
 
 def finalize_wfh_payout(db: Session, booking: Booking):
@@ -211,6 +203,22 @@ def wfh_booking_status(
     enforce_cancel_window(booking)
     db.commit()
 
+    # ✅ EXPIRE job_giver update request when deadline passes
+    req = db.query(WFHProjectUpdate).filter(
+        WFHProjectUpdate.booking_id == booking.id,
+        WFHProjectUpdate.status == "requested",
+        WFHProjectUpdate.request_origin == "job_giver",
+        WFHProjectUpdate.request_deadline.isnot(None)
+    ).first()
+
+    if req:
+        now = ist_now()
+        if now >= req.request_deadline:
+            req.status = "expired"
+            req.request_deadline = None
+            db.commit()
+            db.refresh(booking)
+
     now = ist_now()
     deadline = booking.deadline
 
@@ -236,8 +244,94 @@ def wfh_booking_status(
         "early_cancel_allowed": early_cancel_allowed,
         "final_cancel_allowed": final_cancel_allowed,
         "approval_allowed": approval_allowed(booking),
-        "completion_requested": booking.status == "WFH_COMPLETION_REQUESTED",
+        "completion_requested": booking.status == "WFH_REVIEW_PENDING",
     }
+
+
+@router.post("/wfh/booking/{booking_id}/extend-update")
+def extend_update_deadline(
+    booking_id: int,
+    days: int = Form(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    booking = db.get(Booking, booking_id)
+    if not booking or booking.booking_type != "wfh":
+        raise HTTPException(404)
+
+    if current_user.id != booking.provider_id:
+        raise HTTPException(403)
+
+    req = db.query(WFHProjectUpdate).filter(
+        WFHProjectUpdate.booking_id == booking_id,
+        WFHProjectUpdate.request_origin == "job_giver",
+        WFHProjectUpdate.status.in_(["requested", "expired"])
+    ).order_by(WFHProjectUpdate.id.desc()).first()
+
+    if not req:
+        raise HTTPException(400, "No update request exists to extend")
+
+    req.status = "requested"
+    req.request_deadline = ist_now() + timedelta(days=int(days))
+
+    db.commit()
+
+    return RedirectResponse(f"/wfh/giver/booking/{booking_id}", status_code=303)
+
+
+@router.post("/wfh/booking/{booking_id}/cancel-missed-update")
+def cancel_due_to_missed_update(
+    booking_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    booking = db.get(Booking, booking_id)
+    if not booking or booking.booking_type != "wfh":
+        raise HTTPException(404)
+
+    if current_user.id != booking.provider_id:
+        raise HTTPException(403)
+
+    if not booking.payment_completed:
+        raise HTTPException(400, "Payment not completed")
+
+    # ✅ Must have expired update request
+    expired = db.query(WFHProjectUpdate).filter(
+        WFHProjectUpdate.booking_id == booking_id,
+        WFHProjectUpdate.request_origin == "job_giver",
+        WFHProjectUpdate.status == "expired"
+    ).first()
+
+    if not expired:
+        raise HTTPException(400, "Update request is not expired yet")
+
+    # ✅ Block refund cancel if worker submitted completion
+    submitted_completion = db.query(WFHProjectUpdate).filter(
+        WFHProjectUpdate.booking_id == booking_id,
+        WFHProjectUpdate.status == "approval_requested"
+    ).first()
+
+    if submitted_completion:
+        raise HTTPException(400, "Worker requested completion. Use dispute.")
+
+    # ✅ Refund escrow (your existing service)
+    from app.services.wfh_refund import refund_wfh_escrow
+
+    refund_wfh_escrow(
+        db=db,
+        booking=booking,
+        reason="missed_update_deadline",
+    )
+
+    booking.status = "WFH_CANCELLED"
+    booking.escrow_locked = False
+
+    write_audit(booking.id, "JOB_CANCELLED_MISSED_UPDATE_DEADLINE")
+
+    db.commit()
+    delete_wfh_files(db, booking.id)
+
+    return RedirectResponse("/welcome", status_code=303)
 
 
 def approval_allowed(booking: Booking) -> bool:
@@ -337,6 +431,20 @@ def giver_wfh_booking_detail(
     db.commit()
     now = ist_now()
     deadline = booking.deadline
+
+    # ✅ expire request if deadline passed (giver page)
+    req = db.query(WFHProjectUpdate).filter(
+        WFHProjectUpdate.booking_id == booking.id,
+        WFHProjectUpdate.status == "requested",
+        WFHProjectUpdate.request_origin == "job_giver",
+        WFHProjectUpdate.request_deadline.isnot(None)
+    ).first()
+
+    if req and ist_now() >= req.request_deadline:
+        req.status = "expired"
+        req.request_deadline = None
+        db.commit()
+        db.refresh(booking)
 
     has_pending_update_request = (
             db.query(WFHProjectUpdate)
@@ -1122,7 +1230,7 @@ def comment_on_update(
 def open_dispute(
     booking_id: int,
     reason: str = Form(...),
-    proof: List[UploadFile] = File(None),
+    proof: List[UploadFile] = File(...),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -1133,6 +1241,15 @@ def open_dispute(
 
     if current_user.id not in (booking.worker_id, booking.provider_id):
         raise HTTPException(403)
+
+    # ✅ require reason text
+    if not reason or len(reason.strip()) < 10:
+        raise HTTPException(400, "Dispute reason must be at least 10 characters")
+
+    # ✅ require proof files
+    if not proof or len(proof) == 0:
+        raise HTTPException(400, "Please upload at least 1 proof file")
+
 
     # 🚫 prevent duplicate disputes
     existing = db.query(WFHDispute).filter(
@@ -1213,7 +1330,7 @@ def auto_approve_reviews(db: Session):
 
 
 
-@router.post("/wfh/booking/{booking_id}/request-update")
+@router.post("/wfh/giver/booking/{booking_id}/request-update")
 def request_project_update(
     booking_id: int,
     current_user: User = Depends(get_current_user),
@@ -1240,6 +1357,7 @@ def request_project_update(
     existing = db.query(WFHProjectUpdate).filter(
         WFHProjectUpdate.booking_id == booking_id,
         WFHProjectUpdate.status == "requested",
+        WFHProjectUpdate.request_origin.in_(["system", "job_giver"])
     ).first()
 
     if existing:
@@ -1289,17 +1407,22 @@ def submit_project_update(
     if booking.worker_id != current_user.id:
         raise HTTPException(403)
 
-    # 🔓 Allow updates immediately during revision
+    requested = db.query(WFHProjectUpdate).filter(
+        WFHProjectUpdate.booking_id == booking_id,
+        WFHProjectUpdate.status == "requested",
+        WFHProjectUpdate.request_origin == "job_giver"
+    ).first()
+
+    # ✅ Allow if job giver requested OR 50% reached OR revision mode
     if (
             booking.status != "WFH_REVISION_REQUESTED"
+            and not requested
             and not approval_allowed(booking)
     ):
         raise HTTPException(
             status_code=403,
-            detail="Updates allowed only after 50% of job time"
+            detail="Update allowed only after job giver request or 50% of job time"
         )
-
-
 
     requested = db.query(WFHProjectUpdate).filter(
         WFHProjectUpdate.booking_id == booking_id,
@@ -1497,6 +1620,19 @@ def request_update_revision(
     if booking.status != "WFH_REVIEW_PENDING":
         raise HTTPException(400, "Not in review state")
 
+    # ✅ COUNT revisions (server-side)
+    revision_count = db.query(WFHProjectUpdate).filter(
+        WFHProjectUpdate.booking_id == booking.id,
+        WFHProjectUpdate.status == "revision_requested"
+    ).count()
+
+    # ✅ BLOCK AFTER 3
+    if revision_count >= 3:
+        raise HTTPException(
+            status_code=400,
+            detail="Maximum revision requests reached. Only approve or dispute is allowed."
+        )
+
     update.provider_comment = reason
     update.status = "revision_requested"
     booking.status = "WFH_REVISION_REQUESTED"
@@ -1504,6 +1640,33 @@ def request_update_revision(
     db.commit()
     return RedirectResponse(f"/wfh/giver/booking/{booking.id}", 303)
 
+
+
+@router.get("/wfh/update/file/{update_id}")
+def download_update_file(
+    update_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    update = db.get(WFHProjectUpdate, update_id)
+    if not update:
+        raise HTTPException(404)
+
+    booking = db.get(Booking, update.booking_id)
+
+    # ✅ only worker or job giver can download
+    if current_user.id not in (booking.worker_id, booking.provider_id):
+        raise HTTPException(403)
+
+    path = update.file_url
+    if not path or not os.path.exists(path):
+        raise HTTPException(404, "File missing")
+
+    return FileResponse(
+        path=path,
+        filename=os.path.basename(path),
+        media_type="application/octet-stream"
+    )
 
 def get_job_dir(booking_id: int) -> Path:
     base = WFH_STORAGE_ROOT / f"job_{booking_id}"

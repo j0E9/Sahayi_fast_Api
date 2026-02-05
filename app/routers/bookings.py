@@ -5,7 +5,7 @@ from decimal import Decimal
 from typing import Optional
 from sqlalchemy import desc, func
 from geopy.distance import geodesic
-
+from app.security.auth import get_current_user
 from app.models import (
     User, Skill, Job,
     Booking, Notification, PriceNegotiation
@@ -18,23 +18,13 @@ from sqlalchemy.orm import Session
 from datetime import datetime, time, timedelta
 
 from app.database import get_db
+from app.services.onsite_escrow import refund_onsite_escrow
+
 
 
 router = APIRouter(tags=["bookings"])
 templates = Jinja2Templates(directory="app/templates")
 
-
-# ----------------------------
-# Session-based auth (Trust API style)
-# ----------------------------
-def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
-    uid = request.session.get("user_id")
-    if not uid:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
-    user = db.get(User, int(uid))
-    if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
-    return user
 
 
 # ----------------------------
@@ -460,18 +450,31 @@ def booking_timeout(
     if current_user.id != booking.provider_id:
         raise HTTPException(status_code=403, detail="Forbidden")
 
+    # ✅ If already cancelled, still try refund if escrow exists
     if booking.status != "Token Paid":
         booking.status = "Cancelled"
 
-        if booking.provider:
-            booking.provider.busy = False
+    # ✅ REFUND HERE (THIS WAS MISSING)
+    if (
+        booking.booking_type in {"onsite", "realtime"}  # keep realtime also
+        and getattr(booking, "escrow_locked", False) is True
+        and getattr(booking, "escrow_released", False) is False
+    ):
+        try:
+            refund_ok = refund_onsite_escrow(db=db, booking=booking, reason="timeout_cancel")
+            print(f"[booking_timeout] refund_ok={refund_ok} booking_id={booking.id}")
+        except Exception as e:
+            print("[booking_timeout] refund FAILED:", e)
 
-        if booking.worker:
-            booking.worker.busy = False
+    # free both sides
+    if booking.provider:
+        booking.provider.busy = False
 
-        db.commit()
+    if booking.worker:
+        booking.worker.busy = False
 
-    # No flash in FastAPI; redirect back to welcome
+    db.commit()
+
     return RedirectResponse(url="/welcome", status_code=status.HTTP_303_SEE_OTHER)
 
 

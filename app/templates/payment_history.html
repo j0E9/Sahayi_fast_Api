@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Booking History — Sahayi</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="/static/js/theme.js" defer></script>
+
+  <style>
+    body {
+      background: #f7f9fc;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    }
+
+    .card {
+      border-radius: 14px;
+      box-shadow: 0 6px 16px rgba(0,0,0,0.06);
+      border: none;
+    }
+
+    th {
+      white-space: nowrap;
+      font-size: 12px;
+      color: #64748b;
+      text-transform: uppercase;
+    }
+
+    .table tbody tr:hover {
+      background: #f9fafb;
+    }
+
+    .pill {
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      display: inline-block;
+    }
+
+    .pill-success {
+      background: #d1e7dd;
+      color: #0f5132;
+    }
+
+    .pill-cancelled {
+      background: #f8d7da;
+      color: #842029;
+    }
+
+    .action-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      font-size: 12px;
+      border-radius: 999px;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+
+    .action-book {
+      background: linear-gradient(135deg, #3b82f6, #2563eb);
+      color: #fff;
+    }
+
+    .action-report {
+      background: #fff;
+      color: #dc2626;
+      border: 1px solid #fecaca;
+    }
+
+    @media (max-width: 768px) {
+      .desktop-actions {
+        display: none;
+      }
+    }
+
+    .mobile-action-row {
+      display: none;
+      background: #f8fafc;
+    }
+
+    @media (max-width: 768px) {
+      .mobile-action-row {
+        display: table-row;
+      }
+    }
+
+    /* ================= INSTAGRAM STYLE REPORT MODAL ================= */
+
+    .insta-modal {
+      border-radius: 16px;
+      overflow: hidden;
+      border: none;
+    }
+
+    .insta-header {
+      padding: 14px 16px;
+      font-weight: 600;
+      text-align: center;
+      border-bottom: 1px solid #eee;
+      position: relative;
+    }
+
+    .insta-header .btn-close {
+      position: absolute;
+      right: 14px;
+      top: 14px;
+    }
+
+    .insta-body {
+      padding: 16px;
+    }
+
+    .insta-subtitle {
+      font-size: 14px;
+      color: #555;
+      margin-bottom: 12px;
+    }
+
+    .insta-reasons {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .reason-item {
+      border: 1px solid #eee;
+      background: #fff;
+      padding: 10px 12px;
+      border-radius: 10px;
+      text-align: left;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .reason-item:hover {
+      background: #f5f5f5;
+    }
+
+    .reason-item.active {
+      background: #2563eb;
+      color: #fff;
+      border-color: #2563eb;
+    }
+
+    .insta-textarea {
+      width: 100%;
+      margin-top: 12px;
+      border-radius: 10px;
+      border: 1px solid #ddd;
+      padding: 10px;
+      font-size: 13px;
+      resize: none;
+    }
+
+    .insta-upload {
+      display: block;
+      margin-top: 12px;
+      font-size: 13px;
+      color: #2563eb;
+      cursor: pointer;
+    }
+
+    .insta-footer {
+      border-top: 1px solid #eee;
+      padding: 12px;
+    }
+
+    .insta-submit {
+      width: 100%;
+      border: none;
+      background: #dc2626;
+      color: #fff;
+      padding: 10px;
+      border-radius: 999px;
+      font-weight: 600;
+      opacity: 0.5;
+    }
+
+    .insta-submit:enabled {
+      opacity: 1;
+    }
+
+    /* ===== Insta Upload ===== */
+
+    .insta-upload-box {
+      margin-top: 14px;
+    }
+
+    .upload-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 14px;
+      border-radius: 999px;
+      background: #f5f7fb;
+      color: #2563eb;
+      font-size: 13px;
+      cursor: pointer;
+      border: 1px dashed #dbe3ff;
+      transition: all 0.2s ease;
+    }
+
+    .upload-pill:hover {
+      background: #eef2ff;
+    }
+
+    .upload-preview {
+      margin-top: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: #f9fafb;
+      border-radius: 10px;
+      padding: 8px 12px;
+      font-size: 13px;
+      border: 1px solid #eee;
+    }
+
+    .upload-preview span {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 200px;
+    }
+
+    .upload-preview button {
+      background: none;
+      border: none;
+      color: #dc2626;
+      font-size: 16px;
+      cursor: pointer;
+    }
+
+    /* ============================
+       DARK MODE - HISTORY PAGE
+       ============================ */
+
+    html[data-theme="dark"] body {
+      background: radial-gradient(circle at top left, #020617, #020617 40%, #000814 100%) !important;
+      color: #f8fafc !important;
+    }
+
+    /* Cards */
+    html[data-theme="dark"] .card {
+      background: #0b1220 !important;
+      border: 1px solid #1e293b !important;
+      box-shadow: 0 20px 45px rgba(0,0,0,0.6) !important;
+    }
+
+    /* Headings */
+    html[data-theme="dark"] h2,
+    html[data-theme="dark"] h5 {
+      color: #38bdf8 !important;
+    }
+
+    /* Back button */
+    html[data-theme="dark"] .btn-outline-secondary {
+      color: #f8fafc !important;
+      border-color: #1e293b !important;
+    }
+
+    html[data-theme="dark"] .btn-outline-secondary:hover {
+      background: #1e293b !important;
+    }
+
+    /* Tabs */
+    html[data-theme="dark"] .nav-tabs {
+      border-bottom: 1px solid #1e293b !important;
+    }
+
+    html[data-theme="dark"] .nav-tabs .nav-link {
+      color: #cbd5e1 !important;
+      border: none !important;
+    }
+
+    html[data-theme="dark"] .nav-tabs .nav-link.active {
+      background: #020617 !important;
+      color: #38bdf8 !important;
+      border-bottom: 2px solid #38bdf8 !important;
+    }
+
+    /* Tables */
+    html[data-theme="dark"] table {
+      color: #e5e7eb !important;
+    }
+
+    html[data-theme="dark"] thead {
+      background: #020617 !important;
+    }
+
+    html[data-theme="dark"] th {
+      color: #94a3b8 !important;
+      background: #020617 !important;
+    }
+
+    html[data-theme="dark"] td {
+      color: #e5e7eb !important;
+    }
+
+    html[data-theme="dark"] tbody tr {
+      background: #020617 !important;
+    }
+
+    html[data-theme="dark"] tbody tr:hover {
+      background: #0b1220 !important;
+    }
+
+    /* Pills */
+    html[data-theme="dark"] .pill-success {
+      background: rgba(22,163,74,0.2) !important;
+      color: #4ade80 !important;
+    }
+
+    html[data-theme="dark"] .pill-cancelled {
+      background: rgba(220,38,38,0.2) !important;
+      color: #f87171 !important;
+    }
+
+    /* Action buttons */
+    html[data-theme="dark"] .action-book {
+      background: linear-gradient(135deg, #38bdf8, #2563eb) !important;
+    }
+
+    html[data-theme="dark"] .action-report {
+      background: #020617 !important;
+      color: #f87171 !important;
+      border: 1px solid #1e293b !important;
+    }
+
+    /* Mobile action row */
+    html[data-theme="dark"] .mobile-action-row {
+      background: #020617 !important;
+    }
+
+    /* Report modal */
+    html[data-theme="dark"] .insta-modal {
+      background: #0b1220 !important;
+      color: #f8fafc !important;
+    }
+
+    html[data-theme="dark"] .insta-header {
+      border-bottom: 1px solid #1e293b !important;
+    }
+
+    html[data-theme="dark"] .insta-subtitle {
+      color: #94a3b8 !important;
+    }
+
+    /* Reason buttons */
+    html[data-theme="dark"] .reason-item {
+      background: #020617 !important;
+      border: 1px solid #1e293b !important;
+      color: #e5e7eb !important;
+    }
+
+    html[data-theme="dark"] .reason-item:hover {
+      background: #0b1220 !important;
+    }
+
+    html[data-theme="dark"] .reason-item.active {
+      background: #2563eb !important;
+      color: #fff !important;
+    }
+
+    /* Textarea */
+    html[data-theme="dark"] .insta-textarea {
+      background: #020617 !important;
+      color: #f8fafc !important;
+      border: 1px solid #1e293b !important;
+    }
+
+    html[data-theme="dark"] .insta-textarea::placeholder {
+      color: #64748b !important;
+    }
+
+    /* Upload box */
+    html[data-theme="dark"] .upload-pill {
+      background: #020617 !important;
+      border-color: #1e293b !important;
+      color: #38bdf8 !important;
+    }
+
+    html[data-theme="dark"] .upload-preview {
+      background: #020617 !important;
+      border: 1px solid #1e293b !important;
+      color: #e5e7eb !important;
+    }
+
+    /* Submit */
+    html[data-theme="dark"] .insta-submit {
+      background: #dc2626 !important;
+    }
+    /* ============================
+       DARK MODE - FIX TABLE LAYER
+       ============================ */
+
+    /* Table wrapper */
+    html[data-theme="dark"] .table-responsive {
+      background: #020617 !important;
+    }
+
+    /* Main table */
+    html[data-theme="dark"] .table {
+      background: #020617 !important;
+      color: #e5e7eb !important;
+      border-color: #1e293b !important;
+    }
+
+    /* Header row */
+    html[data-theme="dark"] .table thead tr {
+      background: #020617 !important;
+    }
+
+    /* Header cells */
+    html[data-theme="dark"] .table th {
+      background: #020617 !important;
+      color: #94a3b8 !important;
+      border-color: #1e293b !important;
+    }
+
+    /* Body cells */
+    html[data-theme="dark"] .table td {
+      background: #020617 !important;
+      color: #e5e7eb !important;
+      border-color: #1e293b !important;
+    }
+
+    /* Row striping OFF (Bootstrap override) */
+    html[data-theme="dark"] .table > :not(caption) > * > * {
+      background-color: #020617 !important;
+    }
+
+    /* Hover */
+    html[data-theme="dark"] .table tbody tr:hover > * {
+      background: #0b1220 !important;
+    }
+
+    /* Muted text inside table */
+    html[data-theme="dark"] .table .text-muted {
+      color: #64748b !important;
+    }
+
+    /* Status pill spacing fix */
+    html[data-theme="dark"] .pill {
+      border: 1px solid #1e293b !important;
+    }
+
+    /* Desktop action cell */
+    html[data-theme="dark"] .desktop-actions {
+      background: #020617 !important;
+    }
+
+    /* Mobile row */
+    html[data-theme="dark"] .mobile-action-row td {
+      background: #020617 !important;
+    }
+
+
+
+
+  </style>
+</head>
+
+<body class="p-3 p-md-4">
+<div class="container-xxl">
+
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="mb-0">📂 Booking History</h2>
+    <a href="/welcome" class="btn btn-sm btn-outline-secondary">← Back</a>
+  </div>
+
+  <ul class="nav nav-tabs mb-3">
+    <li class="nav-item">
+      <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#giver">
+        As Job Giver
+      </button>
+    </li>
+    <li class="nav-item">
+      <button class="nav-link" data-bs-toggle="tab" data-bs-target="#worker">
+        As Worker
+      </button>
+    </li>
+  </ul>
+
+  <div class="tab-content">
+
+    <!-- ================= JOB GIVER ================= -->
+    <div class="tab-pane fade show active" id="giver">
+      <div class="card">
+        <div class="card-body">
+
+          {% if giver_rows %}
+          <div class="table-responsive">
+            <table class="table align-middle mb-0">
+              <thead>
+                <tr>
+                  <th>Booking</th>
+                  <th>Worker</th>
+                  <th>Skill</th>
+                  <th>Hours</th>
+                  <th>Payment</th>
+                  <th>Status</th>
+                  <th>Date</th>
+                  <th class="desktop-actions">Actions</th>
+                </tr>
+              </thead>
+
+              <tbody>
+              {% for r in giver_rows %}
+              {% set st = (r.status or '')|lower %}
+
+              <tr>
+                <td>#{{ r.booking_id }}</td>
+                <td>
+                  {{ r.worker_name }}<br>
+                  <small class="text-muted">{{ r.worker_code }}</small>
+                </td>
+
+                <!-- ✅ SKILL COLUMN -->
+                <td>
+                  <strong>{{ r.skill_name }}</strong>
+                </td>
+
+                <td>{{ "%.2f"|format(r.hours) }}</td>
+                <td><strong>₹{{ "%.2f"|format(r.payment) }}</strong></td>
+
+                <td>
+                  <span class="pill {{ 'pill-success' if st in ['completed','accepted','token paid','wfh_completed'] else 'pill-cancelled' }}">
+                    {{ r.status }}
+                  </span>
+                </td>
+
+                <td>{{ r.date }}</td>
+
+                <td class="desktop-actions">
+                  <div class="d-flex gap-2">
+
+                    {% if r.skill_id %}
+                      <a href="/book-again?worker_id={{ r.worker_user_id }}&skill_id={{ r.skill_id }}"
+                         class="action-btn action-book">
+                        🔁 Book Again
+                      </a>
+                    {% else %}
+                      <span class="text-muted small">Skill unavailable</span>
+                    {% endif %}
+
+                    {% if r.can_report %}
+                    <button
+                      class="action-btn action-report"
+                      data-bs-toggle="modal"
+                      data-bs-target="#reportModal"
+                      data-booking="{{ r.booking_id }}">
+                      🚩 Report
+                    </button>
+                    {% else %}
+                    <span class="text-muted small">Reported</span>
+                    {% endif %}
+
+                  </div>
+                </td>
+              </tr>
+
+              <!-- MOBILE -->
+              <tr class="mobile-action-row">
+                <td colspan="8">
+                  <div class="d-flex justify-content-end gap-2">
+                    {% if r.skill_id %}
+                      <a href="/book-again?worker_id={{ r.worker_user_id }}&skill_id={{ r.skill_id }}"
+                         class="action-btn action-book">
+                        🔁 Book Again
+                      </a>
+                    {% else %}
+                      <span class="text-muted small">Skill unavailable</span>
+                    {% endif %}
+                    {% if r.can_report %}
+                    <button
+                      class="action-btn action-report"
+                      data-bs-toggle="modal"
+                      data-bs-target="#reportModal"
+                      data-booking="{{ r.booking_id }}">
+                      🚩 Report
+                    </button>
+                    {% else %}
+                    <span class="text-muted small">Reported</span>
+                    {% endif %}
+                  </div>
+                </td>
+              </tr>
+
+              {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% else %}
+            <div class="text-muted">No booking history as job giver.</div>
+          {% endif %}
+
+        </div>
+      </div>
+    </div>
+
+    <div class="modal fade" id="reportModal" tabindex="-1">
+      <div class="modal-dialog modal-dialog-centered">
+        <form id="reportForm"
+              class="modal-content insta-modal"
+              enctype="multipart/form-data">
+
+          <input type="hidden" name="booking_id" id="reportBookingId">
+          <input type="hidden" name="reason" id="reportReason">
+
+          <!-- HEADER -->
+          <div class="insta-header">
+            <span>Report Worker</span>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+
+          <!-- BODY -->
+          <div class="insta-body">
+
+            <p class="insta-subtitle">
+              Why are you reporting this worker?
+            </p>
+
+            <!-- REASONS -->
+            <div class="insta-reasons">
+              <button type="button" class="reason-item">Did not arrive</button>
+              <button type="button" class="reason-item">Arrived late</button>
+              <button type="button" class="reason-item">Poor quality work</button>
+              <button type="button" class="reason-item">Unprofessional behavior</button>
+              <button type="button" class="reason-item">Fraud / scam</button>
+              <button type="button" class="reason-item">Other</button>
+            </div>
+
+            <!-- DESCRIPTION -->
+            <textarea
+              name="description"
+              class="insta-textarea"
+              placeholder="Add details (optional)"></textarea>
+
+            <!-- FILE -->
+            <div class="insta-upload-box">
+              <label class="upload-pill">
+                <span class="upload-icon">📎</span>
+                <span class="upload-text">Add proof (optional)</span>
+                <input type="file" name="proof" id="proofInput" hidden>
+              </label>
+
+              <div class="upload-preview" id="uploadPreview" style="display:none;">
+                <span id="fileName"></span>
+                <button type="button" id="removeFile">✕</button>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- FOOTER -->
+          <div class="insta-footer">
+            <button type="submit" class="insta-submit" disabled>
+              Submit Report
+            </button>
+          </div>
+
+        </form>
+      </div>
+    </div>
+
+
+
+    <!-- ================= WORKER ================= -->
+    <div class="tab-pane fade" id="worker">
+      <div class="card">
+        <div class="card-body">
+
+          {% if worker_rows %}
+          <div class="table-responsive">
+            <table class="table align-middle mb-0">
+              <thead>
+                <tr>
+                  <th>Booking</th>
+                  <th>Job Giver</th>
+                  <th>Job</th>
+                  <th>Hours</th>
+                  <th>Payment</th>
+                  <th>Status</th>
+                  <th>Date</th>
+                </tr>
+              </thead>
+              <tbody>
+              {% for r in worker_rows %}
+                <tr>
+                  <td>#{{ r.booking_id }}</td>
+                  <td>{{ r.partner_name }}</td>
+                  <td>{{ r.job_title }}</td>
+                  <td>{{ "%.2f"|format(r.hours) }}</td>
+                  <td><strong>₹{{ "%.2f"|format(r.payment) }}</strong></td>
+                  <td>{{ r.status }}</td>
+                  <td>{{ r.date }}</td>
+                </tr>
+              {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% else %}
+            <div class="text-muted">No work history yet.</div>
+          {% endif %}
+
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+document.getElementById('reportModal').addEventListener('show.bs.modal', function (event) {
+  const button = event.relatedTarget
+  const bookingId = button.getAttribute('data-booking')
+  document.getElementById('reportBookingId').value = bookingId
+})
+</script>
+<script>
+document.addEventListener("click", function (e) {
+  if (!e.target.classList.contains("reason-item")) return;
+
+  document.querySelectorAll(".reason-item")
+    .forEach(b => b.classList.remove("active"));
+
+  e.target.classList.add("active");
+
+  document.getElementById("reportReason").value = e.target.innerText;
+
+  document.querySelector(".insta-submit").disabled = false;
+});
+</script>
+<script>
+const proofInput = document.getElementById("proofInput");
+const preview = document.getElementById("uploadPreview");
+const fileName = document.getElementById("fileName");
+const removeBtn = document.getElementById("removeFile");
+
+proofInput?.addEventListener("change", () => {
+  if (proofInput.files.length > 0) {
+    fileName.textContent = proofInput.files[0].name;
+    preview.style.display = "flex";
+  }
+});
+
+removeBtn?.addEventListener("click", () => {
+  proofInput.value = "";
+  preview.style.display = "none";
+});
+</script>
+<script>
+document.getElementById("reportForm").addEventListener("submit", async function (e) {
+  e.preventDefault();
+
+  const form = e.target;
+  const submitBtn = form.querySelector(".insta-submit");
+  submitBtn.disabled = true;
+
+  const formData = new FormData(form);
+
+  try {
+    const res = await fetch("/report-worker", {
+      method: "POST",
+      body: formData,
+      headers: {
+        "X-Requested-With": "XMLHttpRequest"
+      }
+    });
+
+    const data = await res.json();
+
+    if (data.success) {
+      const modalEl = document.getElementById("reportModal");
+      const modal = bootstrap.Modal.getInstance(modalEl);
+      modal.hide();
+
+      alert("Report submitted successfully");
+
+      window.location.reload();
+    } else {
+      alert(data.detail || "Failed to submit report");
+      submitBtn.disabled = false;
+    }
+  } catch (err) {
+    console.error(err);
+    alert("Network error");
+    submitBtn.disabled = false;
+  }
+});
+</script>
+
+</body>
+</html>

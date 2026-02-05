@@ -8,7 +8,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status, Request
 from app.database import get_db
 from app.models import Booking, WorkerWarning, Notification, User
 from fastapi.templating import Jinja2Templates
-from app.routers.auth import verify_token  # JWT -> returns payload with "sub"
+from app.services.onsite_escrow import refund_onsite_escrow
+
+
 
 # NOTE: no prefix -> paths are /issue_warning, /worker_check_warning, /ack_warning
 router = APIRouter(tags=["warnings"])
@@ -110,14 +112,10 @@ def issue_warning(
 
     cancelled = False
 
-    # ---- On 3rd warning: auto-cancel + optional refund ----
+    # ---- On 3rd warning: auto-cancel + refund if escrow exists ----
     if next_stage == 3:
         cancelled = True
 
-        # capture paid state BEFORE changing status
-        was_paid = (booking.status == "Token Paid") or (getattr(booking, "payment_status", "") == "paid")
-
-        # normalize final status casing
         booking.status = "Cancelled"
         booking.extra_timer_requested = False
         booking.extra_timer_stopped = True
@@ -125,51 +123,62 @@ def issue_warning(
         booking.main_timer_paused = True
         booking.worker_arrived = False
 
-        # refund (if paid)
-        try:
-            if was_paid:
-                provider = booking.provider
-                worker = booking.worker
-                total_tokens = int((booking.rate or 0) * (booking.quantity or 0))
+        refund_ok = False
+        refund_error = None
 
-                worker_tokens = (worker.tokens if worker and getattr(worker, "tokens", None) is not None else 0)
-                refund_amount = min(total_tokens, worker_tokens)
+        if (
+                booking.booking_type != "wfh"
+                and getattr(booking, "escrow_locked", False) is True
+                and getattr(booking, "escrow_released", False) is False
+        ):
 
-                if refund_amount > 0 and provider and worker:
-                    worker.tokens = max(0, worker_tokens - refund_amount)
-                    provider.tokens = (getattr(provider, "tokens", 0) or 0) + refund_amount
+            try:
+                db.flush()
+                refund_ok = refund_onsite_escrow(db=db, booking=booking, reason="warning_auto_cancel")
 
+                if refund_ok:
                     db.add(Notification(
-                        recipient_id=provider.id,
-                        sender_id=worker.id,
+                        recipient_id=booking.provider_id,
+                        sender_id=booking.provider_id,
                         booking_id=booking.id,
                         job_id=booking.job_id,
-                        message=f"Booking #{booking.id} auto-cancelled due to delay. {refund_amount} tokens refunded to you.",
+                        message=f"✅ Booking #{booking.id} cancelled (3 warnings). Refund credited to your Sahayi wallet.",
                         action_type="refund_processed",
                         is_read=False
                     ))
+                else:
                     db.add(Notification(
-                        recipient_id=worker.id,
-                        sender_id=provider.id,
+                        recipient_id=booking.provider_id,
+                        sender_id=booking.provider_id,
                         booking_id=booking.id,
                         job_id=booking.job_id,
-                        message=f"Booking #{booking.id} auto-cancelled due to delay. {refund_amount} tokens returned to the job giver.",
-                        action_type="refund_processed",
+                        message=f"⚠️ Booking #{booking.id} cancelled but refund not applied (already refunded or not eligible).",
+                        action_type="refund_skipped",
                         is_read=False
                     ))
-        except Exception as e:
-            db.rollback()
-            raise HTTPException(status_code=500, detail=f"Refund failed: {e}")
 
-        # free both sides if model supports it
-        if hasattr(booking, "worker") and booking.worker:
+            except Exception as e:
+                refund_error = str(e)
+
+                # ✅ IMPORTANT: no rollback, cancellation must stay
+                db.add(Notification(
+                    recipient_id=booking.provider_id,
+                    sender_id=booking.provider_id,
+                    booking_id=booking.id,
+                    job_id=booking.job_id,
+                    message=f"⚠️ Booking #{booking.id} cancelled but refund failed. Admin will review. Error: {refund_error}",
+                    action_type="refund_failed",
+                    is_read=False
+                ))
+
+        # free both sides
+        if booking.worker:
             booking.worker.busy = False
             if hasattr(booking.worker, "current_booking_id"):
                 booking.worker.current_booking_id = None
 
-        if hasattr(booking, "provider") and booking.provider:
-            if hasattr(booking.provider, "busy"):
-                booking.provider.busy = False
+        if booking.provider:
+            booking.provider.busy = False
             if hasattr(booking.provider, "current_booking_id"):
                 booking.provider.current_booking_id = None
 
@@ -185,7 +194,7 @@ def issue_warning(
             recipient_id=booking.provider_id,
             sender_id=booking.provider_id,
             booking_id=booking.id,
-            message="✅ You cancelled the booking after 3 warnings.",
+            message="✅ Booking cancelled after 3 warnings.",
             action_type="booking_cancelled_by_warnings"
         ))
 

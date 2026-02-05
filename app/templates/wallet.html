@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Wallet</title>
   <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+  <script src="/static/js/theme.js" defer></script>
 
   <style>
     :root {
@@ -455,6 +456,132 @@
     .tx-meta span:last-child::after {
       content: "";
     }
+    /* ============================
+       DARK MODE - WALLET PAGE
+       ============================ */
+
+    html[data-theme="dark"] body {
+      background: radial-gradient(circle at top left, #020617, #020617 40%, #000814 100%) !important;
+      color: #f8fafc !important;
+    }
+
+    /* Main card */
+    html[data-theme="dark"] .wallet-card {
+      background: #0b1220 !important;
+      border: 1px solid #1e293b !important;
+      box-shadow: 0 20px 45px rgba(0,0,0,0.6) !important;
+    }
+
+    /* Balance card */
+    html[data-theme="dark"] .balance-card {
+      background: #020617 !important;
+      border: 1px solid #1e293b !important;
+      color: #f8fafc !important;
+    }
+
+    /* Action cards */
+    html[data-theme="dark"] .action-card {
+      background: #020617 !important;
+      border: 1px solid #1e293b !important;
+    }
+
+    /* Headings */
+    html[data-theme="dark"] h1,
+    html[data-theme="dark"] h3 {
+      color: #38bdf8 !important;
+    }
+
+    /* Muted text */
+    html[data-theme="dark"] .wallet-title p,
+    html[data-theme="dark"] .balance-label,
+    html[data-theme="dark"] .balance-sub,
+    html[data-theme="dark"] .help-text,
+    html[data-theme="dark"] .tx-sub,
+    html[data-theme="dark"] .tx-meta {
+      color: #94a3b8 !important;
+    }
+
+    /* Amount */
+    html[data-theme="dark"] .balance-value {
+      color: #f8fafc !important;
+    }
+
+    /* Pills */
+    html[data-theme="dark"] .integrity-pill {
+      background: #020617 !important;
+      border-color: #1e293b !important;
+      color: #f8fafc !important;
+    }
+
+    /* Inputs */
+    html[data-theme="dark"] .field-row input {
+      background: #020617 !important;
+      color: #f8fafc !important;
+      border: 1px solid #1e293b !important;
+    }
+
+    html[data-theme="dark"] .field-row input::placeholder {
+      color: #64748b !important;
+    }
+
+    /* Buttons */
+    html[data-theme="dark"] .btn-ghost {
+      background: #020617 !important;
+      color: #f8fafc !important;
+      border: 1px solid #1e293b !important;
+    }
+
+    html[data-theme="dark"] .btn-ghost:hover {
+      background: #0b1220 !important;
+    }
+
+    /* Transaction table */
+    html[data-theme="dark"] .tx-table-wrap {
+      background: #020617 !important;
+      border: 1px solid #1e293b !important;
+    }
+
+    /* Table header */
+    html[data-theme="dark"] thead tr,
+    html[data-theme="dark"] th {
+      background: #020617 !important;
+      color: #94a3b8 !important;
+    }
+
+    /* Table rows */
+    html[data-theme="dark"] tbody tr:nth-child(even),
+    html[data-theme="dark"] tbody tr:nth-child(odd) {
+      background: #020617 !important;
+    }
+
+    html[data-theme="dark"] tbody tr:hover {
+      background: #0b1220 !important;
+    }
+
+    /* Table cells */
+    html[data-theme="dark"] td {
+      color: #e5e7eb !important;
+    }
+
+    /* Amount column */
+    html[data-theme="dark"] .tx-amount {
+      color: #f8fafc !important;
+    }
+
+    /* Kind badge */
+    html[data-theme="dark"] .tx-kind {
+      background: #020617 !important;
+      border-color: #1e293b !important;
+      color: #38bdf8 !important;
+    }
+
+    /* Quick badges */
+    html[data-theme="dark"] .quick-badge {
+      background: #020617 !important;
+      border: 1px solid #1e293b !important;
+      color: #cbd5e1 !important;
+    }
+
 
   </style>
 </head>

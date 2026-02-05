@@ -9,7 +9,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from werkzeug.security import check_password_hash, generate_password_hash
-
+from app.models import WorkerProfile
 from app.database import get_db
 from app.models import User
 from app.settings import settings
@@ -27,6 +27,19 @@ def _normalize_phone(phone: str) -> str:
         raise ValueError("invalid phone")
     return "+91" + digits
 
+def _check_login_allowed(db: Session, user: User):
+    profile = user.worker_profile
+    if not profile:
+        return
+
+    if profile.moderation_status == "suspended":
+        raise ValueError("account_suspended")
+
+    if profile.moderation_status == "banned":
+        raise ValueError("account_banned")
+
+
+
 def _send_email_sync(to_email: str, otp: str):
     msg = MIMEMultipart()
     msg["From"] = settings.GMAIL_USER
@@ -43,8 +56,55 @@ def _send_email_sync(to_email: str, otp: str):
 # /login  (GET inline HTML + POST password)
 # ---------------------------
 @router.get("/login", response_class=HTMLResponse)
-def login_get():
-    return HTMLResponse(LOGIN_HTML)
+def login_get(request: Request):
+    error = request.query_params.get("error")
+
+    error_block = ""
+
+    if error == "account_suspended":
+        error_block = """
+        <div style="margin-bottom:16px; padding:14px; border-radius:10px;
+                    background:#fff3cd; color:#856404; font-size:14px; text-align:center;">
+            <strong>⚠️ Account Suspended</strong><br>
+            Your account is temporarily suspended.<br><br>
+            <a href="/support" style="
+                display:inline-block;
+                padding:8px 14px;
+                background:#856404;
+                color:white;
+                border-radius:6px;
+                text-decoration:none;
+                font-size:13px;">
+                Contact Support
+            </a>
+        </div>
+        """
+
+    elif error == "account_banned":
+        error_block = """
+        <div style="margin-bottom:16px; padding:14px; border-radius:10px;
+                    background:#f8d7da; color:#721c24; font-size:14px; text-align:center;">
+            <strong>⛔ Account Banned</strong><br>
+            Your account has been permanently banned.<br><br>
+                <a href="/support" style="
+                display:inline-block;
+                padding:8px 14px;
+                background:#721c24;
+                color:white;
+                border-radius:6px;
+                text-decoration:none;
+                font-size:13px;">
+                Contact Support
+            </a>
+        </div>
+        """
+
+
+    return HTMLResponse(
+        LOGIN_HTML.replace("{{ERROR_BLOCK}}", error_block)
+    )
+
+
 
 @router.post("/login")
 def login_post(
@@ -69,7 +129,14 @@ def login_post(
             .first()
         )
         if user and user.password and check_password_hash(user.password, password):
-            # Trust API style: mark session as logged in
+            try:
+                _check_login_allowed(db, user)
+            except ValueError as e:
+                return RedirectResponse(
+                    url=f"/login?error={str(e)}",
+                    status_code=303
+                )
+
             request.session["user_id"] = user.id
             return RedirectResponse(url="/welcome", status_code=303)
 
@@ -131,9 +198,18 @@ def forgot_password_step2_post(
     if otp.strip() == otp_session:
         user = db.query(User).filter(User.email == email).first()
         if user:
+            try:
+                _check_login_allowed(db, user)
+            except ValueError as e:
+                return RedirectResponse(
+                    url=f"/login?error={str(e)}",
+                    status_code=303
+                )
+
             request.session["user_id"] = user.id
             for k in ("forgot_email", "forgot_otp", "forgot_otp_expiry"):
                 request.session.pop(k, None)
+
             return RedirectResponse(url="/welcome", status_code=303)
 
     return RedirectResponse(url="/forgot_password_step2?error=badotp", status_code=303)
@@ -206,192 +282,267 @@ async def sign_up_post(
 # ---------------------------
 # Inline HTML (kept as in your Flask)
 # ---------------------------
-LOGIN_HTML = r"""<!DOCTYPE html>
+LOGIN_HTML = r"""
+<!DOCTYPE html>
 <html lang="en">
 <head>
-    <title>Login - Sahayi</title>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <style>
-        body { height: 100vh; display: flex; justify-content: center; align-items: center;
-               font-family: 'Segoe UI', sans-serif;
-               background: linear-gradient(135deg, #263d61, #43cea2);}
-        .login-box { background: rgba(255,255,255,0.98); padding: 28px; border-radius: 18px;
-                     box-shadow: 0 10px 25px rgba(0,0,0,0.12); max-width: 480px; width: 100%; }
-        .nav-tabs .nav-link.active { background: #007bff; color: white; border-radius: 10px;}
-        .form-control { border-radius: 10px; padding: 12px;}
-        .btn-custom { background: #007bff; color: white; border-radius: 10px;
-                      padding: 12px; font-size: 16px; width: 100%; margin-top: 10px;}
-        .btn-otp { background: #f39c12; color: white; border: none; border-radius: 8px;
-                   padding: 8px 12px; font-size: 14px; margin-left: 8px; cursor: pointer;}
-        .text-muted { margin-top: 15px; font-size: 14px; text-align: center;}
-        .text-muted a { color: #007bff; text-decoration: none; }
-        .otp-msg { margin-top: 6px; font-size: 14px; min-height:18px; }
-        .small { font-size: 13px; }
-        @media (max-width:520px){ .login-box{ padding:18px; } }
-    </style>
+  <title>Login · Sahayi</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <!-- Bootstrap -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+
+  <!-- Lottie -->
+  <script src="https://unpkg.com/lottie-web@5.12.2/build/player/lottie.min.js"></script>
+
+  <style>
+    body {
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background: radial-gradient(circle at top, #0b1a3a, #020617);
+      font-family: Inter, system-ui, sans-serif;
+    }
+
+    .wrapper {
+      width: 100%;
+      max-width: 420px;
+      padding: 16px;
+    }
+
+    /* ---------- ALERT ---------- */
+    .alert-box {
+      background: #fef3c7;
+      border-radius: 12px;
+      padding: 14px;
+      font-size: 14px;
+      margin-bottom: 16px;
+      text-align: center;
+    }
+
+    /* ---------- BRAND ---------- */
+    .brand {
+      text-align: center;
+      margin-bottom: 22px;
+    }
+
+    .brand h1 {
+      color: #ffffff;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    .brand p {
+      color: #94a3b8;
+      font-size: 14px;
+      margin: 0;
+    }
+
+    /* ---------- WORKER WALK TRACK ---------- */
+    .worker-track {
+      position: relative;
+      width: 100%;
+      height: 110px;
+      overflow: hidden;
+      margin: 6px 0 2px;
+    }
+
+    #workerRun {
+      position: absolute;
+      left: -160px;
+      width: 200px;
+      height: 110px;
+      animation: walkAcross 12s linear infinite;
+    }
+
+    @keyframes walkAcross {
+      0% {
+        transform: translateX(-160px);
+      }
+      100% {
+        transform: translateX(520px);
+      }
+    }
+
+    /* ---------- CARD ---------- */
+    .card {
+      border-radius: 16px;
+      padding: 26px;
+      border: none;
+      box-shadow: 0 20px 40px rgba(0,0,0,.35);
+    }
+
+    .tabs {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 20px;
+    }
+
+    .tabs button {
+      flex: 1;
+      padding: 10px;
+      border-radius: 10px;
+      border: none;
+      background: #f1f5f9;
+      font-size: 14px;
+      font-weight: 500;
+      color: #334155;
+    }
+
+    .tabs button.active {
+      background: #0f172a;
+      color: #fff;
+    }
+
+    label {
+      font-size: 13px;
+      color: #475569;
+      margin-bottom: 6px;
+    }
+
+    .form-control {
+      padding: 12px;
+      border-radius: 10px;
+      font-size: 14px;
+    }
+
+    .form-control:focus {
+      border-color: #2563eb;
+      box-shadow: 0 0 0 2px rgba(37,99,235,.15);
+    }
+
+    .btn-primary {
+      margin-top: 10px;
+      padding: 12px;
+      border-radius: 10px;
+      font-weight: 500;
+      background: #0f172a;
+      border: none;
+    }
+
+    .meta {
+      text-align: center;
+      font-size: 13px;
+      margin-top: 14px;
+    }
+
+    .meta a {
+      color: #38bdf8;
+      text-decoration: none;
+      font-weight: 500;
+    }
+  </style>
 </head>
+
 <body>
-<div class="login-box">
-    <ul class="nav nav-tabs mb-3" id="loginTabs" role="tablist">
-        <li class="nav-item">
-            <button class="nav-link active" id="password-tab" data-bs-toggle="tab" data-bs-target="#passwordLogin" type="button" role="tab">Password</button>
-        </li>
-        <li class="nav-item">
-            <button class="nav-link" id="otp-tab" data-bs-toggle="tab" data-bs-target="#otpLogin" type="button" role="tab">OTP</button>
-        </li>
-    </ul>
 
-    <div class="tab-content">
-        <!-- Password Login -->
-        <div class="tab-pane fade show active" id="passwordLogin" role="tabpanel">
-            <form method="POST" id="passwordForm">
-                <input type="hidden" name="method" value="password">
-                <div class="mb-3">
-                    <label class="small">Phone number</label>
-                    <div class="input-group">
-                        <span class="input-group-text">+91</span>
-                        <input type="tel" name="phone" id="pwPhone" class="form-control" placeholder="10-digit mobile" required>
-                    </div>
-                </div>
-                <div class="mb-3">
-                    <label class="small">Password</label>
-                    <input type="password" name="password" id="pwPassword" class="form-control" placeholder="Password" required>
-                </div>
-                <button type="submit" class="btn-custom">Login with password</button>
-            </form>
-            <div class="text-muted small mt-2">Forgot password? <a href="/forgot_password">Reset</a></div>
-        </div>
+<div class="wrapper">
 
-        <!-- OTP Login -->
-        <div class="tab-pane fade" id="otpLogin" role="tabpanel">
-            <form id="otpForm" onsubmit="return false;">
-                <div class="mb-3">
-                    <label class="small">Phone number</label>
-                    <div class="input-group">
-                        <span class="input-group-text">+91</span>
-                        <input type="tel" id="otpPhone" class="form-control" placeholder="10-digit mobile" required>
-                        <button type="button" class="btn-otp" id="sendOtpBtn">Send OTP</button>
-                    </div>
-                </div>
+  {{ERROR_BLOCK}}
 
-                <div class="mb-3">
-                    <label class="small">OTP</label>
-                    <input type="text" id="otpInput" class="form-control" placeholder="Enter OTP">
-                    <div id="otpMsg" class="otp-msg"></div>
-                </div>
+  <!-- BRAND -->
+  <div class="brand">
+    <h1>Sahayi</h1>
 
-                <div class="d-grid gap-2">
-                    <button type="button" class="btn-custom" id="verifyOtpBtn">Login with OTP</button>
-                </div>
-            </form>
-        </div>
+    <!-- WALKING WORKER -->
+    <div class="worker-track">
+      <div id="workerRun"></div>
     </div>
 
-    <div class="text-muted small mt-3">Don’t have an account? <a href="/sign_up">Sign up</a></div>
+    <p>Trusted local services</p>
+  </div>
+
+  <!-- LOGIN CARD -->
+  <div class="card">
+
+    <div class="tabs">
+      <button id="pwTab" class="active" onclick="showTab('pw')">Password</button>
+      <button id="otpTab" onclick="showTab('otp')">OTP</button>
+    </div>
+
+    <!-- PASSWORD -->
+    <form method="POST" id="pw">
+      <input type="hidden" name="method" value="password">
+
+      <div class="mb-3">
+        <label>Phone number</label>
+        <div class="input-group">
+          <span class="input-group-text">+91</span>
+          <input name="phone" class="form-control" placeholder="10-digit mobile" required>
+        </div>
+      </div>
+
+      <div class="mb-3">
+        <label>Password</label>
+        <input type="password" name="password" class="form-control" required>
+      </div>
+
+      <button class="btn btn-primary w-100">Login</button>
+
+      <div class="meta">
+        <a href="/forgot_password">Forgot password?</a>
+      </div>
+    </form>
+
+    <!-- OTP -->
+    <div id="otp" style="display:none;">
+      <div class="mb-3">
+        <label>Phone number</label>
+        <input id="otpPhone" class="form-control" placeholder="10-digit mobile">
+      </div>
+
+      <div class="mb-3">
+        <label>OTP</label>
+        <input id="otpInput" class="form-control">
+      </div>
+
+      <button class="btn btn-primary w-100" id="verifyOtpBtn">
+        Verify & Login
+      </button>
+    </div>
+
+  </div>
+
+  <div class="meta">
+    New here? <a href="/sign_up">Create account</a>
+  </div>
+
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-function normalizePhoneForSend(value){
-  const digits = (value||'').replace(/\\D/g,'').slice(-10);
-  return '+91' + digits;
+function showTab(tab){
+  pw.style.display = tab==='pw' ? 'block' : 'none';
+  otp.style.display = tab==='otp' ? 'block' : 'none';
+  pwTab.classList.toggle('active', tab==='pw');
+  otpTab.classList.toggle('active', tab==='otp');
 }
-const sendOtpBtn = document.getElementById('sendOtpBtn');
-const otpPhone = document.getElementById('otpPhone');
-const otpInput = document.getElementById('otpInput');
-const otpMsg = document.getElementById('otpMsg');
-const verifyOtpBtn = document.getElementById('verifyOtpBtn');
 
-sendOtpBtn.addEventListener('click', async () => {
-    otpMsg.textContent = '';
-    const raw = otpPhone.value.trim();
-    if (!/^\\d{10}$/.test(raw)) { otpMsg.style.color='red'; otpMsg.textContent='Enter 10-digit mobile'; return; }
-    const phone = normalizePhoneForSend(raw);
-    sendOtpBtn.disabled = true;
-    sendOtpBtn.innerText = 'Sending...';
-    try {
-        const res = await fetch('/send_phone_otp_login', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            credentials: 'same-origin',
-            body: JSON.stringify({phone})
-        });
-        const data = await res.json();
-        otpMsg.style.color = data.success ? 'green' : 'red';
-        otpMsg.textContent = data.message || (data.success ? 'OTP sent' : 'Failed to send OTP');
-    } catch (err) {
-        console.error(err);
-        otpMsg.style.color='red';
-        otpMsg.textContent='Network error. Try again.';
-    } finally {
-        sendOtpBtn.disabled = false;
-        sendOtpBtn.innerText = 'Send OTP';
-    }
+/* Load worker animation (ONCE) */
+const workerAnim = lottie.loadAnimation({
+  container: document.getElementById('workerRun'),
+  renderer: 'svg',
+  loop: true,
+  autoplay: true,
+  path: '/static/lottie/walking-office-man.json'
 });
 
-verifyOtpBtn.addEventListener('click', async () => {
-    otpMsg.textContent = '';
-    const raw = otpPhone.value.trim();
-    const code = (otpInput.value || '').trim();
-    if (!/^\\d{10}$/.test(raw)) { otpMsg.style.color='red'; otpMsg.textContent='Enter 10-digit mobile'; return; }
-    if (!/^[0-9]{4,6}$/.test(code)) { otpMsg.style.color='red'; otpMsg.textContent='Enter valid OTP'; return; }
-    const phone = normalizePhoneForSend(raw);
-    verifyOtpBtn.disabled = true;
-    verifyOtpBtn.innerText = 'Verifying...';
-    try {
-        const res = await fetch('/verify_phone_otp_login', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            credentials: 'same-origin',
-            body: JSON.stringify({phone, otp: code})
-        });
-        const data = await res.json();
-        otpMsg.style.color = data.success ? 'green' : 'red';
-        otpMsg.textContent = data.message || (data.success ? 'Logged in' : 'Invalid OTP');
-        if (data.success) {
-            window.location.href = '/welcome';
-        }
-    } catch (err) {
-        console.error(err);
-        otpMsg.style.color='red';
-        otpMsg.textContent='Network error. Try again.';
-    } finally {
-        verifyOtpBtn.disabled = false;
-        verifyOtpBtn.innerText = 'Login with OTP';
-    }
+/* Natural walking pace */
+workerAnim.setSpeed(0.85);
+
+/* Pause animation while typing (premium UX) */
+document.querySelectorAll('input').forEach(input => {
+  input.addEventListener('focus', () => workerAnim.pause());
+  input.addEventListener('blur', () => workerAnim.play());
 });
 </script>
-</body>
-</html>
-"""
 
-FORGOT_HTML = r"""<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8"><title>Forgot Password</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <style>
-        body { height:100vh; display:flex; justify-content:center; align-items:center; background: linear-gradient(135deg, #263d61, #43cea2); font-family: 'Segoe UI', sans-serif; }
-        .box { background: rgba(255,255,255,0.95); padding:30px; border-radius:20px; max-width:400px; width:100%; }
-        .form-control { border-radius:10px; padding:12px; margin-bottom:15px; }
-        .btn-custom { background:#007bff; color:white; border-radius:10px; width:100%; padding:12px; }
-    </style>
-</head>
-<body>
-    <div class="box">
-        <h3>Forgot Password</h3>
-        <form method="POST">
-            <input type="email" name="email" class="form-control" placeholder="Enter your registered email" required>
-            <button type="submit" class="btn-custom">Send OTP</button>
-        </form>
-        <div style="margin-top:15px;text-align:center;">
-            <a href="/login">Back to Login</a>
-        </div>
-    </div>
 </body>
 </html>
+
+
+
 """
 
 FP2_HTML = r"""<!DOCTYPE html>

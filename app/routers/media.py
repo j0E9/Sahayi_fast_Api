@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 from ..database import get_db
-from ..deps import current_user
+from app.security.auth import get_current_user
 from ..models import WorkerProfile
 from ..settings import settings
 
@@ -19,7 +19,7 @@ def safe_filename(name: str) -> str:
 def upload_showcase(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    user = Depends(current_user),
+    user = Depends(get_current_user),
 ):
     if not file.filename:
         raise HTTPException(status_code=400, detail="No file provided")

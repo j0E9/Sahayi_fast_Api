@@ -8,18 +8,10 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from app.database import get_db
 from app.models import Booking, Notification, User
+from app.security.auth import get_current_user
+
 
 router = APIRouter(tags=["booking-actions"])
-
-# --- Trust-API style session auth you’ve been using ---
-def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
-    uid = request.session.get("user_id")
-    if not uid:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
-    user = db.get(User, int(uid))
-    if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
-    return user
 
 
 @router.post("/auto_reject_booking/{booking_id}")
